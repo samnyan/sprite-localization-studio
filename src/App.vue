@@ -1,11 +1,27 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
+import { useWorkspaceStore } from '@/app/stores/workspace'
+import AppMenuBar from '@/components/workspace/AppMenuBar.vue'
+
+const workspace = useWorkspaceStore()
+const { t } = useI18n()
+
+function newProject(): void {
+  void workspace.createLocalProject(t('project.untitled'))
+}
+</script>
 
 <template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
+  <div class="flex h-screen min-w-[800px] flex-col overflow-hidden bg-background text-foreground">
+    <AppMenuBar
+      :project-name="workspace.project?.name"
+      :busy="workspace.isBusy"
+      @new-project="newProject"
+      @open-project="workspace.openLocalProject"
+    />
+    <main class="flex min-h-0 flex-1">
+      <RouterView />
+    </main>
+  </div>
 </template>
-
-<style scoped></style>
