@@ -33,7 +33,7 @@ interface WorkspaceError {
 }
 
 type TextureImageUrls = Record<string, Record<string, string>>
-type ResourceImageUrls = Record<string, string>
+type BackgroundImageUrls = Record<string, string>
 
 const AUTOSAVE_DELAY_MS = 5_000
 let activeRepository: ProjectRepository | undefined
@@ -58,7 +58,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const project = ref<ProjectManifest>()
   const spriteTables = ref<SpriteTable[]>([])
   const textureImageUrls = ref<TextureImageUrls>({})
-  const translationBackgroundImageUrls = ref<ResourceImageUrls>({})
+  const backgroundImageUrls = ref<BackgroundImageUrls>({})
   const selectedSpriteTableId = ref<string>()
   const selectedSpriteId = ref<string>()
   const selectedTextRegionId = ref<string>()
@@ -106,8 +106,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     ),
   )
 
-  const selectedTranslationBackground = computed(() =>
-    project.value?.translationBackgrounds?.find(
+  const selectedBackgroundTemplate = computed(() =>
+    project.value?.backgroundTemplates?.find(
       (background) => background.id === selectedSpriteTranslation.value?.backgroundId,
     ),
   )
@@ -118,7 +118,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  function revokeResourceImageUrls(urls: ResourceImageUrls): void {
+  function revokeBackgroundImageUrls(urls: BackgroundImageUrls): void {
     for (const url of Object.values(urls)) URL.revokeObjectURL(url)
   }
 
@@ -144,11 +144,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  async function loadTranslationBackgroundImages(
+  async function loadBackgroundImages(
     storage: ProjectStorage,
     backgrounds: ImageResource[],
-  ): Promise<ResourceImageUrls> {
-    const urls: ResourceImageUrls = {}
+  ): Promise<BackgroundImageUrls> {
+    const urls: BackgroundImageUrls = {}
 
     try {
       for (const background of backgrounds) {
@@ -157,7 +157,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       return urls
     } catch (caughtError) {
-      revokeResourceImageUrls(urls)
+      revokeBackgroundImageUrls(urls)
       throw caughtError
     }
   }
@@ -294,15 +294,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       loadedProject.spriteTableManifestPaths ?? [],
     )
     const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables)
-    const loadedBackgroundUrls = await loadTranslationBackgroundImages(
+    const loadedBackgroundUrls = await loadBackgroundImages(
       storage,
-      loadedProject.translationBackgrounds ?? [],
+      loadedProject.backgroundTemplates ?? [],
     )
     const firstSpriteTable = loadedSpriteTables[0]
     const firstSprite = firstSpriteTable?.sprites[0]
 
     revokeTextureImageUrls(textureImageUrls.value)
-    revokeResourceImageUrls(translationBackgroundImageUrls.value)
+    revokeBackgroundImageUrls(backgroundImageUrls.value)
     documentSession += 1
     activeRepository = repository
     activeStorage = storage
@@ -310,7 +310,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     resetDocumentHistory()
     spriteTables.value = loadedSpriteTables
     textureImageUrls.value = loadedImageUrls
-    translationBackgroundImageUrls.value = loadedBackgroundUrls
+    backgroundImageUrls.value = loadedBackgroundUrls
     selectedSpriteTableId.value = firstSpriteTable?.id
     selectedSpriteId.value = firstSprite?.id
     selectedTextRegionId.value = undefined
@@ -586,7 +586,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   ): boolean {
     if (
       backgroundId !== undefined &&
-      !project.value?.translationBackgrounds?.some((background) => background.id === backgroundId)
+      !project.value?.backgroundTemplates?.some((background) => background.id === backgroundId)
     ) {
       return false
     }
@@ -601,7 +601,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
   }
 
-  async function addTranslationBackground(file: File): Promise<string | undefined> {
+  async function addBackgroundTemplate(file: File): Promise<string | undefined> {
     if (!project.value || !activeStorage) {
       failProjectNotOpen()
       return undefined
@@ -610,27 +610,28 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     const id = crypto.randomUUID()
     const extension = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? '.png'
-    const background: ImageResource = {
+    const background = {
       id,
       name: file.name,
-      path: `translation-backgrounds/${id}${extension}`,
+      path: `sprite_base/template/${id}${extension}`,
+      scope: 'template' as const,
     }
 
     try {
       await activeStorage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
       const url = URL.createObjectURL(file)
-      const backgrounds = [...(project.value.translationBackgrounds ?? []), background]
+      const backgroundTemplates = [...(project.value.backgroundTemplates ?? []), background]
       if (
-        !dispatchProjectAction('translationBackground.add', {
+        !dispatchProjectAction('backgroundTemplate.add', {
           ...project.value,
-          translationBackgrounds: backgrounds,
+          backgroundTemplates,
         })
       ) {
         URL.revokeObjectURL(url)
         return undefined
       }
-      translationBackgroundImageUrls.value = {
-        ...translationBackgroundImageUrls.value,
+      backgroundImageUrls.value = {
+        ...backgroundImageUrls.value,
         [background.id]: url,
       }
       return background.id
@@ -699,7 +700,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     project,
     spriteTables,
     textureImageUrls,
-    translationBackgroundImageUrls,
+    backgroundImageUrls,
     selectedSpriteTableId,
     selectedSpriteId,
     selectedTextRegionId,
@@ -708,7 +709,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedSprite,
     selectedSpriteTranslation,
     selectedTextRegion,
-    selectedTranslationBackground,
+    selectedBackgroundTemplate,
     directoryName,
     status,
     error,
@@ -735,7 +736,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateTranslationRegion,
     updateTranslationRender,
     setSpriteTranslationBackground,
-    addTranslationBackground,
+    addBackgroundTemplate,
     removeTextRegion,
     clearError,
     selectSpriteTable,

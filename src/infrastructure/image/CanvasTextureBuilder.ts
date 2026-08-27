@@ -164,7 +164,7 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
   }
 
   private async loadBackground(translation: SpriteTranslation): Promise<ImageBitmap> {
-    const background = this.project.translationBackgrounds?.find(
+    const background = this.project.backgroundTemplates?.find(
       (item) => item.id === translation.backgroundId,
     )
     if (!background) throw new Error(`Missing background: ${translation.backgroundId ?? 'unknown'}`)

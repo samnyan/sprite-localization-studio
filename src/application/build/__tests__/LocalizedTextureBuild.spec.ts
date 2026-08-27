@@ -32,7 +32,7 @@ const unchanged: SpriteTranslation = {
 }
 
 function project(translations: SpriteTranslation[]): ProjectManifest {
-  return { schemaVersion: 1, name: 'Project', targetLocales: ['zh-CN'], translations }
+  return { schemaVersion: 2, name: 'Project', targetLocales: ['zh-CN'], translations }
 }
 
 describe('localized texture build plan', () => {

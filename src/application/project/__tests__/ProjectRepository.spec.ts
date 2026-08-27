@@ -39,9 +39,9 @@ function createStorage(initialText: string): {
 }
 
 describe('parseProjectManifest', () => {
-  it('accepts the minimal v1 project manifest', () => {
+  it('migrates the minimal v1 project manifest in memory', () => {
     expect(parseProjectManifest('{"schemaVersion":1,"name":"Sample"}')).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: 'Sample',
     })
   })
@@ -86,8 +86,8 @@ describe('parseProjectManifest', () => {
     ).toThrowError(expect.objectContaining({ code: 'invalidTranslations' }))
   })
 
-  it('rejects unsupported schema versions', () => {
-    expect(() => parseProjectManifest('{"schemaVersion":2,"name":"Future"}')).toThrow(
+  it('rejects unsupported future schema versions', () => {
+    expect(() => parseProjectManifest('{"schemaVersion":3,"name":"Future"}')).toThrow(
       ProjectFormatError,
     )
   })
@@ -102,6 +102,63 @@ describe('parseProjectManifest', () => {
 })
 
 describe('ProjectRepository', () => {
+  it('migrates legacy backgrounds into the template directory before saving schema v2', async () => {
+    const files = new Map<string, string>([
+      [
+        'project.json',
+        JSON.stringify({
+          schemaVersion: 1,
+          name: 'Legacy',
+          translationBackgrounds: [
+            { id: 'button', name: 'Button', path: 'translation-backgrounds/button.png' },
+          ],
+        }),
+      ],
+    ])
+    const binaries = new Map<string, Uint8Array>([
+      ['translation-backgrounds/button.png', new Uint8Array([1, 2, 3])],
+    ])
+    const storage: ProjectStorage = {
+      async readText(path) {
+        const text = files.get(path)
+        if (text === undefined) throw new Error(`Missing ${path}`)
+        return text
+      },
+      async writeText(path, text) {
+        files.set(path, text)
+      },
+      async readBinary(path) {
+        const data = binaries.get(path)
+        if (!data) throw new Error(`Missing ${path}`)
+        return new Uint8Array(data).buffer
+      },
+      async writeBinary(path, data) {
+        binaries.set(path, new Uint8Array(data))
+      },
+      async exists(path) {
+        return files.has(path)
+      },
+      async list() {
+        return []
+      },
+    }
+
+    const project = await new ProjectRepository(storage).load()
+
+    expect(project).toMatchObject({
+      schemaVersion: 2,
+      backgroundTemplates: [
+        {
+          id: 'button',
+          path: 'sprite_base/template/button.png',
+          scope: 'template',
+        },
+      ],
+    })
+    expect(binaries.get('sprite_base/template/button.png')).toEqual(new Uint8Array([1, 2, 3]))
+    expect(JSON.parse(files.get('project.json') ?? '')).toMatchObject({ schemaVersion: 2 })
+  })
+
   it('creates a new project in an empty folder', async () => {
     const { storage, files } = createStorage('')
     files.clear()
@@ -109,7 +166,7 @@ describe('ProjectRepository', () => {
 
     const project = await repository.create('New Project')
 
-    expect(project).toEqual({ schemaVersion: 1, name: 'New Project' })
+    expect(project).toEqual({ schemaVersion: 2, name: 'New Project' })
     expect(JSON.parse(files.get('project.json') ?? '')).toEqual(project)
   })
 
@@ -131,7 +188,7 @@ describe('ProjectRepository', () => {
 
     expect(renamed.name).toBe('After')
     expect(JSON.parse(files.get('project.json') ?? '')).toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: 'After',
       sourceLocale: 'ja-JP',
       translations: [{ spriteTableId: 'ui', spriteId: 'start', textRegions: [] }],

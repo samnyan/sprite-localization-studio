@@ -180,6 +180,8 @@ export default {
       invalidSpriteTableManifestPaths: 'spriteTableManifestPaths 包含无效路径。',
       invalidTranslations: '翻译元数据无效。',
       invalidTranslationBackgrounds: '翻译底图元数据无效。',
+      invalidBackgroundTemplates: '底图模板元数据无效。',
+      invalidSpriteBackgrounds: 'Sprite 专属底图元数据无效。',
     },
     spriteTable: {
       invalidJson: 'Sprite Table manifest 不是有效的 JSON。',

@@ -70,6 +70,6 @@ export interface SpriteTranslation {
   spriteTableId: string
   spriteId: string
   backgroundId?: string
-  backgroundType?: 'original' | 'blank' | 'template'
+  backgroundType?: 'original' | 'blank' | 'template' | 'sprite'
   textRegions: TextRegion[]
 }

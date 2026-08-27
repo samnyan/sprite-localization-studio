@@ -1,7 +1,7 @@
 import type { SpriteTranslation } from '@/domain/text-region/types'
-import type { ImageResource } from '@/domain/resource/types'
+import type { BackgroundTemplate, SpriteBackground } from '@/domain/resource/types'
 
-export const PROJECT_SCHEMA_VERSION = 1 as const
+export const PROJECT_SCHEMA_VERSION = 2 as const
 
 export interface ProjectManifest {
   schemaVersion: typeof PROJECT_SCHEMA_VERSION
@@ -10,5 +10,6 @@ export interface ProjectManifest {
   targetLocales?: string[]
   spriteTableManifestPaths?: string[]
   translations?: SpriteTranslation[]
-  translationBackgrounds?: ImageResource[]
+  backgroundTemplates?: BackgroundTemplate[]
+  spriteBackgrounds?: SpriteBackground[]
 }

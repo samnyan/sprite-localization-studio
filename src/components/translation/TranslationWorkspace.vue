@@ -49,7 +49,7 @@ const translationRows = computed(() => {
 })
 
 function backgroundUrl(backgroundId?: string): string | undefined {
-  return backgroundId ? workspace.translationBackgroundImageUrls[backgroundId] : undefined
+  return backgroundId ? workspace.backgroundImageUrls[backgroundId] : undefined
 }
 
 function styleName(styleId?: string): string {
@@ -132,7 +132,7 @@ function saveBackground(type: 'original' | 'blank' | 'template', backgroundId?: 
 }
 
 async function uploadBackground(file: File): Promise<void> {
-  const backgroundId = await workspace.addTranslationBackground(file)
+  const backgroundId = await workspace.addBackgroundTemplate(file)
   if (backgroundId && editingBackground.value) {
     editingBackground.value = { ...editingBackground.value, type: 'template', backgroundId }
   }
@@ -260,7 +260,10 @@ onUnmounted(finishResize)
                   @click="
                     editingBackground = {
                       spriteId: row.sprite.id,
-                      type: row.translation.backgroundType,
+                      type:
+                        row.translation.backgroundType === 'sprite'
+                          ? 'original'
+                          : row.translation.backgroundType,
                       backgroundId: row.translation.backgroundId,
                     }
                   "
@@ -324,8 +327,8 @@ onUnmounted(finishResize)
       :open="editingBackground !== undefined"
       :type="editingBackground?.type"
       :background-id="editingBackground?.backgroundId"
-      :templates="workspace.project?.translationBackgrounds ?? []"
-      :image-urls="workspace.translationBackgroundImageUrls"
+      :templates="workspace.project?.backgroundTemplates ?? []"
+      :image-urls="workspace.backgroundImageUrls"
       @close="editingBackground = undefined"
       @save="saveBackground"
       @upload="uploadBackground"

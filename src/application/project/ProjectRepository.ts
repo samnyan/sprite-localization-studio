@@ -1,7 +1,7 @@
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import { isProjectRelativePath } from '@/application/storage/projectPath'
 import { PROJECT_SCHEMA_VERSION, type ProjectManifest } from '@/domain/project/types'
-import type { ImageResource } from '@/domain/resource/types'
+import type { BackgroundTemplate, ImageResource, SpriteBackground } from '@/domain/resource/types'
 import type { Rect } from '@/domain/shared/geometry'
 import type { SpriteTranslation, TextRegion } from '@/domain/text-region/types'
 
@@ -18,6 +18,8 @@ export type ProjectFormatErrorCode =
   | 'invalidSpriteTableManifestPaths'
   | 'invalidTranslations'
   | 'invalidTranslationBackgrounds'
+  | 'invalidBackgroundTemplates'
+  | 'invalidSpriteBackgrounds'
 
 export class ProjectFormatError extends Error {
   override readonly name = 'ProjectFormatError'
@@ -76,8 +78,14 @@ function isTextRenderConfig(value: unknown): boolean {
       isNonEmptyString(record.color) &&
       (record.gradientEnd === undefined || isNonEmptyString(record.gradientEnd)) &&
       (record.gradientAngle === undefined || Number.isFinite(record.gradientAngle)) &&
-      (record.alpha === undefined || (Number.isFinite(record.alpha) && (record.alpha as number) >= 0 && (record.alpha as number) <= 1)) &&
-      (record.gradientEndAlpha === undefined || (Number.isFinite(record.gradientEndAlpha) && (record.gradientEndAlpha as number) >= 0 && (record.gradientEndAlpha as number) <= 1))
+      (record.alpha === undefined ||
+        (Number.isFinite(record.alpha) &&
+          (record.alpha as number) >= 0 &&
+          (record.alpha as number) <= 1)) &&
+      (record.gradientEndAlpha === undefined ||
+        (Number.isFinite(record.gradientEndAlpha) &&
+          (record.gradientEndAlpha as number) >= 0 &&
+          (record.gradientEndAlpha as number) <= 1))
     )
   }
   const isStroke = (stroke: unknown): boolean => {
@@ -98,7 +106,10 @@ function isTextRenderConfig(value: unknown): boolean {
       Number.isFinite(record.blur) &&
       Number.isFinite(record.offsetX) &&
       Number.isFinite(record.offsetY) &&
-      (record.alpha === undefined || (Number.isFinite(record.alpha) && (record.alpha as number) >= 0 && (record.alpha as number) <= 1))
+      (record.alpha === undefined ||
+        (Number.isFinite(record.alpha) &&
+          (record.alpha as number) >= 0 &&
+          (record.alpha as number) <= 1))
     )
   }
   return (
@@ -114,16 +125,23 @@ function isTextRenderConfig(value: unknown): boolean {
     (config.fill === undefined || isPaint(config.fill)) &&
     (config.stroke === undefined || isStroke(config.stroke)) &&
     (config.shadow === undefined || isShadow(config.shadow)) &&
-    (config.shadows === undefined || (Array.isArray(config.shadows) && config.shadows.every(isShadow))) &&
-    (config.layers === undefined || (Array.isArray(config.layers) && config.layers.every((layer) => {
-      if (!layer || typeof layer !== 'object' || Array.isArray(layer)) return false
-      const record = layer as Record<string, unknown>
-      return isNonEmptyString(record.id) && typeof record.enabled === 'boolean' && isTextRenderConfig(record.render)
-    })))
+    (config.shadows === undefined ||
+      (Array.isArray(config.shadows) && config.shadows.every(isShadow))) &&
+    (config.layers === undefined ||
+      (Array.isArray(config.layers) &&
+        config.layers.every((layer) => {
+          if (!layer || typeof layer !== 'object' || Array.isArray(layer)) return false
+          const record = layer as Record<string, unknown>
+          return (
+            isNonEmptyString(record.id) &&
+            typeof record.enabled === 'boolean' &&
+            isTextRenderConfig(record.render)
+          )
+        })))
   )
 }
 
-function isTranslationBackgrounds(value: unknown): value is ImageResource[] {
+function isImageResources(value: unknown): value is ImageResource[] {
   if (!Array.isArray(value)) return false
 
   const ids = new Set<string>()
@@ -136,7 +154,6 @@ function isTranslationBackgrounds(value: unknown): value is ImageResource[] {
       !isNonEmptyString(resource.name) ||
       !isNonEmptyString(resource.path) ||
       !isProjectRelativePath(resource.path) ||
-      !resource.path.startsWith('translation-backgrounds/') ||
       ids.has(resource.id) ||
       paths.has(resource.path)
     ) {
@@ -147,6 +164,42 @@ function isTranslationBackgrounds(value: unknown): value is ImageResource[] {
     paths.add(resource.path)
     return true
   })
+}
+
+function isLegacyTranslationBackgrounds(value: unknown): value is ImageResource[] {
+  return (
+    isImageResources(value) &&
+    value.every((background) => background.path.startsWith('translation-backgrounds/'))
+  )
+}
+
+function isBackgroundTemplates(value: unknown): value is BackgroundTemplate[] {
+  return (
+    isImageResources(value) &&
+    value.every(
+      (resource) =>
+        (resource as BackgroundTemplate).scope === 'template' &&
+        resource.path.startsWith('sprite_base/template/'),
+    )
+  )
+}
+
+function isSpriteBackgrounds(value: unknown): value is SpriteBackground[] {
+  return (
+    isImageResources(value) &&
+    value.every((resource) => {
+      const background = resource as SpriteBackground
+      const segments = background.path.split('/')
+      return (
+        background.scope === 'sprite' &&
+        isNonEmptyString(background.spriteTableId) &&
+        isNonEmptyString(background.spriteId) &&
+        segments.length >= 4 &&
+        segments[0] === 'sprite_base' &&
+        segments[1] !== 'template'
+      )
+    })
+  )
 }
 
 function isTranslations(value: unknown): value is SpriteTranslation[] {
@@ -163,7 +216,12 @@ function isTranslations(value: unknown): value is SpriteTranslation[] {
       !isNonEmptyString(translation.spriteTableId) ||
       !isNonEmptyString(translation.spriteId) ||
       !Array.isArray(translation.textRegions) ||
-      (translation.backgroundId !== undefined && !isNonEmptyString(translation.backgroundId))
+      (translation.backgroundId !== undefined && !isNonEmptyString(translation.backgroundId)) ||
+      (translation.backgroundType !== undefined &&
+        translation.backgroundType !== 'original' &&
+        translation.backgroundType !== 'blank' &&
+        translation.backgroundType !== 'template' &&
+        translation.backgroundType !== 'sprite')
     ) {
       return false
     }
@@ -204,6 +262,8 @@ export function parseProjectManifest(text: string): ProjectManifest {
 
   const record = value as Record<string, unknown>
 
+  if (record.schemaVersion === 1) return migrateLegacyManifest(record)
+
   if (record.schemaVersion !== PROJECT_SCHEMA_VERSION) {
     throw new ProjectFormatError('unsupportedSchema', { version: String(record.schemaVersion) })
   }
@@ -227,13 +287,53 @@ export function parseProjectManifest(text: string): ProjectManifest {
   }
 
   if (
+    record.backgroundTemplates !== undefined &&
+    !isBackgroundTemplates(record.backgroundTemplates)
+  ) {
+    throw new ProjectFormatError('invalidBackgroundTemplates')
+  }
+
+  if (record.spriteBackgrounds !== undefined && !isSpriteBackgrounds(record.spriteBackgrounds)) {
+    throw new ProjectFormatError('invalidSpriteBackgrounds')
+  }
+
+  return { ...record, schemaVersion: PROJECT_SCHEMA_VERSION, name: record.name } as ProjectManifest
+}
+
+function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest {
+  if (!isNonEmptyString(record.name)) throw new ProjectFormatError('missingName')
+
+  if (
+    record.spriteTableManifestPaths !== undefined &&
+    (!Array.isArray(record.spriteTableManifestPaths) ||
+      record.spriteTableManifestPaths.some(
+        (path) => typeof path !== 'string' || !isProjectRelativePath(path),
+      ))
+  ) {
+    throw new ProjectFormatError('invalidSpriteTableManifestPaths')
+  }
+
+  if (record.translations !== undefined && !isTranslations(record.translations)) {
+    throw new ProjectFormatError('invalidTranslations')
+  }
+
+  if (
     record.translationBackgrounds !== undefined &&
-    !isTranslationBackgrounds(record.translationBackgrounds)
+    !isLegacyTranslationBackgrounds(record.translationBackgrounds)
   ) {
     throw new ProjectFormatError('invalidTranslationBackgrounds')
   }
 
-  return { ...record, schemaVersion: PROJECT_SCHEMA_VERSION, name: record.name } as ProjectManifest
+  const { translationBackgrounds, ...project } = record
+  const backgroundTemplates = (translationBackgrounds as ImageResource[] | undefined)?.map(
+    (background) => ({ ...background, scope: 'template' as const }),
+  )
+  return {
+    ...project,
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    name: record.name,
+    ...(backgroundTemplates?.length ? { backgroundTemplates } : {}),
+  } as ProjectManifest
 }
 
 export class ProjectRepository {
@@ -244,7 +344,14 @@ export class ProjectRepository {
       throw new ProjectFormatError('missingManifest')
     }
 
-    return parseProjectManifest(await this.storage.readText(PROJECT_MANIFEST_PATH))
+    const text = await this.storage.readText(PROJECT_MANIFEST_PATH)
+    const project = parseProjectManifest(text)
+    if (isLegacyProject(text)) {
+      const migrated = await this.copyLegacyBackgrounds(project)
+      await this.save(migrated)
+      return migrated
+    }
+    return project
   }
 
   async save(project: ProjectManifest): Promise<void> {
@@ -271,5 +378,29 @@ export class ProjectRepository {
     const updated = { ...project, name: trimmedName }
     await this.save(updated)
     return updated
+  }
+
+  private async copyLegacyBackgrounds(project: ProjectManifest): Promise<ProjectManifest> {
+    const backgroundTemplates = await Promise.all(
+      (project.backgroundTemplates ?? []).map(async (background) => {
+        if (!background.path.startsWith('translation-backgrounds/')) return background
+        const extension = background.path.match(/\.[A-Za-z0-9]+$/)?.[0] ?? '.png'
+        const path = `sprite_base/template/${encodeURIComponent(background.id)}${extension}`
+        await this.storage.writeBinary(
+          path,
+          new Uint8Array(await this.storage.readBinary(background.path)),
+        )
+        return { ...background, path }
+      }),
+    )
+    return { ...project, ...(backgroundTemplates.length ? { backgroundTemplates } : {}) }
+  }
+}
+
+function isLegacyProject(text: string): boolean {
+  try {
+    return (JSON.parse(text) as { schemaVersion?: unknown }).schemaVersion === 1
+  } catch {
+    return false
   }
 }

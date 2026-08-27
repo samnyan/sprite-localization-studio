@@ -180,6 +180,8 @@ export default {
       invalidSpriteTableManifestPaths: 'spriteTableManifestPaths contains an invalid path.',
       invalidTranslations: 'Translation metadata is invalid.',
       invalidTranslationBackgrounds: 'Translation background metadata is invalid.',
+      invalidBackgroundTemplates: 'Background template metadata is invalid.',
+      invalidSpriteBackgrounds: 'Sprite background metadata is invalid.',
     },
     spriteTable: {
       invalidJson: 'The sprite table manifest is not valid JSON.',
