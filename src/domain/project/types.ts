@@ -1,3 +1,5 @@
+import type { SpriteTranslation } from '@/domain/text-region/types'
+
 export const PROJECT_SCHEMA_VERSION = 1 as const
 
 export interface ProjectManifest {
@@ -6,4 +8,5 @@ export interface ProjectManifest {
   sourceLocale?: string
   targetLocales?: string[]
   spriteTableManifestPaths?: string[]
+  translations?: SpriteTranslation[]
 }

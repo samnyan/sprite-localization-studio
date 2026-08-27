@@ -46,6 +46,46 @@ describe('parseProjectManifest', () => {
     })
   })
 
+  it('accepts translation metadata without modifying a sprite table manifest', () => {
+    expect(
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          name: 'Sample',
+          translations: [
+            {
+              spriteTableId: 'ui',
+              spriteId: 'button-start',
+              textRegions: [
+                {
+                  id: 'region-1',
+                  rect: { x: 12, y: 8, width: 30, height: 14 },
+                  rotation: 0,
+                  translationKey: 'ui.button-start.1',
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+    ).toMatchObject({
+      translations: [{ spriteTableId: 'ui', spriteId: 'button-start' }],
+    })
+  })
+
+  it('rejects duplicate sprite translation metadata and invalid regions', () => {
+    expect(() =>
+      parseProjectManifest(
+        '{"schemaVersion":1,"name":"Sample","translations":[{"spriteTableId":"ui","spriteId":"start","textRegions":[]},{"spriteTableId":"ui","spriteId":"start","textRegions":[]}]}',
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidTranslations' }))
+    expect(() =>
+      parseProjectManifest(
+        '{"schemaVersion":1,"name":"Sample","translations":[{"spriteTableId":"ui","spriteId":"start","textRegions":[{"id":"one","rect":{"x":0,"y":0,"width":0,"height":1},"rotation":0,"translationKey":"key"}]}]}',
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidTranslations' }))
+  })
+
   it('rejects unsupported schema versions', () => {
     expect(() => parseProjectManifest('{"schemaVersion":2,"name":"Future"}')).toThrow(
       ProjectFormatError,
@@ -77,14 +117,12 @@ describe('ProjectRepository', () => {
     const { storage } = createStorage('{"schemaVersion":1,"name":"Existing"}')
     const repository = new ProjectRepository(storage)
 
-    await expect(repository.create('New Project')).rejects.toMatchObject({
-      code: 'alreadyExists',
-    })
+    await expect(repository.create('New Project')).rejects.toMatchObject({ code: 'alreadyExists' })
   })
 
   it('renames and persists a project without dropping existing fields', async () => {
     const { storage, files } = createStorage(
-      '{"schemaVersion":1,"name":"Before","sourceLocale":"ja-JP"}',
+      '{"schemaVersion":1,"name":"Before","sourceLocale":"ja-JP","translations":[{"spriteTableId":"ui","spriteId":"start","textRegions":[]}]}',
     )
     const repository = new ProjectRepository(storage)
 
@@ -96,6 +134,7 @@ describe('ProjectRepository', () => {
       schemaVersion: 1,
       name: 'After',
       sourceLocale: 'ja-JP',
+      translations: [{ spriteTableId: 'ui', spriteId: 'start', textRegions: [] }],
     })
   })
 })

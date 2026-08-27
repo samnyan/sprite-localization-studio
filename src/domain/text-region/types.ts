@@ -7,3 +7,9 @@ export interface TextRegion {
   translationKey: string
   styleId?: string
 }
+
+export interface SpriteTranslation {
+  spriteTableId: string
+  spriteId: string
+  textRegions: TextRegion[]
+}

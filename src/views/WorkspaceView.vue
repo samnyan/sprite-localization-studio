@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { FilePlus2, Folder, FolderOpen, Image, Images, Save } from '@lucide/vue'
+import { FilePlus2, Folder, FolderOpen, Image, Images, Save, Trash2 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
+import { showAlert } from '@/app/services/alertDialog'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
 import { Button } from '@/components/ui/button'
+import type { Rect } from '@/domain/shared/geometry'
 
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
 const projectName = ref(workspace.project?.name ?? '')
 const saved = ref(false)
 
-const errorText = computed(() => {
-  if (!workspace.error) return ''
-  return t(workspace.error.key, workspace.error.params ?? {})
-})
-
+const errorText = computed(() =>
+  workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
+)
 const selectedImageUrl = computed(() => {
   const spriteTable = workspace.selectedSpriteTable
   const texture = workspace.selectedTexture
@@ -24,12 +24,12 @@ const selectedImageUrl = computed(() => {
     ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
     : undefined
 })
-
 const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
   return t('status.ready')
 })
+const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
 
 watch(
   () => workspace.project?.name,
@@ -46,14 +46,64 @@ async function newProject(): Promise<void> {
 async function saveProject(): Promise<void> {
   saved.value = await workspace.saveProjectName(projectName.value)
 }
+
+async function toggleTranslation(event: Event): Promise<void> {
+  await workspace.setSpriteTranslationEnabled((event.target as HTMLInputElement).checked)
+}
+
+function numericRegionField(
+  field: 'x' | 'y' | 'width' | 'height' | 'rotation',
+  event: Event,
+): void {
+  const region = workspace.selectedTextRegion
+  const value = Number((event.target as HTMLInputElement).value)
+  if (
+    !region ||
+    !Number.isFinite(value) ||
+    (field !== 'rotation' && value < (field === 'width' || field === 'height' ? 1 : 0))
+  )
+    return
+
+  if (field === 'rotation') {
+    void workspace.updateTextRegion(region.id, { rotation: value })
+  } else {
+    void workspace.updateTextRegion(region.id, { rect: { ...region.rect, [field]: value } })
+  }
+}
+function updateRegionRect(regionId: string, rect: Rect): void {
+  void workspace.updateTextRegion(regionId, { rect })
+}
+
+async function updateTranslationKey(event: FocusEvent): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const region = workspace.selectedTextRegion
+  if (!region) return
+
+  const key = input.value.trim()
+  const validationError = workspace.validateTranslationKey(region.id, key)
+  if (validationError) {
+    input.value = region.translationKey
+    await showAlert({
+      title: t('textRegion.invalidKeyTitle'),
+      message: t(`textRegion.${validationError}Key`),
+      confirmLabel: t('common.ok'),
+    })
+    input.focus()
+    return
+  }
+
+  input.value = key
+  if (key !== region.translationKey) {
+    await workspace.updateTextRegion(region.id, { translationKey: key })
+  }
+}
 </script>
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col bg-muted/20">
     <div class="flex h-10 shrink-0 items-center gap-1 border-b bg-background px-2">
       <Button variant="ghost" size="sm" :disabled="workspace.isBusy" @click="newProject">
-        <FilePlus2 class="size-4" aria-hidden="true" />
-        {{ t('workspace.newProject') }}
+        <FilePlus2 class="size-4" aria-hidden="true" />{{ t('workspace.newProject') }}
       </Button>
       <Button
         variant="ghost"
@@ -61,16 +111,15 @@ async function saveProject(): Promise<void> {
         :disabled="workspace.isBusy"
         @click="workspace.openLocalProject"
       >
-        <FolderOpen class="size-4" aria-hidden="true" />
-        {{ t('workspace.openProject') }}
+        <FolderOpen class="size-4" aria-hidden="true" />{{ t('workspace.openProject') }}
       </Button>
       <div class="mx-2 h-5 border-l"></div>
-      <span class="truncate text-xs text-muted-foreground">
-        {{ workspace.project?.name || t('toolbar.noProject') }}
-      </span>
+      <span class="truncate text-xs text-muted-foreground">{{
+        workspace.project?.name || t('toolbar.noProject')
+      }}</span>
       <template v-if="workspace.selectedSprite">
-        <span class="text-muted-foreground/50">/</span>
-        <span class="truncate text-xs">{{ workspace.selectedSprite.name }}</span>
+        <span class="text-muted-foreground/50">/</span
+        ><span class="truncate text-xs">{{ workspace.selectedSprite.name }}</span>
       </template>
     </div>
 
@@ -89,10 +138,11 @@ async function saveProject(): Promise<void> {
               :class="{ 'bg-accent': !workspace.selectedSpriteTableId }"
               @click="workspace.selectProject"
             >
-              <Folder class="size-3.5 shrink-0" aria-hidden="true" />
-              <span class="truncate font-medium">{{ workspace.project.name }}</span>
+              <Folder class="size-3.5 shrink-0" aria-hidden="true" /><span
+                class="truncate font-medium"
+                >{{ workspace.project.name }}</span
+              >
             </button>
-
             <div v-for="spriteTable in workspace.spriteTables" :key="spriteTable.id" class="mt-0.5">
               <button
                 type="button"
@@ -104,13 +154,13 @@ async function saveProject(): Promise<void> {
                 }"
                 @click="workspace.selectSpriteTable(spriteTable.id)"
               >
-                <Images class="size-3.5 shrink-0" aria-hidden="true" />
-                <span class="truncate">{{ spriteTable.name }}</span>
-                <span class="ml-auto text-[10px] text-muted-foreground">
-                  {{ spriteTable.sprites.length }}
-                </span>
+                <Images class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
+                  spriteTable.name
+                }}</span
+                ><span class="ml-auto text-[10px] text-muted-foreground">{{
+                  spriteTable.sprites.length
+                }}</span>
               </button>
-
               <button
                 v-for="sprite in spriteTable.sprites"
                 :key="sprite.id"
@@ -123,11 +173,11 @@ async function saveProject(): Promise<void> {
                 }"
                 @click="workspace.selectSprite(spriteTable.id, sprite.id)"
               >
-                <Image class="size-3.5 shrink-0" aria-hidden="true" />
-                <span class="truncate">{{ sprite.name }}</span>
+                <Image class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
+                  sprite.name
+                }}</span>
               </button>
             </div>
-
             <p v-if="workspace.spriteTables.length === 0" class="px-2 py-3 text-muted-foreground">
               {{ t('workspace.noSpriteTables') }}
             </p>
@@ -151,38 +201,37 @@ async function saveProject(): Promise<void> {
           <h1 class="mt-4 text-base font-semibold">{{ t('workspace.emptyTitle') }}</h1>
           <p class="mt-1 text-sm text-muted-foreground">{{ t('workspace.emptyHint') }}</p>
           <div class="mt-5 flex justify-center gap-2">
-            <Button :disabled="workspace.isBusy" @click="newProject">
-              <FilePlus2 class="size-4" aria-hidden="true" />
-              {{ t('workspace.newProject') }}
-            </Button>
-            <Button
+            <Button :disabled="workspace.isBusy" @click="newProject"
+              ><FilePlus2 class="size-4" aria-hidden="true" />{{
+                t('workspace.newProject')
+              }}</Button
+            ><Button
               variant="outline"
               :disabled="workspace.isBusy"
               @click="workspace.openLocalProject"
+              ><FolderOpen class="size-4" aria-hidden="true" />{{
+                t('workspace.openProject')
+              }}</Button
             >
-              <FolderOpen class="size-4" aria-hidden="true" />
-              {{ t('workspace.openProject') }}
-            </Button>
           </div>
-          <p v-if="errorText" class="mt-4 text-sm text-destructive" role="alert">
-            {{ errorText }}
-          </p>
+          <p v-if="errorText" class="mt-4 text-sm text-destructive" role="alert">{{ errorText }}</p>
         </div>
-
         <SpritePreview
           v-else-if="workspace.selectedTexture && workspace.selectedSprite && selectedImageUrl"
           :image-url="selectedImageUrl"
           :texture-size="workspace.selectedTexture.size"
           :sprite="workspace.selectedSprite"
+          :text-regions="workspace.selectedSpriteTranslation?.textRegions"
+          :selected-text-region-id="workspace.selectedTextRegionId"
+          :editable="spriteTranslationEnabled"
+          @create-region="workspace.addTextRegion"
+          @select-region="workspace.selectTextRegion"
+          @update-region="updateRegionRect"
         />
-
         <div v-else-if="workspace.spriteTables.length === 0" class="text-center">
           <p class="text-sm font-medium">{{ t('workspace.noSpriteTables') }}</p>
-          <p class="mt-1 text-xs text-muted-foreground">
-            {{ t('workspace.noSpriteTablesHint') }}
-          </p>
+          <p class="mt-1 text-xs text-muted-foreground">{{ t('workspace.noSpriteTablesHint') }}</p>
         </div>
-
         <div v-else class="text-center">
           <p class="text-sm text-muted-foreground">{{ t('workspace.noSprite') }}</p>
         </div>
@@ -194,7 +243,6 @@ async function saveProject(): Promise<void> {
         >
           {{ t('panel.inspector') }}
         </div>
-
         <div
           v-if="
             workspace.selectedSprite && workspace.selectedSpriteTable && workspace.selectedTexture
@@ -205,6 +253,7 @@ async function saveProject(): Promise<void> {
             <p class="truncate font-semibold">{{ workspace.selectedSprite.name }}</p>
             <p class="mt-0.5 truncate text-muted-foreground">{{ workspace.selectedSprite.id }}</p>
           </div>
+
           <dl class="space-y-2">
             <div class="flex justify-between gap-3">
               <dt class="text-muted-foreground">{{ t('sprite.spriteTable') }}</dt>
@@ -237,16 +286,106 @@ async function saveProject(): Promise<void> {
                 {{ workspace.selectedSprite.originalSize.height }}
               </dd>
             </div>
-            <div v-if="workspace.selectedSprite.trimOffset" class="flex justify-between gap-3">
-              <dt class="text-muted-foreground">{{ t('sprite.trimOffset') }}</dt>
-              <dd>
-                {{ workspace.selectedSprite.trimOffset.x }},
-                {{ workspace.selectedSprite.trimOffset.y }}
-              </dd>
-            </div>
           </dl>
-        </div>
 
+          <label
+            class="flex cursor-pointer items-center justify-between gap-3 rounded border px-2 py-2"
+          >
+            <span>{{ t('sprite.translate') }}</span>
+            <input
+              type="checkbox"
+              :checked="spriteTranslationEnabled"
+              :disabled="workspace.isBusy"
+              @change="toggleTranslation"
+            />
+          </label>
+
+          <template v-if="spriteTranslationEnabled">
+            <div class="border-t pt-3">
+              <div class="mb-2 flex items-center justify-between">
+                <span class="font-semibold">{{ t('textRegion.title') }}</span>
+                <span class="text-muted-foreground">
+                  {{ workspace.selectedSpriteTranslation?.textRegions.length }}
+                </span>
+              </div>
+              <p
+                v-if="workspace.selectedSpriteTranslation?.textRegions.length === 0"
+                class="text-muted-foreground"
+              >
+                {{ t('textRegion.drawHint') }}
+              </p>
+              <button
+                v-for="region in workspace.selectedSpriteTranslation?.textRegions"
+                :key="region.id"
+                type="button"
+                class="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-accent"
+                :class="{ 'bg-accent': region.id === workspace.selectedTextRegionId }"
+                @click="workspace.selectTextRegion(region.id)"
+              >
+                <span class="truncate">{{ region.translationKey }}</span>
+                <span class="text-muted-foreground"
+                  >{{ region.rect.width }} × {{ region.rect.height }}</span
+                >
+              </button>
+            </div>
+
+            <div v-if="workspace.selectedTextRegion" class="space-y-3 border-t pt-3">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <p class="font-semibold">{{ t('textRegion.title') }}</p>
+                  <p class="truncate text-muted-foreground">
+                    {{ workspace.selectedTextRegion.id }}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="size-8"
+                  :title="t('textRegion.delete')"
+                  @click="workspace.removeTextRegion(workspace.selectedTextRegion.id)"
+                >
+                  <Trash2 class="size-3.5" />
+                </Button>
+              </div>
+              <label class="block text-muted-foreground">
+                {{ t('textRegion.key') }}
+                <input
+                  class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
+                  :value="workspace.selectedTextRegion.translationKey"
+                  @blur="updateTranslationKey"
+                />
+              </label>
+              <div class="grid grid-cols-2 gap-2">
+                <label
+                  v-for="field in ['x', 'y', 'width', 'height'] as const"
+                  :key="field"
+                  class="text-muted-foreground"
+                >
+                  {{ t(`textRegion.${field}`) }}
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
+                    :value="workspace.selectedTextRegion.rect[field]"
+                    @change="numericRegionField(field, $event)"
+                  />
+                </label>
+              </div>
+              <label class="block text-muted-foreground">
+                {{ t('textRegion.rotation') }}
+                <input
+                  type="number"
+                  step="1"
+                  class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
+                  :value="workspace.selectedTextRegion.rotation"
+                  @change="numericRegionField('rotation', $event)"
+                />
+              </label>
+            </div>
+            <p class="text-[11px] text-muted-foreground">{{ t('textRegion.sourceSpace') }}</p>
+          </template>
+        </div>
         <div v-else-if="workspace.selectedSpriteTable" class="space-y-4 p-3 text-xs">
           <div>
             <p class="truncate font-semibold">{{ workspace.selectedSpriteTable.name }}</p>
@@ -265,19 +404,16 @@ async function saveProject(): Promise<void> {
             </div>
           </dl>
         </div>
-
         <form v-else-if="workspace.project" class="space-y-4 p-3" @submit.prevent="saveProject">
           <p class="text-xs font-semibold">{{ t('project.settings') }}</p>
           <div>
-            <label for="project-name" class="text-xs text-muted-foreground">
-              {{ t('project.name') }}
-            </label>
-            <input
+            <label for="project-name" class="text-xs text-muted-foreground">{{
+              t('project.name')
+            }}</label
+            ><input
               id="project-name"
               v-model="projectName"
-              class="mt-1 h-8 w-full rounded border bg-background px-2 text-xs outline-none focus:ring-2 focus:ring-ring/30"
-              autocomplete="off"
-              @input="saved = false"
+              class="mt-1 h-8 w-full rounded border bg-background px-2 text-sm"
             />
           </div>
           <dl class="space-y-2 text-xs">
@@ -296,32 +432,27 @@ async function saveProject(): Promise<void> {
               </dd>
             </div>
           </dl>
-          <Button type="submit" size="sm" class="w-full" :disabled="workspace.isBusy">
-            <Save class="size-3.5" aria-hidden="true" />
-            {{ workspace.status === 'saving' ? t('project.saving') : t('project.save') }}
-          </Button>
+          <Button type="submit" size="sm" class="w-full" :disabled="workspace.isBusy"
+            ><Save class="size-3.5" aria-hidden="true" />{{
+              workspace.status === 'saving' ? t('project.saving') : t('project.save')
+            }}</Button
+          >
           <p v-if="saved && !errorText" class="text-center text-xs text-emerald-600">
             {{ t('project.saved') }}
           </p>
-          <p v-if="errorText" class="text-xs text-destructive" role="alert">
-            {{ errorText }}
-          </p>
+          <p v-if="errorText" class="text-xs text-destructive" role="alert">{{ errorText }}</p>
         </form>
-
         <p v-else class="p-3 text-xs text-muted-foreground">{{ t('panel.empty') }}</p>
       </aside>
     </div>
-
     <footer
       class="flex h-6 shrink-0 items-center border-t bg-card px-2 text-[11px] text-muted-foreground"
     >
-      <span>{{ statusText }}</span>
-      <span v-if="workspace.selectedSprite" class="ml-3">
-        {{ workspace.selectedSprite.name }}
-      </span>
-      <span v-if="workspace.directoryName" class="ml-auto truncate">
-        {{ workspace.directoryName }}
-      </span>
+      <span>{{ statusText }}</span
+      ><span v-if="workspace.selectedSprite" class="ml-3">{{ workspace.selectedSprite.name }}</span
+      ><span v-if="workspace.directoryName" class="ml-auto truncate">{{
+        workspace.directoryName
+      }}</span>
     </footer>
   </div>
 </template>

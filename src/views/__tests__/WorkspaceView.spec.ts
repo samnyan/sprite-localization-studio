@@ -70,8 +70,8 @@ describe('WorkspaceView', () => {
     })
 
     expect(wrapper.text()).toContain('UI Table')
-    expect(wrapper.text()).toContain('page-00')
     expect(wrapper.text()).toContain('page-01')
+    expect(wrapper.text()).not.toContain('page-00')
     expect(wrapper.text()).toContain('button_start')
     const resourceItems = wrapper.findAll('aside button').map((button) => button.text())
     expect(resourceItems.indexOf('button_start')).toBeLessThan(

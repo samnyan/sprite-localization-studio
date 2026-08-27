@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import AppMenuBar from '@/components/workspace/AppMenuBar.vue'
+import AlertDialogHost from '@/components/ui/AlertDialogHost.vue'
 
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
@@ -23,5 +24,6 @@ function newProject(): void {
     <main class="flex min-h-0 flex-1">
       <RouterView />
     </main>
+    <AlertDialogHost />
   </div>
 </template>
