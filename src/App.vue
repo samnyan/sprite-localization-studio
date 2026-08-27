@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import { useWorkspaceShortcuts } from '@/app/composables/useWorkspaceShortcuts'
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import AppMenuBar from '@/components/workspace/AppMenuBar.vue'
 import AlertDialogHost from '@/components/ui/AlertDialogHost.vue'
 
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
+useWorkspaceShortcuts()
 
 function newProject(): void {
   void workspace.createLocalProject(t('project.untitled'))

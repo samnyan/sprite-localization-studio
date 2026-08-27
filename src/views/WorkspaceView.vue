@@ -27,6 +27,7 @@ const selectedImageUrl = computed(() => {
 const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
+  if (workspace.isDirty) return t('status.unsaved')
   return t('status.ready')
 })
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
@@ -43,8 +44,14 @@ async function newProject(): Promise<void> {
   await workspace.createLocalProject(t('project.untitled'))
 }
 
+function updateProjectName(): boolean {
+  saved.value = false
+  return workspace.saveProjectName(projectName.value)
+}
+
 async function saveProject(): Promise<void> {
-  saved.value = await workspace.saveProjectName(projectName.value)
+  if (!updateProjectName()) return
+  saved.value = await workspace.saveProject()
 }
 
 async function toggleTranslation(event: Event): Promise<void> {
@@ -414,6 +421,8 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
               id="project-name"
               v-model="projectName"
               class="mt-1 h-8 w-full rounded border bg-background px-2 text-sm"
+              @input="saved = false"
+              @blur="updateProjectName"
             />
           </div>
           <dl class="space-y-2 text-xs">

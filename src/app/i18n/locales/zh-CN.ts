@@ -85,6 +85,7 @@ export default {
     ready: '就绪',
     opening: '正在打开…',
     saving: '正在保存…',
+    unsaved: '有未保存的更改',
   },
   errors: {
     unsupportedBrowser: '当前浏览器不支持本地文件夹。',

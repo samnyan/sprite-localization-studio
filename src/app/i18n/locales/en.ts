@@ -85,6 +85,7 @@ export default {
     ready: 'Ready',
     opening: 'Opening…',
     saving: 'Saving…',
+    unsaved: 'Unsaved changes',
   },
   errors: {
     unsupportedBrowser: 'Local folders are not supported by this browser.',
