@@ -17,6 +17,7 @@ describe('WorkspaceView', () => {
       schemaVersion: 1,
       name: 'Example',
       spriteTableManifestPaths: ['manifests/ui.sprite-table.json'],
+      translations: [{ spriteTableId: 'ui', spriteId: 'button-start', textRegions: [] }],
     }
     workspace.spriteTables = [
       {
@@ -74,6 +75,8 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).not.toContain('page-00')
     expect(wrapper.text()).toContain('button_start')
     const resourceItems = wrapper.findAll('aside button').map((button) => button.text())
+    const markedSprite = wrapper.findAll('aside button').find((button) => button.text() === 'button_start')
+    expect(markedSprite?.classes()).toContain('font-semibold')
     expect(resourceItems.indexOf('button_start')).toBeLessThan(
       resourceItems.indexOf('button_back'),
     )

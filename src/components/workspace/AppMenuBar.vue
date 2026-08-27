@@ -7,31 +7,46 @@ import { setLocale, type SupportedLocale } from '@/app/i18n'
 import { useTheme } from '@/app/composables/useTheme'
 
 const props = defineProps<{
-  projectName?: string
+  projectPath?: string
+  canUndo?: boolean
+  canRedo?: boolean
   busy?: boolean
 }>()
 
 const emit = defineEmits<{
   newProject: []
   openProject: []
+  saveProject: []
+  undo: []
+  redo: []
 }>()
 
 const { locale, t } = useI18n()
 const { theme, toggleTheme } = useTheme()
 const fileMenu = ref<HTMLDetailsElement>()
+const editMenu = ref<HTMLDetailsElement>()
 
 function changeLocale(event: Event): void {
   setLocale((event.target as HTMLSelectElement).value as SupportedLocale)
 }
 
-function runMenuAction(action: 'new' | 'open'): void {
+function closeMenus(): void {
   fileMenu.value?.removeAttribute('open')
+  editMenu.value?.removeAttribute('open')
+}
 
-  if (action === 'new') {
-    emit('newProject')
-  } else {
-    emit('openProject')
-  }
+function runFileAction(action: 'new' | 'open' | 'save'): void {
+  closeMenus()
+
+  if (action === 'new') emit('newProject')
+  else if (action === 'open') emit('openProject')
+  else emit('saveProject')
+}
+
+function runEditAction(action: 'undo' | 'redo'): void {
+  closeMenus()
+  if (action === 'undo') emit('undo')
+  else emit('redo')
 }
 
 function handleShortcut(event: KeyboardEvent): void {
@@ -49,9 +64,9 @@ function handleShortcut(event: KeyboardEvent): void {
 }
 
 function closeMenu(event: PointerEvent): void {
-  if (!fileMenu.value?.contains(event.target as Node)) {
-    fileMenu.value?.removeAttribute('open')
-  }
+  const target = event.target as Node
+  if (!fileMenu.value?.contains(target)) fileMenu.value?.removeAttribute('open')
+  if (!editMenu.value?.contains(target)) editMenu.value?.removeAttribute('open')
 }
 
 onMounted(() => {
@@ -74,12 +89,12 @@ onBeforeUnmount(() => {
         <summary class="cursor-default list-none rounded px-2 py-1.5 hover:bg-accent">
           {{ t('menu.file') }}
         </summary>
-        <div class="absolute top-[calc(100%+3px)] left-0 z-50 w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+        <div class="absolute top-[calc(100%+3px)] left-0 z-50 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
           <button
             type="button"
             class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
             :disabled="busy"
-            @click="runMenuAction('new')"
+            @click="runFileAction('new')"
           >
             {{ t('menu.newProject') }}
             <span class="ml-auto text-muted-foreground">Ctrl+N</span>
@@ -88,16 +103,52 @@ onBeforeUnmount(() => {
             type="button"
             class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
             :disabled="busy"
-            @click="runMenuAction('open')"
+            @click="runFileAction('open')"
           >
             {{ t('menu.openProject') }}
             <span class="ml-auto text-muted-foreground">Ctrl+O</span>
+          </button>
+          <div class="my-1 border-t" />
+          <button
+            type="button"
+            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
+            :disabled="busy || !projectPath"
+            @click="runFileAction('save')"
+          >
+            {{ t('menu.save') }}
+            <span class="ml-auto text-muted-foreground">Ctrl+S</span>
+          </button>
+        </div>
+      </details>
+
+      <details ref="editMenu" class="group relative">
+        <summary class="cursor-default list-none rounded px-2 py-1.5 hover:bg-accent">
+          {{ t('menu.edit') }}
+        </summary>
+        <div class="absolute top-[calc(100%+3px)] left-0 z-50 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+          <button
+            type="button"
+            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
+            :disabled="busy || !canUndo"
+            @click="runEditAction('undo')"
+          >
+            {{ t('menu.undo') }}
+            <span class="ml-auto text-muted-foreground">Ctrl+Z</span>
+          </button>
+          <button
+            type="button"
+            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
+            :disabled="busy || !canRedo"
+            @click="runEditAction('redo')"
+          >
+            {{ t('menu.redo') }}
+            <span class="ml-auto text-muted-foreground">Ctrl+Y</span>
           </button>
         </div>
       </details>
 
       <span class="ml-2 truncate border-l pl-3 text-muted-foreground">
-        {{ projectName || t('app.name') }}
+        {{ projectPath || t('app.name') }}
       </span>
     </div>
 

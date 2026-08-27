@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { FilePlus2, Folder, FolderOpen, Image, Images, Save, Trash2 } from '@lucide/vue'
+import { FilePlus2, Folder, FolderOpen, Image, Images, Redo2, Save, Trash2, Undo2 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
@@ -52,6 +52,15 @@ function updateProjectName(): boolean {
 async function saveProject(): Promise<void> {
   if (!updateProjectName()) return
   saved.value = await workspace.saveProject()
+}
+
+function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
+  return (
+    workspace.project?.translations?.some(
+      (translation) =>
+        translation.spriteTableId === spriteTableId && translation.spriteId === spriteId,
+    ) ?? false
+  )
 }
 
 async function toggleTranslation(event: Event): Promise<void> {
@@ -109,25 +118,28 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
 <template>
   <div class="flex min-h-0 flex-1 flex-col bg-muted/20">
     <div class="flex h-10 shrink-0 items-center gap-1 border-b bg-background px-2">
-      <Button variant="ghost" size="sm" :disabled="workspace.isBusy" @click="newProject">
-        <FilePlus2 class="size-4" aria-hidden="true" />{{ t('workspace.newProject') }}
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-8"
+        :disabled="workspace.isBusy || !workspace.canUndo"
+        :title="t('history.undoTooltip')"
+        :aria-label="t('history.undoTooltip')"
+        @click="workspace.undo"
+      >
+        <Undo2 class="size-4" aria-hidden="true" />
       </Button>
       <Button
         variant="ghost"
-        size="sm"
-        :disabled="workspace.isBusy"
-        @click="workspace.openLocalProject"
+        size="icon"
+        class="size-8"
+        :disabled="workspace.isBusy || !workspace.canRedo"
+        :title="t('history.redoTooltip')"
+        :aria-label="t('history.redoTooltip')"
+        @click="workspace.redo"
       >
-        <FolderOpen class="size-4" aria-hidden="true" />{{ t('workspace.openProject') }}
+        <Redo2 class="size-4" aria-hidden="true" />
       </Button>
-      <div class="mx-2 h-5 border-l"></div>
-      <span class="truncate text-xs text-muted-foreground">{{
-        workspace.project?.name || t('toolbar.noProject')
-      }}</span>
-      <template v-if="workspace.selectedSprite">
-        <span class="text-muted-foreground/50">/</span
-        ><span class="truncate text-xs">{{ workspace.selectedSprite.name }}</span>
-      </template>
     </div>
 
     <div class="flex min-h-0 flex-1">
@@ -177,6 +189,7 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
                   'bg-accent':
                     workspace.selectedSpriteTableId === spriteTable.id &&
                     workspace.selectedSpriteId === sprite.id,
+                  'font-semibold': isSpriteTranslationEnabled(spriteTable.id, sprite.id),
                 }"
                 @click="workspace.selectSprite(spriteTable.id, sprite.id)"
               >

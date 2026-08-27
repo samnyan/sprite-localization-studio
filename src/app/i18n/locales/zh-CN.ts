@@ -4,8 +4,16 @@ export default {
   },
   menu: {
     file: '文件',
+    edit: '编辑',
     newProject: '新建工程',
     openProject: '打开工程…',
+    save: '保存',
+    undo: '撤销',
+    redo: '重做',
+  },
+  history: {
+    undoTooltip: '撤销 (Ctrl+Z)',
+    redoTooltip: '重做 (Ctrl+Y)',
   },
   toolbar: {
     project: '工程',

@@ -4,8 +4,16 @@ export default {
   },
   menu: {
     file: 'File',
+    edit: 'Edit',
     newProject: 'New Project',
     openProject: 'Open Project…',
+    save: 'Save',
+    undo: 'Undo',
+    redo: 'Redo',
+  },
+  history: {
+    undoTooltip: 'Undo (Ctrl+Z)',
+    redoTooltip: 'Redo (Ctrl+Y)',
   },
   toolbar: {
     project: 'Project',

@@ -18,10 +18,15 @@ function newProject(): void {
 <template>
   <div class="flex h-screen min-w-[800px] flex-col overflow-hidden bg-background text-foreground">
     <AppMenuBar
-      :project-name="workspace.project?.name"
+      :project-path="workspace.directoryName"
+      :can-undo="workspace.canUndo"
+      :can-redo="workspace.canRedo"
       :busy="workspace.isBusy"
       @new-project="newProject"
       @open-project="workspace.openLocalProject"
+      @save-project="workspace.saveProject"
+      @undo="workspace.undo"
+      @redo="workspace.redo"
     />
     <main class="flex min-h-0 flex-1">
       <RouterView />
