@@ -2,6 +2,11 @@ import { computed, markRaw, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
+import {
+  buildLocalizedTextures,
+  createLocalizedTextureBuildPlan,
+  type LocalizedTextureBuildReport,
+} from '@/application/build/LocalizedTextureBuild'
 import { ProjectFormatError, ProjectRepository } from '@/application/project/ProjectRepository'
 import {
   SpriteTableFormatError,
@@ -15,9 +20,10 @@ import type { SpriteTable } from '@/domain/sprite-table/types'
 import type { SpriteTranslation, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
+import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 
-type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'error'
+type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
 export type PreviewBackground = 'transparent' | 'black' | 'white'
 
@@ -61,6 +67,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const error = ref<WorkspaceError>()
   const mode = ref<WorkspaceMode>('sprites')
   const previewBackground = ref<PreviewBackground>('transparent')
+  const lastBuildReport = ref<LocalizedTextureBuildReport>()
   const documentRevision = ref(0)
   const persistedRevision = ref(0)
   const canUndo = ref(false)
@@ -71,7 +78,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let documentSession = 0
 
   const hasProject = computed(() => project.value !== undefined)
-  const isBusy = computed(() => status.value === 'opening' || status.value === 'saving')
+  const isBusy = computed(
+    () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
+  )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
   const selectedSpriteTable = computed(() =>
     spriteTables.value.find((spriteTable) => spriteTable.id === selectedSpriteTableId.value),
@@ -228,6 +237,37 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
     })()
     return savePromise
+  }
+
+  async function buildTextures(): Promise<boolean> {
+    if (!project.value || !activeStorage) return failProjectNotOpen()
+    if (!(await saveProject())) return false
+
+    const projectSnapshot = structuredClone(project.value)
+    const spriteTablesSnapshot = structuredClone(spriteTables.value)
+    const storage = activeStorage
+    const session = documentSession
+    status.value = 'building'
+    error.value = undefined
+
+    try {
+      const plan = createLocalizedTextureBuildPlan(projectSnapshot, spriteTablesSnapshot)
+      const report = await buildLocalizedTextures(
+        plan,
+        markRaw(new CanvasTextureBuilder(storage, projectSnapshot)),
+      )
+      if (session === documentSession) {
+        lastBuildReport.value = report
+        status.value = 'ready'
+      }
+      return true
+    } catch (caughtError) {
+      if (session === documentSession) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
+      return false
+    }
   }
 
   function undo(): boolean {
@@ -679,9 +719,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     canRedo,
     mode,
     previewBackground,
+    lastBuildReport,
     openLocalProject,
     createLocalProject,
     saveProject,
+    buildTextures,
     saveProjectName,
     undo,
     redo,

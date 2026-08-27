@@ -4,6 +4,7 @@ import {
   FilePlus2,
   Folder,
   FolderOpen,
+  FileOutput,
   Image,
   Images,
   Redo2,
@@ -45,8 +46,18 @@ const selectedImageUrl = computed(() => {
 const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
+  if (workspace.status === 'building') return t('status.building')
   if (workspace.isDirty) return t('status.unsaved')
   return t('status.ready')
+})
+const lastBuildText = computed(() => {
+  const report = workspace.lastBuildReport
+  return report
+    ? t('build.completed', {
+        textures: report.textures.length,
+        sprites: report.modifiedSpriteCount,
+      })
+    : undefined
 })
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
 
@@ -70,6 +81,10 @@ function updateProjectName(): boolean {
 async function saveProject(): Promise<void> {
   if (!updateProjectName()) return
   saved.value = await workspace.saveProject()
+}
+
+async function buildTextures(): Promise<void> {
+  await workspace.buildTextures()
 }
 
 function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
@@ -206,6 +221,16 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+      <Button
+        variant="outline"
+        size="sm"
+        class="ml-auto"
+        :disabled="workspace.isBusy || !workspace.project"
+        @click="buildTextures"
+      >
+        <FileOutput data-icon="inline-start" aria-hidden="true" />
+        {{ t('build.action') }}
+      </Button>
     </div>
 
     <div class="flex min-h-0 flex-1">
@@ -542,9 +567,10 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
     <footer
       class="flex h-6 shrink-0 items-center border-t bg-card px-2 text-[11px] text-muted-foreground"
     >
-      <span>{{ statusText }}</span
-      ><span v-if="workspace.selectedSprite" class="ml-3">{{ workspace.selectedSprite.name }}</span
-      ><span v-if="workspace.directoryName" class="ml-auto truncate">{{
+      <span>{{ statusText }}</span>
+      <span v-if="lastBuildText" class="ml-3">{{ lastBuildText }}</span>
+      <span v-if="workspace.selectedSprite" class="ml-3">{{ workspace.selectedSprite.name }}</span>
+      <span v-if="workspace.directoryName" class="ml-auto truncate">{{
         workspace.directoryName
       }}</span>
     </footer>

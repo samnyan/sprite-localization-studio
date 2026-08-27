@@ -36,3 +36,18 @@ export function getStoredToLogicalTransform(sprite: Sprite): CanvasTransform {
       return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
   }
 }
+
+export function getLogicalToStoredTransform(sprite: Sprite): CanvasTransform {
+  const { width, height } = sprite.frame
+
+  switch (sprite.rotation) {
+    case 90:
+      return { a: 0, b: 1, c: -1, d: 0, e: width, f: 0 }
+    case 180:
+      return { a: -1, b: 0, c: 0, d: -1, e: width, f: height }
+    case 270:
+      return { a: 0, b: -1, c: 1, d: 0, e: 0, f: height }
+    default:
+      return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }
+  }
+}

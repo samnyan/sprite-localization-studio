@@ -111,6 +111,10 @@ export default {
     saving: '正在保存…',
     saved: '已保存',
   },
+  build: {
+    action: '构造贴图',
+    completed: '已构造 {textures} 张贴图 · {sprites} 个 Sprite',
+  },
   spriteTable: {
     textures: '贴图',
     sprites: 'Sprites',
@@ -158,6 +162,7 @@ export default {
     ready: '就绪',
     opening: '正在打开…',
     saving: '正在保存…',
+    building: '正在构造贴图…',
     unsaved: '有未保存的更改',
   },
   errors: {

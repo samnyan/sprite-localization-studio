@@ -25,17 +25,19 @@ const emit = defineEmits<{
   upload: [file: File]
 }>()
 const { t } = useI18n()
-const type = ref<'original' | 'blank' | 'template'>('original')
-const backgroundId = ref<string>()
+const draftType = ref<'original' | 'blank' | 'template'>('original')
+const draftBackgroundId = ref<string>()
 const fileInput = ref<HTMLInputElement>()
-const canSave = computed(() => type.value !== 'template' || backgroundId.value !== undefined)
+const canSave = computed(
+  () => draftType.value !== 'template' || draftBackgroundId.value !== undefined,
+)
 
 watch(
   () => [props.open, props.type, props.backgroundId] as const,
   () => {
     if (!props.open) return
-    type.value = props.type ?? (props.backgroundId ? 'template' : 'original')
-    backgroundId.value = props.backgroundId
+    draftType.value = props.type ?? (props.backgroundId ? 'template' : 'original')
+    draftBackgroundId.value = props.backgroundId
   },
   { immediate: true },
 )
@@ -63,10 +65,12 @@ function typeLabel(type: 'original' | 'blank' | 'template'): string {
             v-for="option in ['original', 'blank', 'template'] as const"
             :key="option"
             class="flex items-center gap-2 text-sm"
-            ><input v-model="type" type="radio" :value="option" />{{ typeLabel(option) }}</label
+            ><input v-model="draftType" type="radio" :value="option" />{{
+              typeLabel(option)
+            }}</label
           >
         </div>
-        <template v-if="type === 'template'">
+        <template v-if="draftType === 'template'">
           <input ref="fileInput" class="sr-only" type="file" accept="image/*" @change="upload" />
           <Button variant="outline" class="w-fit" @click="fileInput?.click()">{{
             t('translation.upload')
@@ -77,8 +81,8 @@ function typeLabel(type: 'original' | 'blank' | 'template'): string {
               :key="template.id"
               type="button"
               class="overflow-hidden rounded border p-1"
-              :class="{ 'border-primary ring-1 ring-primary': backgroundId === template.id }"
-              @click="backgroundId = template.id"
+              :class="{ 'border-primary ring-1 ring-primary': draftBackgroundId === template.id }"
+              @click="draftBackgroundId = template.id"
             >
               <img
                 :src="imageUrls[template.id]"
@@ -94,7 +98,7 @@ function typeLabel(type: 'original' | 'blank' | 'template'): string {
         ><Button variant="outline" @click="emit('close')">{{ t('translation.cancel') }}</Button
         ><Button
           :disabled="!canSave"
-          @click="emit('save', type, type === 'template' ? backgroundId : undefined)"
+          @click="emit('save', draftType, draftType === 'template' ? draftBackgroundId : undefined)"
           >{{ t('common.ok') }}</Button
         ></DialogFooter
       >

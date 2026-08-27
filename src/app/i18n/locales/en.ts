@@ -111,6 +111,10 @@ export default {
     saving: 'Saving…',
     saved: 'Saved',
   },
+  build: {
+    action: 'Build Textures',
+    completed: 'Built {textures} textures · {sprites} sprites',
+  },
   spriteTable: {
     textures: 'Textures',
     sprites: 'Sprites',
@@ -158,6 +162,7 @@ export default {
     ready: 'Ready',
     opening: 'Opening…',
     saving: 'Saving…',
+    building: 'Building textures…',
     unsaved: 'Unsaved changes',
   },
   errors: {
