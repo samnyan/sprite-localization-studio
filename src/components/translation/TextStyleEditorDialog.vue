@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FormField from '@/components/ui/FormField.vue'
@@ -22,7 +22,13 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { DEFAULT_TEXT_RENDER, textStyleTemplates } from '@/domain/text-region/styleTemplates'
-import type { TextRenderConfig, TextShadow } from '@/domain/text-region/types'
+import type {
+  GradientStop,
+  TextPaint,
+  TextRenderConfig,
+  TextShadow,
+  TextStyleTemplate,
+} from '@/domain/text-region/types'
 import TextStyleCanvasPreview from '@/components/translation/TextStyleCanvasPreview.vue'
 import type { PreviewBackground } from '@/app/stores/workspace'
 
@@ -31,16 +37,24 @@ const props = defineProps<{
   text: string
   render?: TextRenderConfig
   styleId?: string
+  templates?: TextStyleTemplate[]
   previewBackground?: PreviewBackground
 }>()
 const emit = defineEmits<{
   close: []
   save: [render: TextRenderConfig, styleId?: string]
+  saveTemplate: [name: string, render: TextRenderConfig, id?: string]
+  deleteTemplate: [id: string]
 }>()
 const { t } = useI18n()
 const draft = ref<TextRenderConfig>({ ...DEFAULT_TEXT_RENDER })
 const selectedTemplateId = ref<string>()
 const templatesOpen = ref(false)
+const templateName = ref('')
+const availableTemplates = computed(() => [...textStyleTemplates, ...(props.templates ?? [])])
+const selectedProjectTemplate = computed(() =>
+  props.templates?.find((template) => template.id === selectedTemplateId.value),
+)
 
 function ensureShadows(): TextShadow[] {
   if (!draft.value.shadows) draft.value.shadows = draft.value.shadow ? [draft.value.shadow] : []
@@ -55,6 +69,34 @@ function removeShadow(index: number): void {
   ensureShadows().splice(index, 1)
 }
 
+function ensureGradientStops(paint: TextPaint): GradientStop[] {
+  if (!paint.gradientStops) {
+    paint.gradientStops = [
+      { color: paint.color, position: 0, alpha: paint.alpha ?? 1 },
+      {
+        color: paint.gradientEnd ?? paint.color,
+        position: 1,
+        alpha: paint.gradientEndAlpha ?? paint.alpha ?? 1,
+      },
+    ]
+  }
+  return paint.gradientStops
+}
+
+function addGradientStop(paint: TextPaint): void {
+  ensureGradientStops(paint).push({ color: paint.color, position: 0.5, alpha: paint.alpha ?? 1 })
+}
+
+function removeGradientStop(paint: TextPaint, index: number): void {
+  const stops = ensureGradientStops(paint)
+  if (stops.length > 2) stops.splice(index, 1)
+}
+
+function updateGradientStopPosition(stop: GradientStop, value: string | number): void {
+  const percent = Number(value)
+  stop.position = Number.isFinite(percent) ? Math.max(0, Math.min(1, percent / 100)) : 0
+}
+
 watch(
   () => [props.open, props.render, props.styleId] as const,
   () => {
@@ -63,14 +105,16 @@ watch(
       JSON.stringify({ ...DEFAULT_TEXT_RENDER, ...props.render }),
     ) as TextRenderConfig
     selectedTemplateId.value = props.styleId
+    templateName.value = selectedProjectTemplate.value?.name ?? ''
   },
   { immediate: true, deep: true },
 )
 
 function selectTemplate(id: string): void {
-  const template = textStyleTemplates.find((item) => item.id === id)
+  const template = availableTemplates.value.find((item) => item.id === id)
   if (!template) return
   selectedTemplateId.value = id
+  templateName.value = template.name
   draft.value = JSON.parse(JSON.stringify(template.render)) as TextRenderConfig
 }
 
@@ -79,6 +123,17 @@ function save(): void {
     'save',
     JSON.parse(JSON.stringify(draft.value)) as TextRenderConfig,
     selectedTemplateId.value,
+  )
+}
+
+function saveTemplate(overwrite: boolean): void {
+  const name = templateName.value.trim()
+  if (!name) return
+  emit(
+    'saveTemplate',
+    name,
+    JSON.parse(JSON.stringify(draft.value)) as TextRenderConfig,
+    overwrite ? selectedProjectTemplate.value?.id : undefined,
   )
 }
 </script>
@@ -113,7 +168,7 @@ function save(): void {
             </button>
             <div v-if="templatesOpen" class="mt-2 grid grid-cols-2 gap-2">
               <button
-                v-for="template in textStyleTemplates"
+                v-for="template in availableTemplates"
                 :key="template.id"
                 type="button"
                 class="h-20 rounded border p-2 text-center text-xs"
@@ -129,6 +184,30 @@ function save(): void {
                 />
                 <span class="mt-1 block text-muted-foreground">{{ template.name }}</span>
               </button>
+            </div>
+            <div class="mt-3 space-y-2">
+              <Input v-model="templateName" :placeholder="t('style.templateName')" />
+              <div class="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" @click="saveTemplate(false)">
+                  {{ t('style.saveAsTemplate') }}
+                </Button>
+                <Button
+                  v-if="selectedProjectTemplate"
+                  variant="outline"
+                  size="sm"
+                  @click="saveTemplate(true)"
+                >
+                  {{ t('style.updateTemplate') }}
+                </Button>
+                <Button
+                  v-if="selectedProjectTemplate"
+                  variant="outline"
+                  size="sm"
+                  @click="emit('deleteTemplate', selectedProjectTemplate.id)"
+                >
+                  {{ t('style.deleteTemplate') }}
+                </Button>
+              </div>
             </div>
           </section>
           <section class="space-y-5">
@@ -220,6 +299,41 @@ function save(): void {
                   :step="0.01"
                   @update:model-value="draft.fill!.gradientEndAlpha = $event?.[0] ?? 1"
               /></FormField>
+              <div v-if="draft.fill!.mode === 'gradient'" class="col-span-full space-y-2">
+                <div
+                  v-for="(stop, index) in ensureGradientStops(draft.fill!)"
+                  :key="index"
+                  class="grid grid-cols-[2rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2"
+                >
+                  <span class="pb-2 text-xs text-muted-foreground">{{ index + 1 }}</span>
+                  <FormField :label="t('style.color')">
+                    <input v-model="stop.color" class="h-8 w-full rounded border bg-background p-1" type="color" />
+                  </FormField>
+                  <FormField :label="t('style.stopPosition')">
+                    <Input
+                      :model-value="Math.round(stop.position * 100)"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      @update:model-value="updateGradientStopPosition(stop, $event)"
+                    />
+                  </FormField>
+                  <FormField :label="t('style.alpha')">
+                    <Slider
+                      :model-value="[stop.alpha ?? 1]"
+                      :min="0"
+                      :max="1"
+                      :step="0.01"
+                      @update:model-value="stop.alpha = $event?.[0] ?? 1"
+                    />
+                  </FormField>
+                  <Button variant="outline" size="sm" :disabled="ensureGradientStops(draft.fill!).length <= 2" @click="removeGradientStop(draft.fill!, index)">×</Button>
+                </div>
+                <Button variant="outline" size="sm" @click="addGradientStop(draft.fill!)">
+                  + {{ t('style.addStop') }}
+                </Button>
+              </div>
             </fieldset>
             <fieldset class="grid grid-cols-3 gap-3 rounded border p-3">
               <legend class="px-1 text-xs text-muted-foreground">{{ t('style.stroke') }}</legend>

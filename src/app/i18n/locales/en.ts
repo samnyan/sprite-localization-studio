@@ -89,6 +89,14 @@ export default {
     offsetX: 'Offset X',
     offsetY: 'Offset Y',
     addShadow: 'Add shadow',
+    templateName: 'Template name',
+    saveAsTemplate: 'Save as template',
+    updateTemplate: 'Update template',
+    deleteTemplate: 'Delete template',
+    templateInUseTitle: 'Template is in use',
+    templateInUse: 'This template is used by {count} text regions. Assign another style first.',
+    stopPosition: 'Position (%)',
+    addStop: 'Add stop',
   },
   workspace: {
     emptyTitle: 'No project open',
@@ -189,6 +197,8 @@ export default {
       invalidBackgroundTemplates: 'Background template metadata is invalid.',
       invalidSpriteBackgrounds: 'Sprite background metadata is invalid.',
       invalidBackgroundReferences: 'Background references are invalid.',
+      invalidTextStyleTemplates: 'Text style template metadata is invalid.',
+      invalidStyleReferences: 'Text style references are invalid.',
     },
     spriteTable: {
       invalidJson: 'The sprite table manifest is not valid JSON.',

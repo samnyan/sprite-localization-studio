@@ -14,7 +14,7 @@ describe('WorkspaceView', () => {
 
     const workspace = useWorkspaceStore()
     workspace.project = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: 'Example',
       spriteTableManifestPaths: ['manifests/ui.sprite-table.json'],
       translations: [{ spriteTableId: 'ui', spriteId: 'button-start', textRegions: [] }],

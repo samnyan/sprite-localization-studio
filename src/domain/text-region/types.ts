@@ -4,6 +4,12 @@ export type TextAlign = 'left' | 'center' | 'right'
 export type PaintMode = 'transparent' | 'solid' | 'gradient'
 export type StrokePosition = 'inside' | 'outside'
 
+export interface GradientStop {
+  color: string
+  position: number
+  alpha?: number
+}
+
 export interface TextPaint {
   mode: PaintMode
   color: string
@@ -13,6 +19,7 @@ export interface TextPaint {
   /** Opacity multiplier from 0 to 1. */
   alpha?: number
   gradientEndAlpha?: number
+  gradientStops?: GradientStop[]
 }
 
 export interface TextStroke {

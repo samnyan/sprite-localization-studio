@@ -7,7 +7,9 @@ import {
   resolveBackgroundType,
   type SpriteTranslation,
   type TextRegion,
+  type TextStyleTemplate,
 } from '@/domain/text-region/types'
+import { textStyleTemplates } from '@/domain/text-region/styleTemplates'
 
 export const PROJECT_MANIFEST_PATH = 'project.json'
 
@@ -25,6 +27,8 @@ export type ProjectFormatErrorCode =
   | 'invalidBackgroundTemplates'
   | 'invalidSpriteBackgrounds'
   | 'invalidBackgroundReferences'
+  | 'invalidTextStyleTemplates'
+  | 'invalidStyleReferences'
 
 export class ProjectFormatError extends Error {
   override readonly name = 'ProjectFormatError'
@@ -71,7 +75,7 @@ function isTextRegion(value: unknown): value is TextRegion {
   )
 }
 
-function isTextRenderConfig(value: unknown): boolean {
+export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['render'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
 
   const config = value as Record<string, unknown>
@@ -90,7 +94,24 @@ function isTextRenderConfig(value: unknown): boolean {
       (record.gradientEndAlpha === undefined ||
         (Number.isFinite(record.gradientEndAlpha) &&
           (record.gradientEndAlpha as number) >= 0 &&
-          (record.gradientEndAlpha as number) <= 1))
+          (record.gradientEndAlpha as number) <= 1)) &&
+      (record.gradientStops === undefined ||
+        (Array.isArray(record.gradientStops) &&
+          record.gradientStops.length >= 2 &&
+          record.gradientStops.every((stop) => {
+            if (!stop || typeof stop !== 'object' || Array.isArray(stop)) return false
+            const gradientStop = stop as Record<string, unknown>
+            return (
+              isNonEmptyString(gradientStop.color) &&
+              Number.isFinite(gradientStop.position) &&
+              (gradientStop.position as number) >= 0 &&
+              (gradientStop.position as number) <= 1 &&
+              (gradientStop.alpha === undefined ||
+                (Number.isFinite(gradientStop.alpha) &&
+                  (gradientStop.alpha as number) >= 0 &&
+                  (gradientStop.alpha as number) <= 1))
+            )
+          })))
     )
   }
   const isStroke = (stroke: unknown): boolean => {
@@ -143,6 +164,41 @@ function isTextRenderConfig(value: unknown): boolean {
             isTextRenderConfig(record.render)
           )
         })))
+  )
+}
+
+function isTextStyleTemplates(value: unknown): value is TextStyleTemplate[] {
+  if (!Array.isArray(value)) return false
+  const ids = new Set<string>()
+  return value.every((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+    const template = item as Record<string, unknown>
+    if (
+      !isNonEmptyString(template.id) ||
+      !isNonEmptyString(template.name) ||
+      !isTextRenderConfig(template.render) ||
+      ids.has(template.id) ||
+      textStyleTemplates.some((builtin) => builtin.id === template.id)
+    ) {
+      return false
+    }
+    ids.add(template.id)
+    return true
+  })
+}
+
+function hasValidStyleTemplateReferences(
+  translations: SpriteTranslation[],
+  projectTemplates: TextStyleTemplate[],
+): boolean {
+  const templateIds = new Set([
+    ...textStyleTemplates.map((template) => template.id),
+    ...projectTemplates.map((template) => template.id),
+  ])
+  return translations.every((translation) =>
+    translation.textRegions.every(
+      (region) => region.styleId === undefined || templateIds.has(region.styleId),
+    ),
   )
 }
 
@@ -303,6 +359,7 @@ export function parseProjectManifest(text: string): ProjectManifest {
   const record = value as Record<string, unknown>
 
   if (record.schemaVersion === 1) return migrateLegacyManifest(record)
+  if (record.schemaVersion === 2) return migrateV2Manifest(record)
 
   if (record.schemaVersion !== PROJECT_SCHEMA_VERSION) {
     throw new ProjectFormatError('unsupportedSchema', { version: String(record.schemaVersion) })
@@ -337,17 +394,34 @@ export function parseProjectManifest(text: string): ProjectManifest {
     throw new ProjectFormatError('invalidSpriteBackgrounds')
   }
 
+  if (
+    record.textStyleTemplates !== undefined &&
+    !isTextStyleTemplates(record.textStyleTemplates)
+  ) {
+    throw new ProjectFormatError('invalidTextStyleTemplates')
+  }
+
   const translations = (record.translations ?? []) as SpriteTranslation[]
   const templates = (record.backgroundTemplates ?? []) as BackgroundTemplate[]
   const spriteBackgrounds = (record.spriteBackgrounds ?? []) as SpriteBackground[]
-  if (
-    !hasUniqueBackgroundResources(templates, spriteBackgrounds) ||
-    !hasValidBackgroundReferences(translations, templates, spriteBackgrounds)
-  ) {
+  const textStyleTemplates = (record.textStyleTemplates ?? []) as TextStyleTemplate[]
+  if (!hasUniqueBackgroundResources(templates, spriteBackgrounds)) {
     throw new ProjectFormatError('invalidBackgroundReferences')
+  }
+  if (!hasValidBackgroundReferences(translations, templates, spriteBackgrounds)) {
+    throw new ProjectFormatError('invalidBackgroundReferences')
+  }
+  if (!hasValidStyleTemplateReferences(translations, textStyleTemplates)) {
+    throw new ProjectFormatError('invalidStyleReferences')
   }
 
   return { ...record, schemaVersion: PROJECT_SCHEMA_VERSION, name: record.name } as ProjectManifest
+}
+
+function migrateV2Manifest(record: Record<string, unknown>): ProjectManifest {
+  return parseProjectManifest(
+    JSON.stringify({ ...record, schemaVersion: PROJECT_SCHEMA_VERSION }),
+  )
 }
 
 function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest {
@@ -374,11 +448,18 @@ function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest
     throw new ProjectFormatError('invalidTranslationBackgrounds')
   }
 
+  if (
+    record.textStyleTemplates !== undefined &&
+    !isTextStyleTemplates(record.textStyleTemplates)
+  ) {
+    throw new ProjectFormatError('invalidTextStyleTemplates')
+  }
+
   const { translationBackgrounds, translations: legacyTranslations, ...project } = record
   const backgroundTemplates = (translationBackgrounds as ImageResource[] | undefined)?.map(
     (background) => ({ ...background, scope: 'template' as const }),
   )
-  return {
+  const migrated = {
     ...project,
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name: record.name,
@@ -392,7 +473,8 @@ function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest
           ),
         }
       : {}),
-  } as ProjectManifest
+  }
+  return migrated as ProjectManifest
 }
 
 export class ProjectRepository {
@@ -410,6 +492,7 @@ export class ProjectRepository {
       await this.save(migrated)
       return migrated
     }
+    if (isOutdatedProject(text)) await this.save(project)
     return project
   }
 
@@ -459,6 +542,15 @@ export class ProjectRepository {
 function isLegacyProject(text: string): boolean {
   try {
     return (JSON.parse(text) as { schemaVersion?: unknown }).schemaVersion === 1
+  } catch {
+    return false
+  }
+}
+
+function isOutdatedProject(text: string): boolean {
+  try {
+    const schemaVersion = (JSON.parse(text) as { schemaVersion?: unknown }).schemaVersion
+    return typeof schemaVersion === 'number' && schemaVersion < PROJECT_SCHEMA_VERSION
   } catch {
     return false
   }

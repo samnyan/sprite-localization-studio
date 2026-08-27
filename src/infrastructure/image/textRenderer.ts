@@ -20,14 +20,24 @@ function paintStyle(
 ): CanvasFillStrokeStyles['fillStyle'] | undefined {
   if (!paint || paint.mode === 'transparent') return undefined
   const start = withAlpha(paint.color, paint.alpha)
-  if (paint.mode !== 'gradient' || !paint.gradientEnd) return start
+  if (paint.mode !== 'gradient') return start
   const angle = ((paint.gradientAngle ?? 0) * Math.PI) / 180
   const dx = Math.cos(angle)
   const dy = Math.sin(angle)
   const extent = Math.abs(dx) * width / 2 + Math.abs(dy) * height / 2
   const gradient = context.createLinearGradient(-dx * extent, -dy * extent, dx * extent, dy * extent)
-  gradient.addColorStop(0, start)
-  gradient.addColorStop(1, withAlpha(paint.gradientEnd, paint.gradientEndAlpha ?? paint.alpha))
+  const stops = paint.gradientStops?.length
+    ? paint.gradientStops
+    : paint.gradientEnd
+      ? [
+          { color: paint.color, position: 0, alpha: paint.alpha },
+          { color: paint.gradientEnd, position: 1, alpha: paint.gradientEndAlpha ?? paint.alpha },
+        ]
+      : []
+  if (stops.length < 2) return start
+  for (const stop of [...stops].sort((left, right) => left.position - right.position)) {
+    gradient.addColorStop(stop.position, withAlpha(stop.color, stop.alpha))
+  }
   return gradient
 }
 
@@ -43,11 +53,19 @@ export function drawTextRegion(
   render: TextRenderConfig,
 ): void {
   const config = { ...DEFAULT_TEXT_RENDER, ...render }
-  const fill = paintStyle(context, config.fill ?? { mode: 'solid', color: config.color }, region.rect.width, region.rect.height)
-  const stroke = config.stroke && config.stroke.width > 0 ? paintStyle(context, config.stroke.paint, region.rect.width, region.rect.height) : undefined
   context.save()
   context.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
   context.rotate((region.rotation * Math.PI) / 180)
+  const fill = paintStyle(
+    context,
+    config.fill ?? { mode: 'solid', color: config.color },
+    region.rect.width,
+    region.rect.height,
+  )
+  const stroke =
+    config.stroke && config.stroke.width > 0
+      ? paintStyle(context, config.stroke.paint, region.rect.width, region.rect.height)
+      : undefined
   context.font = `${config.fontWeight} ${config.fontSize}px ${config.fontFamily}`
   context.textAlign = config.align
   context.textBaseline = 'middle'

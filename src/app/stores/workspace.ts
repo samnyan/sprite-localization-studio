@@ -11,7 +11,11 @@ import {
   createLocalizedTextureBuildPlan,
   type LocalizedTextureBuildReport,
 } from '@/application/build/LocalizedTextureBuild'
-import { ProjectFormatError, ProjectRepository } from '@/application/project/ProjectRepository'
+import {
+  isTextRenderConfig,
+  ProjectFormatError,
+  ProjectRepository,
+} from '@/application/project/ProjectRepository'
 import {
   SpriteTableFormatError,
   SpriteTableRepository,
@@ -26,6 +30,7 @@ import {
   type SpriteTranslation,
   type TextRegion,
   type TextRenderConfig,
+  type TextStyleTemplate,
 } from '@/domain/text-region/types'
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
@@ -569,6 +574,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!translation || !region) return false
 
     const updatedRegion = { ...region, ...update }
+    if (updatedRegion.render !== undefined && !isTextRenderConfig(updatedRegion.render)) return false
     if (textRegionEquals(region, updatedRegion)) return true
 
     return saveTranslations(
@@ -611,6 +617,65 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return updateTranslationRegion(spriteTableId, spriteId, regionId, {
       render: { ...DEFAULT_TEXT_RENDER, ...region.render, ...update },
     })
+  }
+
+  function saveTextStyleTemplate(
+    name: string,
+    render: TextRenderConfig,
+    id?: string,
+  ): string | undefined {
+    if (!project.value || !name.trim() || !isTextRenderConfig(render)) return undefined
+
+    const templates = project.value.textStyleTemplates ?? []
+    const templateId = id ?? crypto.randomUUID()
+    const template: TextStyleTemplate = {
+      id: templateId,
+      name: name.trim(),
+      render: JSON.parse(JSON.stringify(render)) as TextRenderConfig,
+    }
+    if (id && !templates.some((item) => item.id === id)) return undefined
+    const updatedTranslations = id
+      ? (project.value.translations ?? []).map((translation) => ({
+          ...translation,
+          textRegions: translation.textRegions.map((region) =>
+            region.styleId === id
+              ? { ...region, render: JSON.parse(JSON.stringify(template.render)) as TextRenderConfig }
+              : region,
+          ),
+        }))
+      : project.value.translations
+    const textStyleTemplates = id
+      ? templates.map((item) => (item.id === id ? template : item))
+      : [...templates, template]
+    if (
+      !dispatchProjectAction('textStyleTemplate.save', {
+        ...project.value,
+        textStyleTemplates,
+        ...(updatedTranslations ? { translations: updatedTranslations } : {}),
+      })
+    ) {
+      return undefined
+    }
+    return templateId
+  }
+
+  function textStyleTemplateReferenceCount(id: string): number {
+    return (
+      project.value?.translations?.flatMap((translation) => translation.textRegions).filter(
+        (region) => region.styleId === id,
+      ).length ?? 0
+    )
+  }
+
+  function deleteTextStyleTemplate(id: string): boolean {
+    if (!project.value || textStyleTemplateReferenceCount(id) > 0) return false
+    const textStyleTemplates = project.value.textStyleTemplates?.filter(
+      (template) => template.id !== id,
+    )
+    if (!textStyleTemplates || textStyleTemplates.length === project.value.textStyleTemplates?.length) {
+      return false
+    }
+    return dispatchProjectAction('textStyleTemplate.delete', { ...project.value, textStyleTemplates })
   }
 
   function setSpriteTranslationBackground(
@@ -906,6 +971,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateTranslationText,
     updateTranslationRegion,
     updateTranslationRender,
+    saveTextStyleTemplate,
+    textStyleTemplateReferenceCount,
+    deleteTextStyleTemplate,
     setSpriteTranslationBackground,
     addBackgroundTemplate,
     addSpriteBackground,

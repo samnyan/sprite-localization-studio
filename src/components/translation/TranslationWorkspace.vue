@@ -54,7 +54,11 @@ function backgroundUrl(backgroundId?: string): string | undefined {
 }
 
 function styleName(styleId?: string): string {
-  return textStyleTemplates.find((template) => template.id === styleId)?.name ?? t('style.custom')
+  return (
+    [...textStyleTemplates, ...(workspace.project?.textStyleTemplates ?? [])].find(
+      (template) => template.id === styleId,
+    )?.name ?? t('style.custom')
+  )
 }
 
 function startResize(index: number, event: PointerEvent): void {
@@ -112,13 +116,36 @@ function openStyleEditor(
 function saveStyle(render: TextRenderConfig, styleId?: string): void {
   if (!selectedSpriteTable.value || !editingStyle.value) return
   const editing = editingStyle.value
-  workspace.updateTranslationRegion(
+  if (
+    !workspace.updateTranslationRegion(
     selectedSpriteTable.value.id,
     editing.spriteId,
     editing.regionId,
     { render, styleId },
-  )
+    )
+  ) {
+    return
+  }
   editingStyle.value = undefined
+}
+
+function saveStyleTemplate(name: string, render: TextRenderConfig, id?: string): void {
+  workspace.saveTextStyleTemplate(name, render, id)
+}
+
+async function deleteStyleTemplate(id: string): Promise<void> {
+  const references = workspace.textStyleTemplateReferenceCount(id)
+  if (references > 0) {
+    await showAlert({
+      title: t('style.templateInUseTitle'),
+      message: t('style.templateInUse', { count: references }),
+      confirmLabel: t('common.ok'),
+    })
+    return
+  }
+  if (workspace.deleteTextStyleTemplate(id) && editingStyle.value?.styleId === id) {
+    editingStyle.value = { ...editingStyle.value, styleId: undefined }
+  }
 }
 
 function saveBackground(
@@ -354,9 +381,12 @@ onUnmounted(finishResize)
       :text="editingStyle?.text ?? ''"
       :render="editingStyle?.render"
       :style-id="editingStyle?.styleId"
+      :templates="workspace.project?.textStyleTemplates"
       :preview-background="workspace.previewBackground"
       @close="editingStyle = undefined"
       @save="saveStyle"
+      @save-template="saveStyleTemplate"
+      @delete-template="deleteStyleTemplate"
     />
     <BackgroundEditorDialog
       :open="editingBackground !== undefined"

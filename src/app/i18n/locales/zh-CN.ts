@@ -89,6 +89,14 @@ export default {
     offsetX: 'X 偏移',
     offsetY: 'Y 偏移',
     addShadow: '添加阴影',
+    templateName: '模板名称',
+    saveAsTemplate: '另存为模板',
+    updateTemplate: '覆盖模板',
+    deleteTemplate: '删除模板',
+    templateInUseTitle: '模板正在使用',
+    templateInUse: '此模板正被 {count} 个文本区域使用，请先切换样式。',
+    stopPosition: '位置 (%)',
+    addStop: '添加节点',
   },
   workspace: {
     emptyTitle: '未打开工程',
@@ -189,6 +197,8 @@ export default {
       invalidBackgroundTemplates: '底图模板元数据无效。',
       invalidSpriteBackgrounds: 'Sprite 专属底图元数据无效。',
       invalidBackgroundReferences: '底图引用无效。',
+      invalidTextStyleTemplates: '文本样式模板数据无效。',
+      invalidStyleReferences: '文本样式引用无效。',
     },
     spriteTable: {
       invalidJson: 'Sprite Table manifest 不是有效的 JSON。',
