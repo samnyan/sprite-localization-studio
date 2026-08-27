@@ -61,6 +61,10 @@ describe('localized texture build plan', () => {
   it('treats blank and template backgrounds as modifications', () => {
     expect(isSpriteTranslationModified({ ...unchanged, backgroundType: 'blank' })).toBe(true)
     expect(isSpriteTranslationModified({ ...unchanged, backgroundType: 'template' })).toBe(true)
+    expect(isSpriteTranslationModified({ ...unchanged, backgroundType: 'sprite' })).toBe(true)
+    expect(isSpriteTranslationModified({ ...unchanged, backgroundId: 'legacy-template' })).toBe(
+      true,
+    )
     expect(isSpriteTranslationModified(unchanged)).toBe(false)
   })
 

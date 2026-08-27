@@ -73,3 +73,9 @@ export interface SpriteTranslation {
   backgroundType?: 'original' | 'blank' | 'template' | 'sprite'
   textRegions: TextRegion[]
 }
+
+export function resolveBackgroundType(
+  translation: Pick<SpriteTranslation, 'backgroundType' | 'backgroundId'>,
+): NonNullable<SpriteTranslation['backgroundType']> {
+  return translation.backgroundType ?? (translation.backgroundId ? 'template' : 'original')
+}

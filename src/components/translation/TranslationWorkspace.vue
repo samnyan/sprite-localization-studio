@@ -3,6 +3,7 @@ import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
+import { showAlert } from '@/app/services/alertDialog'
 import TranslationSpritePreview from '@/components/translation/TranslationSpritePreview.vue'
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
@@ -22,7 +23,7 @@ const editingStyle = ref<{
 }>()
 const editingBackground = ref<{
   spriteId: string
-  type?: 'original' | 'blank' | 'template'
+  type?: 'original' | 'blank' | 'template' | 'sprite'
   backgroundId?: string
 }>()
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
@@ -120,22 +121,59 @@ function saveStyle(render: TextRenderConfig, styleId?: string): void {
   editingStyle.value = undefined
 }
 
-function saveBackground(type: 'original' | 'blank' | 'template', backgroundId?: string): void {
+function saveBackground(
+  type: 'original' | 'blank' | 'template' | 'sprite',
+  backgroundId?: string,
+): void {
   if (!selectedSpriteTable.value || !editingBackground.value) return
-  workspace.setSpriteTranslationBackground(
-    selectedSpriteTable.value.id,
-    editingBackground.value.spriteId,
-    backgroundId,
-    type,
-  )
-  editingBackground.value = undefined
+  if (
+    workspace.setSpriteTranslationBackground(
+      selectedSpriteTable.value.id,
+      editingBackground.value.spriteId,
+      backgroundId,
+      type,
+    )
+  ) {
+    editingBackground.value = undefined
+  }
 }
 
-async function uploadBackground(file: File): Promise<void> {
-  const backgroundId = await workspace.addBackgroundTemplate(file)
-  if (backgroundId && editingBackground.value) {
-    editingBackground.value = { ...editingBackground.value, type: 'template', backgroundId }
+async function uploadBackground(scope: 'template' | 'sprite', file: File): Promise<void> {
+  if (!selectedSpriteTable.value || !editingBackground.value) return
+  const spriteTableId = selectedSpriteTable.value.id
+  const spriteId = editingBackground.value.spriteId
+  const backgroundId =
+    scope === 'template'
+      ? await workspace.addBackgroundTemplate(file)
+      : await workspace.addSpriteBackground(spriteTableId, spriteId, file)
+  if (
+    backgroundId &&
+    editingBackground.value?.spriteId === spriteId &&
+    selectedSpriteTable.value?.id === spriteTableId
+  ) {
+    editingBackground.value = { ...editingBackground.value, type: scope, backgroundId }
   }
+}
+
+function renameTemplate(id: string, name: string): void {
+  workspace.renameBackgroundTemplate(id, name)
+}
+
+async function replaceTemplate(id: string, file: File): Promise<void> {
+  await workspace.replaceBackgroundTemplate(id, file)
+}
+
+async function deleteTemplate(id: string): Promise<void> {
+  const references = workspace.backgroundTemplateReferenceCount(id)
+  if (references > 0) {
+    await showAlert({
+      title: t('translation.templateInUseTitle'),
+      message: t('translation.templateInUse', { count: references }),
+      confirmLabel: t('common.ok'),
+    })
+    return
+  }
+  await workspace.deleteBackgroundTemplate(id)
 }
 
 onUnmounted(finishResize)
@@ -260,10 +298,7 @@ onUnmounted(finishResize)
                   @click="
                     editingBackground = {
                       spriteId: row.sprite.id,
-                      type:
-                        row.translation.backgroundType === 'sprite'
-                          ? 'original'
-                          : row.translation.backgroundType,
+                      type: row.translation.backgroundType,
                       backgroundId: row.translation.backgroundId,
                     }
                   "
@@ -328,10 +363,21 @@ onUnmounted(finishResize)
       :type="editingBackground?.type"
       :background-id="editingBackground?.backgroundId"
       :templates="workspace.project?.backgroundTemplates ?? []"
+      :sprite-backgrounds="
+        selectedSpriteTable && editingBackground
+          ? workspace.spriteBackgroundsForSprite(
+              selectedSpriteTable.id,
+              editingBackground.spriteId,
+            )
+          : []
+      "
       :image-urls="workspace.backgroundImageUrls"
       @close="editingBackground = undefined"
       @save="saveBackground"
       @upload="uploadBackground"
+      @rename-template="renameTemplate"
+      @replace-template="replaceTemplate"
+      @delete-template="deleteTemplate"
     />
   </section>
 </template>

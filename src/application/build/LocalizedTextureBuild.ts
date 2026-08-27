@@ -1,6 +1,6 @@
 import type { ProjectManifest } from '@/domain/project/types'
 import type { Texture, SpriteTable } from '@/domain/sprite-table/types'
-import type { SpriteTranslation } from '@/domain/text-region/types'
+import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 
 export interface LocalizedTextureBuildTask {
   spriteTable: SpriteTable
@@ -35,7 +35,7 @@ function outputLocale(project: ProjectManifest): string {
 }
 
 export function isSpriteTranslationModified(translation: SpriteTranslation): boolean {
-  if (translation.backgroundType === 'blank' || translation.backgroundType === 'template') {
+  if (resolveBackgroundType(translation) !== 'original') {
     return true
   }
 

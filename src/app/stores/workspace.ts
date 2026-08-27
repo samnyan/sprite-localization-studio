@@ -3,6 +3,10 @@ import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import {
+  createBackgroundTemplatePath,
+  createSpriteBackgroundPath,
+} from '@/application/assets/backgroundPath'
+import {
   buildLocalizedTextures,
   createLocalizedTextureBuildPlan,
   type LocalizedTextureBuildReport,
@@ -14,10 +18,15 @@ import {
 } from '@/application/sprite-table/SpriteTableRepository'
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { ProjectManifest } from '@/domain/project/types'
-import type { ImageResource } from '@/domain/resource/types'
+import type { BackgroundTemplate, ImageResource, SpriteBackground } from '@/domain/resource/types'
 import type { Rect } from '@/domain/shared/geometry'
 import type { SpriteTable } from '@/domain/sprite-table/types'
-import type { SpriteTranslation, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
+import {
+  resolveBackgroundType,
+  type SpriteTranslation,
+  type TextRegion,
+  type TextRenderConfig,
+} from '@/domain/text-region/types'
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
@@ -239,6 +248,32 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return savePromise
   }
 
+  async function persistAssetProject(updated: ProjectManifest): Promise<boolean> {
+    if (!activeRepository) return failProjectNotOpen()
+
+    status.value = 'saving'
+    error.value = undefined
+    try {
+      await activeRepository.save(updated)
+      project.value = updated
+      resetDocumentHistory()
+      status.value = 'ready'
+      return true
+    } catch (caughtError) {
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return false
+    }
+  }
+
+  async function removeResourceFile(path: string): Promise<void> {
+    try {
+      await activeStorage?.delete(path)
+    } catch {
+      return
+    }
+  }
+
   async function buildTextures(): Promise<boolean> {
     if (!project.value || !activeStorage) return failProjectNotOpen()
     if (!(await saveProject())) return false
@@ -294,10 +329,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       loadedProject.spriteTableManifestPaths ?? [],
     )
     const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables)
-    const loadedBackgroundUrls = await loadBackgroundImages(
-      storage,
-      loadedProject.backgroundTemplates ?? [],
-    )
+    const loadedBackgroundUrls = await loadBackgroundImages(storage, [
+      ...(loadedProject.backgroundTemplates ?? []),
+      ...(loadedProject.spriteBackgrounds ?? []),
+    ])
     const firstSpriteTable = loadedSpriteTables[0]
     const firstSprite = firstSpriteTable?.sprites[0]
 
@@ -582,12 +617,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     spriteTableId: string,
     spriteId: string,
     backgroundId?: string,
-    backgroundType: 'original' | 'blank' | 'template' = backgroundId ? 'template' : 'original',
+    backgroundType: 'original' | 'blank' | 'template' | 'sprite' = backgroundId
+      ? 'template'
+      : 'original',
   ): boolean {
-    if (
-      backgroundId !== undefined &&
-      !project.value?.backgroundTemplates?.some((background) => background.id === backgroundId)
-    ) {
+    if (!isValidBackgroundSelection(spriteTableId, spriteId, backgroundType, backgroundId)) {
       return false
     }
 
@@ -609,12 +643,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!file.type.startsWith('image/')) return undefined
 
     const id = crypto.randomUUID()
-    const extension = file.name.toLowerCase().match(/\.[a-z0-9]+$/)?.[0] ?? '.png'
-    const background = {
+    const background: BackgroundTemplate = {
       id,
       name: file.name,
-      path: `sprite_base/template/${id}${extension}`,
-      scope: 'template' as const,
+      path: createBackgroundTemplatePath(id, file.name),
+      scope: 'template',
     }
 
     try {
@@ -628,6 +661,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         })
       ) {
         URL.revokeObjectURL(url)
+        await activeStorage.delete(background.path)
         return undefined
       }
       backgroundImageUrls.value = {
@@ -640,6 +674,143 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       error.value = workspaceErrorFrom(caughtError)
       return undefined
     }
+  }
+
+  async function addSpriteBackground(
+    spriteTableId: string,
+    spriteId: string,
+    file: File,
+  ): Promise<string | undefined> {
+    if (!project.value || !activeStorage || !file.type.startsWith('image/')) return undefined
+
+    const id = crypto.randomUUID()
+    const background: SpriteBackground = {
+      id,
+      name: file.name,
+      path: createSpriteBackgroundPath(spriteTableId, spriteId, id, file.name),
+      scope: 'sprite',
+      spriteTableId,
+      spriteId,
+    }
+
+    try {
+      await activeStorage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
+      const url = URL.createObjectURL(file)
+      const spriteBackgrounds = [...(project.value.spriteBackgrounds ?? []), background]
+      if (!dispatchProjectAction('spriteBackground.add', { ...project.value, spriteBackgrounds })) {
+        URL.revokeObjectURL(url)
+        await activeStorage.delete(background.path)
+        return undefined
+      }
+      backgroundImageUrls.value = { ...backgroundImageUrls.value, [background.id]: url }
+      return background.id
+    } catch (caughtError) {
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return undefined
+    }
+  }
+
+  function spriteBackgroundsForSprite(
+    spriteTableId: string,
+    spriteId: string,
+  ): SpriteBackground[] {
+    return (project.value?.spriteBackgrounds ?? []).filter(
+      (background) =>
+        background.spriteTableId === spriteTableId && background.spriteId === spriteId,
+    )
+  }
+
+  function backgroundTemplateReferenceCount(id: string): number {
+    return (
+      project.value?.translations?.filter(
+        (translation) =>
+          resolveBackgroundType(translation) === 'template' && translation.backgroundId === id,
+      ).length ?? 0
+    )
+  }
+
+  function renameBackgroundTemplate(id: string, name: string): boolean {
+    const trimmedName = name.trim()
+    if (!project.value || !trimmedName) return false
+    const backgroundTemplates = project.value.backgroundTemplates?.map((background) =>
+      background.id === id ? { ...background, name: trimmedName } : background,
+    )
+    if (!backgroundTemplates?.some((background) => background.id === id)) return false
+    return dispatchProjectAction('backgroundTemplate.rename', {
+      ...project.value,
+      backgroundTemplates,
+    })
+  }
+
+  async function replaceBackgroundTemplate(id: string, file: File): Promise<boolean> {
+    const current = project.value?.backgroundTemplates?.find((background) => background.id === id)
+    if (!project.value || !activeStorage || !current || !file.type.startsWith('image/'))
+      return false
+
+    const path = createBackgroundTemplatePath(`${id}-${crypto.randomUUID()}`, file.name)
+    try {
+      await activeStorage.writeBinary(path, new Uint8Array(await file.arrayBuffer()))
+      const updated: BackgroundTemplate = { ...current, name: file.name, path }
+      const backgroundTemplates = project.value.backgroundTemplates?.map((background) =>
+        background.id === id ? updated : background,
+      )
+      if (!backgroundTemplates) return false
+      if (!(await persistAssetProject({ ...project.value, backgroundTemplates }))) return false
+      await removeResourceFile(current.path)
+      const oldUrl = backgroundImageUrls.value[id]
+      if (oldUrl) URL.revokeObjectURL(oldUrl)
+      backgroundImageUrls.value = { ...backgroundImageUrls.value, [id]: URL.createObjectURL(file) }
+      return true
+    } catch (caughtError) {
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return false
+    }
+  }
+
+  async function deleteBackgroundTemplate(id: string): Promise<boolean> {
+    const current = project.value?.backgroundTemplates?.find((background) => background.id === id)
+    if (!project.value || !activeStorage || !current || backgroundTemplateReferenceCount(id) > 0)
+      return false
+
+    const backgroundTemplates = project.value.backgroundTemplates?.filter(
+      (background) => background.id !== id,
+    )
+    if (!backgroundTemplates) return false
+    try {
+      if (!(await persistAssetProject({ ...project.value, backgroundTemplates }))) return false
+      await removeResourceFile(current.path)
+      const url = backgroundImageUrls.value[id]
+      if (url) URL.revokeObjectURL(url)
+      backgroundImageUrls.value = Object.fromEntries(
+        Object.entries(backgroundImageUrls.value).filter(([resourceId]) => resourceId !== id),
+      )
+      return true
+    } catch (caughtError) {
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return false
+    }
+  }
+
+  function isValidBackgroundSelection(
+    spriteTableId: string,
+    spriteId: string,
+    backgroundType: SpriteTranslation['backgroundType'],
+    backgroundId: string | undefined,
+  ): boolean {
+    if (backgroundType === 'original' || backgroundType === 'blank') return !backgroundId
+    if (!backgroundId) return false
+    if (backgroundType === 'template') {
+      return (
+        project.value?.backgroundTemplates?.some((background) => background.id === backgroundId) ??
+        false
+      )
+    }
+    return spriteBackgroundsForSprite(spriteTableId, spriteId).some(
+      (background) => background.id === backgroundId,
+    )
   }
 
   function removeTextRegion(regionId: string): boolean {
@@ -737,6 +908,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateTranslationRender,
     setSpriteTranslationBackground,
     addBackgroundTemplate,
+    addSpriteBackground,
+    spriteBackgroundsForSprite,
+    backgroundTemplateReferenceCount,
+    renameBackgroundTemplate,
+    replaceBackgroundTemplate,
+    deleteBackgroundTemplate,
     removeTextRegion,
     clearError,
     selectSpriteTable,

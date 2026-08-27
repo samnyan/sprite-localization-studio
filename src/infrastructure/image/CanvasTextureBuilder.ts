@@ -6,7 +6,7 @@ import type {
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { ProjectManifest } from '@/domain/project/types'
 import type { Sprite } from '@/domain/sprite/types'
-import type { SpriteTranslation } from '@/domain/text-region/types'
+import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 import { drawTranslationText } from '@/infrastructure/image/textRenderer'
 import {
   getLogicalSpriteSize,
@@ -152,10 +152,11 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
     const logical = createCanvas(logicalSize.width, logicalSize.height)
     const logicalContext = getContext(logical)
 
-    if (translation.backgroundType === 'template') {
+    const backgroundType = resolveBackgroundType(translation)
+    if (backgroundType === 'template' || backgroundType === 'sprite') {
       const background = await this.loadBackground(translation)
       logicalContext.drawImage(background, 0, 0, logicalSize.width, logicalSize.height)
-    } else if (translation.backgroundType !== 'blank') {
+    } else if (backgroundType !== 'blank') {
       drawStoredSprite(logicalContext, source, sprite)
     }
 
@@ -164,8 +165,17 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
   }
 
   private async loadBackground(translation: SpriteTranslation): Promise<ImageBitmap> {
-    const background = this.project.backgroundTemplates?.find(
-      (item) => item.id === translation.backgroundId,
+    const backgrounds =
+      resolveBackgroundType(translation) === 'sprite'
+        ? this.project.spriteBackgrounds
+        : this.project.backgroundTemplates
+    const background = backgrounds?.find(
+      (item) =>
+        item.id === translation.backgroundId &&
+        (resolveBackgroundType(translation) !== 'sprite' ||
+          (item.scope === 'sprite' &&
+            item.spriteTableId === translation.spriteTableId &&
+            item.spriteId === translation.spriteId)),
     )
     if (!background) throw new Error(`Missing background: ${translation.backgroundId ?? 'unknown'}`)
     return this.loadImage(background.path)

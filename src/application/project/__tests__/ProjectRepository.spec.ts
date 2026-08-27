@@ -27,6 +27,9 @@ function createStorage(initialText: string): {
     async writeBinary() {
       throw new Error('Not implemented for this test')
     },
+    async delete() {
+      throw new Error('Not implemented for this test')
+    },
     async exists(path) {
       return files.has(path)
     },
@@ -71,6 +74,72 @@ describe('parseProjectManifest', () => {
     ).toMatchObject({
       translations: [{ spriteTableId: 'ui', spriteId: 'button-start' }],
     })
+  })
+
+  it('normalizes legacy background references as templates', () => {
+    expect(
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 1,
+          name: 'Sample',
+          translationBackgrounds: [
+            { id: 'button', name: 'Button', path: 'translation-backgrounds/button.png' },
+          ],
+          translations: [
+            {
+              spriteTableId: 'ui',
+              spriteId: 'button-start',
+              backgroundId: 'button',
+              textRegions: [],
+            },
+          ],
+        }),
+      ).translations?.[0],
+    ).toMatchObject({ backgroundId: 'button', backgroundType: 'template' })
+  })
+
+  it('rejects duplicate and invalid v2 background references', () => {
+    const template = {
+      id: 'button',
+      name: 'Button',
+      path: 'sprite_base/template/id-button.png',
+      scope: 'template',
+    }
+    expect(() =>
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 2,
+          name: 'Sample',
+          backgroundTemplates: [template],
+          spriteBackgrounds: [
+            {
+              ...template,
+              scope: 'sprite',
+              path: 'sprite_base/id-ui/id-button/id-button.png',
+              spriteTableId: 'ui',
+              spriteId: 'button',
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidBackgroundReferences' }))
+    expect(() =>
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 2,
+          name: 'Sample',
+          translations: [
+            {
+              spriteTableId: 'ui',
+              spriteId: 'button',
+              backgroundType: 'template',
+              backgroundId: 'missing',
+              textRegions: [],
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidBackgroundReferences' }))
   })
 
   it('rejects duplicate sprite translation metadata and invalid regions', () => {
@@ -134,6 +203,9 @@ describe('ProjectRepository', () => {
       },
       async writeBinary(path, data) {
         binaries.set(path, new Uint8Array(data))
+      },
+      async delete(path) {
+        binaries.delete(path)
       },
       async exists(path) {
         return files.has(path)

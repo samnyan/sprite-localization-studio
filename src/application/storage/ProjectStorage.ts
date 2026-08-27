@@ -11,6 +11,7 @@ export interface ProjectStorage {
   writeText(path: string, text: string): Promise<void>
   readBinary(path: string): Promise<ArrayBuffer>
   writeBinary(path: string, data: Uint8Array): Promise<void>
+  delete(path: string): Promise<void>
   exists(path: string): Promise<boolean>
   list(path: string): Promise<ProjectEntry[]>
 }

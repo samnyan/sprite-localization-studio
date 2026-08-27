@@ -29,6 +29,17 @@ export class LocalFolderStorage implements ProjectStorage {
     await this.writeFile(path, new Uint8Array(data).buffer)
   }
 
+  async delete(path: string): Promise<void> {
+    const parts = splitProjectPath(path)
+    const fileName = parts.pop()
+
+    if (!fileName) {
+      throw new Error(`A file path is required: ${path}`)
+    }
+
+    await (await this.getDirectory(parts, false)).removeEntry(fileName)
+  }
+
   async exists(path: string): Promise<boolean> {
     try {
       await this.getHandle(path)
@@ -49,9 +60,7 @@ export class LocalFolderStorage implements ProjectStorage {
     for await (const handle of directory.values()) {
       entries.push({
         name: handle.name,
-        path: [path.replace(/\\/g, '/').replace(/\/$/, ''), handle.name]
-          .filter(Boolean)
-          .join('/'),
+        path: [path.replace(/\\/g, '/').replace(/\/$/, ''), handle.name].filter(Boolean).join('/'),
         kind: handle.kind,
       })
     }
@@ -116,10 +125,7 @@ export class LocalFolderStorage implements ProjectStorage {
     }
   }
 
-  private async getDirectory(
-    parts: string[],
-    create: boolean,
-  ): Promise<FileSystemDirectoryHandle> {
+  private async getDirectory(parts: string[], create: boolean): Promise<FileSystemDirectoryHandle> {
     let directory = this.root
 
     for (const part of parts) {

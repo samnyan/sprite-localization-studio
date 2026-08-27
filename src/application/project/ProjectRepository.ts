@@ -3,7 +3,11 @@ import { isProjectRelativePath } from '@/application/storage/projectPath'
 import { PROJECT_SCHEMA_VERSION, type ProjectManifest } from '@/domain/project/types'
 import type { BackgroundTemplate, ImageResource, SpriteBackground } from '@/domain/resource/types'
 import type { Rect } from '@/domain/shared/geometry'
-import type { SpriteTranslation, TextRegion } from '@/domain/text-region/types'
+import {
+  resolveBackgroundType,
+  type SpriteTranslation,
+  type TextRegion,
+} from '@/domain/text-region/types'
 
 export const PROJECT_MANIFEST_PATH = 'project.json'
 
@@ -20,6 +24,7 @@ export type ProjectFormatErrorCode =
   | 'invalidTranslationBackgrounds'
   | 'invalidBackgroundTemplates'
   | 'invalidSpriteBackgrounds'
+  | 'invalidBackgroundReferences'
 
 export class ProjectFormatError extends Error {
   override readonly name = 'ProjectFormatError'
@@ -202,6 +207,41 @@ function isSpriteBackgrounds(value: unknown): value is SpriteBackground[] {
   )
 }
 
+function hasUniqueBackgroundResources(
+  templates: BackgroundTemplate[],
+  spriteBackgrounds: SpriteBackground[],
+): boolean {
+  const ids = new Set<string>()
+  const paths = new Set<string>()
+  return [...templates, ...spriteBackgrounds].every((resource) => {
+    if (ids.has(resource.id) || paths.has(resource.path)) return false
+    ids.add(resource.id)
+    paths.add(resource.path)
+    return true
+  })
+}
+
+function hasValidBackgroundReferences(
+  translations: SpriteTranslation[],
+  templates: BackgroundTemplate[],
+  spriteBackgrounds: SpriteBackground[],
+): boolean {
+  return translations.every((translation) => {
+    const type = resolveBackgroundType(translation)
+    if (type === 'original' || type === 'blank') return translation.backgroundId === undefined
+    if (!translation.backgroundId) return false
+    if (type === 'template') {
+      return templates.some((template) => template.id === translation.backgroundId)
+    }
+    return spriteBackgrounds.some(
+      (background) =>
+        background.id === translation.backgroundId &&
+        background.spriteTableId === translation.spriteTableId &&
+        background.spriteId === translation.spriteId,
+    )
+  })
+}
+
 function isTranslations(value: unknown): value is SpriteTranslation[] {
   if (!Array.isArray(value)) return false
 
@@ -297,6 +337,16 @@ export function parseProjectManifest(text: string): ProjectManifest {
     throw new ProjectFormatError('invalidSpriteBackgrounds')
   }
 
+  const translations = (record.translations ?? []) as SpriteTranslation[]
+  const templates = (record.backgroundTemplates ?? []) as BackgroundTemplate[]
+  const spriteBackgrounds = (record.spriteBackgrounds ?? []) as SpriteBackground[]
+  if (
+    !hasUniqueBackgroundResources(templates, spriteBackgrounds) ||
+    !hasValidBackgroundReferences(translations, templates, spriteBackgrounds)
+  ) {
+    throw new ProjectFormatError('invalidBackgroundReferences')
+  }
+
   return { ...record, schemaVersion: PROJECT_SCHEMA_VERSION, name: record.name } as ProjectManifest
 }
 
@@ -324,7 +374,7 @@ function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest
     throw new ProjectFormatError('invalidTranslationBackgrounds')
   }
 
-  const { translationBackgrounds, ...project } = record
+  const { translationBackgrounds, translations: legacyTranslations, ...project } = record
   const backgroundTemplates = (translationBackgrounds as ImageResource[] | undefined)?.map(
     (background) => ({ ...background, scope: 'template' as const }),
   )
@@ -333,6 +383,15 @@ function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest
     schemaVersion: PROJECT_SCHEMA_VERSION,
     name: record.name,
     ...(backgroundTemplates?.length ? { backgroundTemplates } : {}),
+    ...(legacyTranslations
+      ? {
+          translations: (legacyTranslations as SpriteTranslation[]).map((translation) =>
+            translation.backgroundId && !translation.backgroundType
+              ? { ...translation, backgroundType: 'template' as const }
+              : translation,
+          ),
+        }
+      : {}),
   } as ProjectManifest
 }
 
