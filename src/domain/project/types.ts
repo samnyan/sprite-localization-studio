@@ -1,4 +1,5 @@
 import type { SpriteTranslation } from '@/domain/text-region/types'
+import type { ImageResource } from '@/domain/resource/types'
 
 export const PROJECT_SCHEMA_VERSION = 1 as const
 
@@ -9,4 +10,5 @@ export interface ProjectManifest {
   targetLocales?: string[]
   spriteTableManifestPaths?: string[]
   translations?: SpriteTranslation[]
+  translationBackgrounds?: ImageResource[]
 }

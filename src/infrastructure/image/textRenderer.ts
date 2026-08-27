@@ -1,0 +1,117 @@
+import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
+import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
+
+function withAlpha(value: string, alpha?: number): string {
+  if (alpha === undefined) return value
+  const match = value.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i)
+  if (!match) return value
+  const hex = match[1]!
+  const short = hex.length === 3 || hex.length === 4
+  const channel = (index: number) => parseInt(short ? hex[index]! + hex[index]! : hex.slice(index * 2, index * 2 + 2), 16)
+  const existing = hex.length === 4 ? channel(3) / 255 : hex.length === 8 ? parseInt(hex.slice(6), 16) / 255 : 1
+  return `rgba(${channel(0)}, ${channel(1)}, ${channel(2)}, ${Math.max(0, Math.min(1, existing * alpha))})`
+}
+
+function paintStyle(
+  context: CanvasRenderingContext2D,
+  paint: TextPaint | undefined,
+  width: number,
+  height: number,
+): CanvasFillStrokeStyles['fillStyle'] | undefined {
+  if (!paint || paint.mode === 'transparent') return undefined
+  const start = withAlpha(paint.color, paint.alpha)
+  if (paint.mode !== 'gradient' || !paint.gradientEnd) return start
+  const angle = ((paint.gradientAngle ?? 0) * Math.PI) / 180
+  const dx = Math.cos(angle)
+  const dy = Math.sin(angle)
+  const extent = Math.abs(dx) * width / 2 + Math.abs(dy) * height / 2
+  const gradient = context.createLinearGradient(-dx * extent, -dy * extent, dx * extent, dy * extent)
+  gradient.addColorStop(0, start)
+  gradient.addColorStop(1, withAlpha(paint.gradientEnd, paint.gradientEndAlpha ?? paint.alpha))
+  return gradient
+}
+
+function drawLine(context: CanvasRenderingContext2D, text: string, x: number, width: number): void {
+  context.strokeText(text, x, 0, width)
+  context.fillText(text, x, 0, width)
+}
+
+export function drawTextRegion(
+  context: CanvasRenderingContext2D,
+  text: string,
+  region: TextRegion,
+  render: TextRenderConfig,
+): void {
+  const config = { ...DEFAULT_TEXT_RENDER, ...render }
+  const fill = paintStyle(context, config.fill ?? { mode: 'solid', color: config.color }, region.rect.width, region.rect.height)
+  const stroke = config.stroke && config.stroke.width > 0 ? paintStyle(context, config.stroke.paint, region.rect.width, region.rect.height) : undefined
+  context.save()
+  context.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
+  context.rotate((region.rotation * Math.PI) / 180)
+  context.font = `${config.fontWeight} ${config.fontSize}px ${config.fontFamily}`
+  context.textAlign = config.align
+  context.textBaseline = 'middle'
+  const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
+  const x =
+    config.align === 'left'
+      ? -region.rect.width / 2
+      : config.align === 'right'
+        ? region.rect.width / 2
+        : 0
+  const lines = text.split(/\r?\n/)
+  const lineHeight = config.fontSize * (config.lineHeight ?? 1.2)
+  const startY = -((lines.length - 1) * lineHeight) / 2
+  for (const [index, line] of lines.entries()) {
+    context.save()
+    context.translate(0, startY + index * lineHeight)
+    context.lineWidth = config.stroke && config.stroke.width > 0 ? config.stroke.width * 2 : 0
+    context.strokeStyle = stroke ?? 'transparent'
+    context.fillStyle = fill ?? 'transparent'
+    for (const shadow of shadows) {
+      context.save()
+      context.shadowColor = withAlpha(shadow.color, shadow.alpha)
+      context.shadowBlur = shadow.blur
+      context.shadowOffsetX = shadow.offsetX
+      context.shadowOffsetY = shadow.offsetY
+      drawLine(context, line, x, region.rect.width)
+      context.restore()
+    }
+    context.shadowColor = 'transparent'
+    context.shadowBlur = 0
+    if (config.stroke?.position === 'inside' && stroke) {
+      context.fillText(line, x, 0, region.rect.width)
+      context.save()
+      context.globalCompositeOperation = 'source-atop'
+      context.strokeText(line, x, 0, region.rect.width)
+      context.restore()
+    } else {
+      drawLine(context, line, x, region.rect.width)
+    }
+    context.restore()
+  }
+  context.restore()
+}
+
+export function drawTranslationText(
+  context: CanvasRenderingContext2D,
+  regions: TextRegion[],
+): void {
+  for (const region of regions) {
+    const text = region.translatedText?.trim()
+    if (!text) continue
+    const config = { ...DEFAULT_TEXT_RENDER, ...region.render }
+    drawTextConfigLayers(context, text, region, config)
+  }
+}
+
+function drawTextConfigLayers(
+  context: CanvasRenderingContext2D,
+  text: string,
+  region: TextRegion,
+  config: TextRenderConfig,
+): void {
+  for (const layer of config.layers ?? []) {
+    if (layer.enabled) drawTextConfigLayers(context, text, region, layer.render)
+  }
+  drawTextRegion(context, text, region, config)
+}

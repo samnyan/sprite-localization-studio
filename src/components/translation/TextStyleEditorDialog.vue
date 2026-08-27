@@ -1,0 +1,355 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+import FormField from '@/components/ui/FormField.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { DEFAULT_TEXT_RENDER, textStyleTemplates } from '@/domain/text-region/styleTemplates'
+import type { TextRenderConfig, TextShadow } from '@/domain/text-region/types'
+import TextStyleCanvasPreview from '@/components/translation/TextStyleCanvasPreview.vue'
+import type { PreviewBackground } from '@/app/stores/workspace'
+
+const props = defineProps<{
+  open: boolean
+  text: string
+  render?: TextRenderConfig
+  styleId?: string
+  previewBackground?: PreviewBackground
+}>()
+const emit = defineEmits<{
+  close: []
+  save: [render: TextRenderConfig, styleId?: string]
+}>()
+const { t } = useI18n()
+const draft = ref<TextRenderConfig>({ ...DEFAULT_TEXT_RENDER })
+const selectedTemplateId = ref<string>()
+const templatesOpen = ref(false)
+
+function ensureShadows(): TextShadow[] {
+  if (!draft.value.shadows) draft.value.shadows = draft.value.shadow ? [draft.value.shadow] : []
+  return draft.value.shadows
+}
+
+function addShadow(): void {
+  ensureShadows().push({ color: '#000000', alpha: 0.6, blur: 3, offsetX: 2, offsetY: 2 })
+}
+
+function removeShadow(index: number): void {
+  ensureShadows().splice(index, 1)
+}
+
+watch(
+  () => [props.open, props.render, props.styleId] as const,
+  () => {
+    if (!props.open) return
+    draft.value = JSON.parse(
+      JSON.stringify({ ...DEFAULT_TEXT_RENDER, ...props.render }),
+    ) as TextRenderConfig
+    selectedTemplateId.value = props.styleId
+  },
+  { immediate: true, deep: true },
+)
+
+function selectTemplate(id: string): void {
+  const template = textStyleTemplates.find((item) => item.id === id)
+  if (!template) return
+  selectedTemplateId.value = id
+  draft.value = JSON.parse(JSON.stringify(template.render)) as TextRenderConfig
+}
+
+function save(): void {
+  emit(
+    'save',
+    JSON.parse(JSON.stringify(draft.value)) as TextRenderConfig,
+    selectedTemplateId.value,
+  )
+}
+</script>
+
+<template>
+  <Dialog :open="open" @update:open="(value) => !value && emit('close')">
+    <DialogContent
+      class="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-[1200px]"
+      :show-close-button="false"
+    >
+      <DialogHeader class="border-b px-5 py-4">
+        <DialogTitle>{{ t('style.title') }}</DialogTitle>
+      </DialogHeader>
+      <div class="min-h-0 overflow-auto p-5">
+        <div
+          class="flex h-36 items-center justify-center overflow-hidden rounded border text-center"
+        >
+          <TextStyleCanvasPreview
+            :text="text"
+            :render="draft"
+            :preview-background="previewBackground"
+          />
+        </div>
+        <div class="mt-5 grid gap-5 md:grid-cols-[13rem_minmax(0,1fr)]">
+          <section>
+            <button
+              type="button"
+              class="flex w-full items-center justify-between rounded border px-3 py-2 text-left text-sm"
+              @click="templatesOpen = !templatesOpen"
+            >
+              {{ t('style.useTemplate') }} <span>{{ templatesOpen ? '↓' : '↑' }}</span>
+            </button>
+            <div v-if="templatesOpen" class="mt-2 grid grid-cols-2 gap-2">
+              <button
+                v-for="template in textStyleTemplates"
+                :key="template.id"
+                type="button"
+                class="h-20 rounded border p-2 text-center text-xs"
+                :class="{
+                  'border-primary ring-1 ring-primary': selectedTemplateId === template.id,
+                }"
+                @click="selectTemplate(template.id)"
+              >
+                <TextStyleCanvasPreview
+                  :text="text || template.name"
+                  :render="template.render"
+                  :preview-background="previewBackground"
+                />
+                <span class="mt-1 block text-muted-foreground">{{ template.name }}</span>
+              </button>
+            </div>
+          </section>
+          <section class="space-y-5">
+            <div class="grid grid-cols-4 gap-3">
+              <FormField :label="t('style.fontFamily')"
+                ><Input
+                  v-model="draft.fontFamily"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+              /></FormField>
+              <FormField :label="t('style.fontSize')"
+                ><Input
+                  v-model.number="draft.fontSize"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  type="number"
+                  min="1"
+              /></FormField>
+              <FormField :label="t('style.lineHeight')"
+                ><Input
+                  v-model.number="draft.lineHeight"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+              /></FormField>
+              <FormField :label="t('translation.align')">
+                <Select v-model="draft.align">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent
+                    ><SelectGroup
+                      ><SelectItem value="left">{{ t('translation.left') }}</SelectItem
+                      ><SelectItem value="center">{{ t('translation.center') }}</SelectItem
+                      ><SelectItem value="right">{{
+                        t('translation.right')
+                      }}</SelectItem></SelectGroup
+                    ></SelectContent
+                  >
+                </Select>
+              </FormField>
+            </div>
+            <fieldset class="grid grid-cols-3 gap-3 rounded border p-3">
+              <legend class="px-1 text-xs text-muted-foreground">{{ t('style.fill') }}</legend>
+              <FormField :label="t('style.mode')"
+                ><Select v-model="draft.fill!.mode"
+                  ><SelectTrigger><SelectValue /></SelectTrigger
+                  ><SelectContent
+                    ><SelectGroup
+                      ><SelectItem value="solid">{{ t('style.solid') }}</SelectItem
+                      ><SelectItem value="transparent">{{ t('style.transparent') }}</SelectItem
+                      ><SelectItem value="gradient">{{
+                        t('style.gradient')
+                      }}</SelectItem></SelectGroup
+                    ></SelectContent
+                  ></Select
+                ></FormField
+              >
+              <FormField :label="t('style.color')"
+                ><input
+                  v-model="draft.fill!.color"
+                  class="h-8 w-full rounded border bg-background p-1"
+                  type="color"
+              /></FormField>
+              <FormField v-if="draft.fill!.mode === 'gradient'" :label="t('style.gradientEnd')"
+                ><input
+                  v-model="draft.fill!.gradientEnd"
+                  class="h-8 w-full rounded border bg-background p-1"
+                  type="color"
+              /></FormField>
+              <FormField v-if="draft.fill!.mode === 'gradient'" :label="t('style.angle')"
+                ><input
+                  v-model.number="draft.fill!.gradientAngle"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  type="number"
+              /></FormField>
+              <FormField :label="t('style.alpha')"
+                ><Slider
+                  :model-value="[draft.fill!.alpha ?? 1]"
+                  :min="0"
+                  :max="1"
+                  :step="0.01"
+                  @update:model-value="draft.fill!.alpha = $event?.[0] ?? 1"
+              /></FormField>
+              <FormField
+                v-if="draft.fill!.mode === 'gradient'"
+                :label="`${t('style.gradientEnd')} ${t('style.alpha')}`"
+                ><Slider
+                  :model-value="[draft.fill!.gradientEndAlpha ?? 1]"
+                  :min="0"
+                  :max="1"
+                  :step="0.01"
+                  @update:model-value="draft.fill!.gradientEndAlpha = $event?.[0] ?? 1"
+              /></FormField>
+            </fieldset>
+            <fieldset class="grid grid-cols-3 gap-3 rounded border p-3">
+              <legend class="px-1 text-xs text-muted-foreground">{{ t('style.stroke') }}</legend>
+              <FormField :label="t('style.width')"
+                ><input
+                  v-model.number="draft.stroke!.width"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  type="number"
+                  min="0"
+              /></FormField>
+              <FormField :label="t('style.position')"
+                ><Select v-model="draft.stroke!.position"
+                  ><SelectTrigger><SelectValue /></SelectTrigger
+                  ><SelectContent
+                    ><SelectGroup
+                      ><SelectItem value="outside">{{ t('style.outside') }}</SelectItem
+                      ><SelectItem value="inside">{{ t('style.inside') }}</SelectItem></SelectGroup
+                    ></SelectContent
+                  ></Select
+                ></FormField
+              >
+              <FormField :label="t('style.color')"
+                ><input
+                  v-model="draft.stroke!.paint.color"
+                  class="h-8 w-full rounded border bg-background p-1"
+                  type="color"
+              /></FormField>
+              <FormField :label="t('style.mode')"
+                ><Select v-model="draft.stroke!.paint.mode"
+                  ><SelectTrigger><SelectValue /></SelectTrigger
+                  ><SelectContent
+                    ><SelectGroup
+                      ><SelectItem value="solid">{{ t('style.solid') }}</SelectItem
+                      ><SelectItem value="gradient">{{ t('style.gradient') }}</SelectItem
+                      ><SelectItem value="transparent">{{
+                        t('style.transparent')
+                      }}</SelectItem></SelectGroup
+                    ></SelectContent
+                  ></Select
+                ></FormField
+              >
+              <FormField
+                v-if="draft.stroke!.paint.mode === 'gradient'"
+                :label="t('style.gradientEnd')"
+                ><input
+                  v-model="draft.stroke!.paint.gradientEnd"
+                  class="h-8 w-full rounded border bg-background p-1"
+                  type="color"
+              /></FormField>
+              <FormField v-if="draft.stroke!.paint.mode === 'gradient'" :label="t('style.angle')"
+                ><input
+                  v-model.number="draft.stroke!.paint.gradientAngle"
+                  class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  type="number"
+              /></FormField>
+              <FormField :label="t('style.alpha')"
+                ><input
+                  v-model.number="draft.stroke!.paint.alpha"
+                  class="h-8 w-full"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+              /></FormField>
+              <FormField
+                v-if="draft.stroke!.paint.mode === 'gradient'"
+                :label="`${t('style.gradientEnd')} ${t('style.alpha')}`"
+                ><input
+                  v-model.number="draft.stroke!.paint.gradientEndAlpha"
+                  class="h-8 w-full"
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+              /></FormField>
+            </fieldset>
+            <fieldset class="space-y-3 rounded border p-3">
+              <legend class="px-1 text-xs text-muted-foreground">{{ t('style.shadow') }}</legend>
+              <div
+                v-for="(shadow, index) in ensureShadows()"
+                :key="index"
+                class="grid grid-cols-5 gap-2 items-end"
+              >
+                <FormField :label="t('style.color')"
+                  ><input
+                    v-model="shadow.color"
+                    class="h-8 w-full rounded border bg-background p-1"
+                    type="color"
+                /></FormField>
+                <FormField :label="t('style.alpha')"
+                  ><Slider
+                    :model-value="[shadow.alpha ?? 1]"
+                    :min="0"
+                    :max="1"
+                    :step="0.01"
+                    @update:model-value="shadow.alpha = $event?.[0] ?? 1"
+                /></FormField>
+                <FormField :label="t('style.blur')"
+                  ><input
+                    v-model.number="shadow.blur"
+                    class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                    type="number"
+                    min="0"
+                /></FormField>
+                <FormField :label="t('style.offsetX')"
+                  ><input
+                    v-model.number="shadow.offsetX"
+                    class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                    type="number"
+                /></FormField>
+                <div class="flex gap-1">
+                  <FormField :label="t('style.offsetY')"
+                    ><input
+                      v-model.number="shadow.offsetY"
+                      class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                      type="number" /></FormField
+                  ><Button variant="outline" size="sm" @click="removeShadow(index)">×</Button>
+                </div>
+              </div>
+              <Button variant="outline" size="sm" @click="addShadow"
+                >+ {{ t('style.addShadow') }}</Button
+              >
+            </fieldset>
+          </section>
+        </div>
+      </div>
+      <DialogFooter class="border-t px-5 py-3">
+        <Button variant="outline" @click="emit('close')">{{ t('translation.cancel') }}</Button
+        ><Button @click="save">{{ t('common.ok') }}</Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+</template>

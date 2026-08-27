@@ -1,12 +1,30 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { FilePlus2, Folder, FolderOpen, Image, Images, Redo2, Save, Trash2, Undo2 } from '@lucide/vue'
+import {
+  FilePlus2,
+  Folder,
+  FolderOpen,
+  Image,
+  Images,
+  Redo2,
+  Save,
+  Trash2,
+  Undo2,
+} from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
+import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import type { Rect } from '@/domain/shared/geometry'
 
 const workspace = useWorkspaceStore()
@@ -113,11 +131,37 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
     await workspace.updateTextRegion(region.id, { translationKey: key })
   }
 }
+
+function selectPreviewBackground(background: 'transparent' | 'black' | 'white'): void {
+  workspace.setPreviewBackground(background)
+}
 </script>
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col bg-muted/20">
     <div class="flex h-10 shrink-0 items-center gap-1 border-b bg-background px-2">
+      <div class="inline-flex items-center text-xs">
+        <button
+          type="button"
+          class="rounded px-2 py-1.5"
+          :class="workspace.mode === 'sprites' ? 'bg-accent font-medium' : 'text-muted-foreground'"
+          @click="workspace.setMode('sprites')"
+        >
+          {{ t('mode.sprites') }}
+        </button>
+        <span class="px-1 text-muted-foreground" aria-hidden="true">|</span>
+        <button
+          type="button"
+          class="rounded px-2 py-1.5"
+          :class="
+            workspace.mode === 'translations' ? 'bg-accent font-medium' : 'text-muted-foreground'
+          "
+          @click="workspace.setMode('translations')"
+        >
+          {{ t('mode.translations') }}
+        </button>
+      </div>
+      <div class="mx-1 h-5 border-l" aria-hidden="true"></div>
       <Button
         variant="ghost"
         size="icon"
@@ -140,6 +184,28 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
       >
         <Redo2 class="size-4" aria-hidden="true" />
       </Button>
+      <div class="mx-1 h-5 border-l" aria-hidden="true"></div>
+      <DropdownMenu>
+        <DropdownMenuTrigger class="rounded px-2 py-1.5 text-xs hover:bg-accent">
+          {{ t('previewBackground.label') }}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuRadioGroup
+            :model-value="workspace.previewBackground"
+            @update:model-value="
+              selectPreviewBackground($event as 'transparent' | 'black' | 'white')
+            "
+          >
+            <DropdownMenuRadioItem
+              v-for="option in ['transparent', 'black', 'white'] as const"
+              :key="option"
+              :value="option"
+            >
+              {{ t(`previewBackground.${option}`) }}
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
 
     <div class="flex min-h-0 flex-1">
@@ -180,23 +246,25 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
                   spriteTable.sprites.length
                 }}</span>
               </button>
-              <button
-                v-for="sprite in spriteTable.sprites"
-                :key="sprite.id"
-                type="button"
-                class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-9 text-left hover:bg-accent"
-                :class="{
-                  'bg-accent':
-                    workspace.selectedSpriteTableId === spriteTable.id &&
-                    workspace.selectedSpriteId === sprite.id,
-                  'font-semibold': isSpriteTranslationEnabled(spriteTable.id, sprite.id),
-                }"
-                @click="workspace.selectSprite(spriteTable.id, sprite.id)"
-              >
-                <Image class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
-                  sprite.name
-                }}</span>
-              </button>
+              <template v-if="workspace.mode === 'sprites'">
+                <button
+                  v-for="sprite in spriteTable.sprites"
+                  :key="sprite.id"
+                  type="button"
+                  class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-9 text-left hover:bg-accent"
+                  :class="{
+                    'bg-accent':
+                      workspace.selectedSpriteTableId === spriteTable.id &&
+                      workspace.selectedSpriteId === sprite.id,
+                    'font-semibold': isSpriteTranslationEnabled(spriteTable.id, sprite.id),
+                  }"
+                  @click="workspace.selectSprite(spriteTable.id, sprite.id)"
+                >
+                  <Image class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
+                    sprite.name
+                  }}</span>
+                </button>
+              </template>
             </div>
             <p v-if="workspace.spriteTables.length === 0" class="px-2 py-3 text-muted-foreground">
               {{ t('workspace.noSpriteTables') }}
@@ -209,8 +277,9 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
       <main
         class="relative flex min-w-0 flex-1 items-center justify-center overflow-hidden bg-workspace"
       >
+        <TranslationWorkspace v-if="workspace.mode === 'translations'" class="self-stretch" />
         <div
-          v-if="!workspace.project"
+          v-else-if="!workspace.project"
           class="w-80 rounded-lg border bg-card p-6 text-center shadow-sm"
         >
           <div
@@ -257,7 +326,10 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
         </div>
       </main>
 
-      <aside class="flex w-64 shrink-0 flex-col border-l bg-card">
+      <aside
+        v-if="workspace.mode === 'sprites'"
+        class="flex w-64 shrink-0 flex-col border-l bg-card"
+      >
         <div
           class="flex h-8 shrink-0 items-center border-b px-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
         >

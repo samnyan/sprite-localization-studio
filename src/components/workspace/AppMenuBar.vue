@@ -1,10 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted } from 'vue'
 import { Moon, Sun } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 
-import { setLocale, type SupportedLocale } from '@/app/i18n'
 import { useTheme } from '@/app/composables/useTheme'
+import { setLocale, type SupportedLocale } from '@/app/i18n'
+import { Button } from '@/components/ui/button'
+import {
+  Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarShortcut,
+  MenubarTrigger,
+} from '@/components/ui/menubar'
 
 const props = defineProps<{
   projectPath?: string
@@ -12,7 +22,6 @@ const props = defineProps<{
   canRedo?: boolean
   busy?: boolean
 }>()
-
 const emit = defineEmits<{
   newProject: []
   openProject: []
@@ -20,138 +29,63 @@ const emit = defineEmits<{
   undo: []
   redo: []
 }>()
-
 const { locale, t } = useI18n()
 const { theme, toggleTheme } = useTheme()
-const fileMenu = ref<HTMLDetailsElement>()
-const editMenu = ref<HTMLDetailsElement>()
 
 function changeLocale(event: Event): void {
   setLocale((event.target as HTMLSelectElement).value as SupportedLocale)
 }
 
-function closeMenus(): void {
-  fileMenu.value?.removeAttribute('open')
-  editMenu.value?.removeAttribute('open')
-}
-
-function runFileAction(action: 'new' | 'open' | 'save'): void {
-  closeMenus()
-
-  if (action === 'new') emit('newProject')
-  else if (action === 'open') emit('openProject')
-  else emit('saveProject')
-}
-
-function runEditAction(action: 'undo' | 'redo'): void {
-  closeMenus()
-  if (action === 'undo') emit('undo')
-  else emit('redo')
-}
-
 function handleShortcut(event: KeyboardEvent): void {
   if (props.busy || (!event.ctrlKey && !event.metaKey)) return
-
   if (event.key.toLowerCase() === 'n') {
     event.preventDefault()
     emit('newProject')
   }
-
   if (event.key.toLowerCase() === 'o') {
     event.preventDefault()
     emit('openProject')
   }
 }
 
-function closeMenu(event: PointerEvent): void {
-  const target = event.target as Node
-  if (!fileMenu.value?.contains(target)) fileMenu.value?.removeAttribute('open')
-  if (!editMenu.value?.contains(target)) editMenu.value?.removeAttribute('open')
-}
-
-onMounted(() => {
-  window.addEventListener('keydown', handleShortcut)
-  window.addEventListener('pointerdown', closeMenu)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', handleShortcut)
-  window.removeEventListener('pointerdown', closeMenu)
-})
+onMounted(() => window.addEventListener('keydown', handleShortcut))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
 </script>
 
 <template>
   <header class="flex h-9 shrink-0 items-center border-b bg-card px-1 text-xs select-none">
-    <div class="flex min-w-0 items-center">
+    <Menubar class="h-8 border-0 bg-transparent p-0 shadow-none">
       <span class="px-2 font-semibold">SLS</span>
-
-      <details ref="fileMenu" class="group relative">
-        <summary class="cursor-default list-none rounded px-2 py-1.5 hover:bg-accent">
-          {{ t('menu.file') }}
-        </summary>
-        <div class="absolute top-[calc(100%+3px)] left-0 z-50 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-          <button
-            type="button"
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
-            :disabled="busy"
-            @click="runFileAction('new')"
+      <MenubarMenu>
+        <MenubarTrigger>{{ t('menu.file') }}</MenubarTrigger>
+        <MenubarContent>
+          <MenubarItem :disabled="busy" @select="emit('newProject')"
+            >{{ t('menu.newProject') }}<MenubarShortcut>Ctrl+N</MenubarShortcut></MenubarItem
           >
-            {{ t('menu.newProject') }}
-            <span class="ml-auto text-muted-foreground">Ctrl+N</span>
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
-            :disabled="busy"
-            @click="runFileAction('open')"
+          <MenubarItem :disabled="busy" @select="emit('openProject')"
+            >{{ t('menu.openProject') }}<MenubarShortcut>Ctrl+O</MenubarShortcut></MenubarItem
           >
-            {{ t('menu.openProject') }}
-            <span class="ml-auto text-muted-foreground">Ctrl+O</span>
-          </button>
-          <div class="my-1 border-t" />
-          <button
-            type="button"
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
-            :disabled="busy || !projectPath"
-            @click="runFileAction('save')"
+          <MenubarSeparator />
+          <MenubarItem :disabled="busy || !projectPath" @select="emit('saveProject')"
+            >{{ t('menu.save') }}<MenubarShortcut>Ctrl+S</MenubarShortcut></MenubarItem
           >
-            {{ t('menu.save') }}
-            <span class="ml-auto text-muted-foreground">Ctrl+S</span>
-          </button>
-        </div>
-      </details>
-
-      <details ref="editMenu" class="group relative">
-        <summary class="cursor-default list-none rounded px-2 py-1.5 hover:bg-accent">
-          {{ t('menu.edit') }}
-        </summary>
-        <div class="absolute top-[calc(100%+3px)] left-0 z-50 w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-          <button
-            type="button"
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
-            :disabled="busy || !canUndo"
-            @click="runEditAction('undo')"
+        </MenubarContent>
+      </MenubarMenu>
+      <MenubarMenu>
+        <MenubarTrigger>{{ t('menu.edit') }}</MenubarTrigger>
+        <MenubarContent>
+          <MenubarItem :disabled="busy || !canUndo" @select="emit('undo')"
+            >{{ t('menu.undo') }}<MenubarShortcut>Ctrl+Z</MenubarShortcut></MenubarItem
           >
-            {{ t('menu.undo') }}
-            <span class="ml-auto text-muted-foreground">Ctrl+Z</span>
-          </button>
-          <button
-            type="button"
-            class="flex w-full items-center rounded-sm px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
-            :disabled="busy || !canRedo"
-            @click="runEditAction('redo')"
+          <MenubarItem :disabled="busy || !canRedo" @select="emit('redo')"
+            >{{ t('menu.redo') }}<MenubarShortcut>Ctrl+Y</MenubarShortcut></MenubarItem
           >
-            {{ t('menu.redo') }}
-            <span class="ml-auto text-muted-foreground">Ctrl+Y</span>
-          </button>
-        </div>
-      </details>
-
-      <span class="ml-2 truncate border-l pl-3 text-muted-foreground">
-        {{ projectPath || t('app.name') }}
-      </span>
-    </div>
-
+        </MenubarContent>
+      </MenubarMenu>
+      <span class="ml-2 truncate border-l pl-3 text-muted-foreground">{{
+        projectPath || t('app.name')
+      }}</span>
+    </Menubar>
     <div class="ml-auto flex items-center gap-1">
       <label class="sr-only" for="app-language">{{ t('language.label') }}</label>
       <select
@@ -163,17 +97,15 @@ onBeforeUnmount(() => {
         <option value="en">{{ t('language.en') }}</option>
         <option value="zh-CN">{{ t('language.zhCN') }}</option>
       </select>
-
-      <button
-        type="button"
-        class="flex size-7 items-center justify-center rounded hover:bg-accent"
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-7"
         :aria-label="theme === 'dark' ? t('theme.light') : t('theme.dark')"
         :title="theme === 'dark' ? t('theme.light') : t('theme.dark')"
         @click="toggleTheme"
-      >
-        <Sun v-if="theme === 'dark'" class="size-4" aria-hidden="true" />
-        <Moon v-else class="size-4" aria-hidden="true" />
-      </button>
+        ><Sun v-if="theme === 'dark'" /><Moon v-else
+      /></Button>
     </div>
   </header>
 </template>
