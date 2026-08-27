@@ -5,5 +5,5 @@ export interface ProjectManifest {
   name: string
   sourceLocale?: string
   targetLocales?: string[]
-  atlasManifestPaths?: string[]
+  spriteTableManifestPaths?: string[]
 }

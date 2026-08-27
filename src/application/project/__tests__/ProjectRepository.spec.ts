@@ -7,7 +7,10 @@ import {
 } from '@/application/project/ProjectRepository'
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 
-function createStorage(initialText: string): { storage: ProjectStorage; files: Map<string, string> } {
+function createStorage(initialText: string): {
+  storage: ProjectStorage
+  files: Map<string, string>
+} {
   const files = new Map([['project.json', initialText]])
   const storage: ProjectStorage = {
     async readText(path) {
@@ -47,6 +50,14 @@ describe('parseProjectManifest', () => {
     expect(() => parseProjectManifest('{"schemaVersion":2,"name":"Future"}')).toThrow(
       ProjectFormatError,
     )
+  })
+
+  it('rejects sprite table manifest paths outside the project root', () => {
+    expect(() =>
+      parseProjectManifest(
+        '{"schemaVersion":1,"name":"Sample","spriteTableManifestPaths":["../table.json"]}',
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidSpriteTableManifestPaths' }))
   })
 })
 

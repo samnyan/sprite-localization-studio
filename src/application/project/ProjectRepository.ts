@@ -1,8 +1,6 @@
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
-import {
-  PROJECT_SCHEMA_VERSION,
-  type ProjectManifest,
-} from '@/domain/project/types'
+import { isProjectRelativePath } from '@/application/storage/projectPath'
+import { PROJECT_SCHEMA_VERSION, type ProjectManifest } from '@/domain/project/types'
 
 export const PROJECT_MANIFEST_PATH = 'project.json'
 
@@ -14,6 +12,7 @@ export type ProjectFormatErrorCode =
   | 'missingManifest'
   | 'emptyName'
   | 'alreadyExists'
+  | 'invalidSpriteTableManifestPaths'
 
 export class ProjectFormatError extends Error {
   override readonly name = 'ProjectFormatError'
@@ -49,6 +48,16 @@ export function parseProjectManifest(text: string): ProjectManifest {
 
   if (typeof record.name !== 'string' || !record.name.trim()) {
     throw new ProjectFormatError('missingName')
+  }
+
+  if (
+    record.spriteTableManifestPaths !== undefined &&
+    (!Array.isArray(record.spriteTableManifestPaths) ||
+      record.spriteTableManifestPaths.some(
+        (path) => typeof path !== 'string' || !isProjectRelativePath(path),
+      ))
+  ) {
+    throw new ProjectFormatError('invalidSpriteTableManifestPaths')
   }
 
   return { ...record, schemaVersion: PROJECT_SCHEMA_VERSION, name: record.name } as ProjectManifest

@@ -5,6 +5,7 @@ export type SpriteRotation = 0 | 90 | 180 | 270
 export interface Sprite {
   id: string
   name: string
+  textureId: string
   frame: Rect
   rotation: SpriteRotation
   trimmed: boolean
