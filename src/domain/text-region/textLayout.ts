@@ -47,14 +47,20 @@ function layoutAtSize(
   const lines = config.wrap
     ? sourceLines.flatMap((line) => wrapLine(line, width, fontSize, measure))
     : sourceLines
-  let overflowed = lines.some((line) => measure(line, fontSize) > width)
-  const maxLines = config.maxLines
-  if (maxLines && lines.length > maxLines) {
-    overflowed = true
-    lines.length = maxLines
-    if (config.overflow === 'ellipsis') lines[maxLines - 1] = ellipsize(lines[maxLines - 1] ?? '', width, fontSize, measure)
+  const widthOverflow = lines.some((line) => measure(line, fontSize) > width)
+  const heightLimit = config.overflow === 'visible'
+    ? lines.length
+    : Math.max(0, Math.floor(height / lineHeight))
+  const visibleLines = Math.min(config.maxLines ?? lines.length, heightLimit)
+  const hiddenLines = lines.length > visibleLines
+  if (hiddenLines) lines.length = visibleLines
+  if (config.overflow === 'ellipsis' && lines.length) {
+    const last = lines.length - 1
+    if (hiddenLines || measure(lines[last] ?? '', fontSize) > width) {
+      lines[last] = ellipsize(lines[last] ?? '', width, fontSize, measure)
+    }
   }
-  const result = { fontSize, lineHeight, lines, height: lines.length * lineHeight, overflowed }
+  const result = { fontSize, lineHeight, lines, height: lines.length * lineHeight, overflowed: widthOverflow || hiddenLines }
   return { ...result, overflowed: result.overflowed || result.height > height }
 }
 

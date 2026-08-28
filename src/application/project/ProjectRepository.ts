@@ -160,7 +160,10 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
     (config.wrap === undefined || typeof config.wrap === 'boolean') &&
     (config.maxLines === undefined ||
       (Number.isInteger(config.maxLines) && (config.maxLines as number) > 0)) &&
-    (config.overflow === undefined || config.overflow === 'clip' || config.overflow === 'ellipsis') &&
+    (config.overflow === undefined ||
+      config.overflow === 'visible' ||
+      config.overflow === 'clip' ||
+      config.overflow === 'ellipsis') &&
     (config.autoFit === undefined ||
       (typeof config.autoFit === 'object' &&
         !Array.isArray(config.autoFit) &&

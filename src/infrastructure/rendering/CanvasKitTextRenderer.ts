@@ -82,6 +82,30 @@ function lineWidth(font: Font, text: string): number {
   return font.getGlyphWidths(glyphs).reduce((total, width) => total + width, 0)
 }
 
+function spacedLineWidth(font: Font, text: string, letterSpacing: number): number {
+  return lineWidth(font, text) + Math.max(0, Array.from(text).length - 1) * letterSpacing
+}
+
+function drawLine(
+  canvas: Canvas,
+  text: string,
+  x: number,
+  y: number,
+  paint: Paint,
+  font: Font,
+  letterSpacing: number,
+): void {
+  if (letterSpacing === 0) {
+    canvas.drawText(text, x, y, paint, font)
+    return
+  }
+  let cursor = x
+  for (const character of Array.from(text)) {
+    canvas.drawText(character, cursor, y, paint, font)
+    cursor += lineWidth(font, character) + letterSpacing
+  }
+}
+
 function resolveTypeface(canvasKit: CanvasKit, config: TextRenderConfig) {
   const data = projectFontRegistry.findData(
     config.fontFamily,
@@ -110,7 +134,6 @@ export function isCanvasKitTextRenderSupported(render: TextRenderConfig): boolea
   }
   if (
     config.stroke?.position === 'inside' ||
-    (config.letterSpacing ?? 0) !== 0 ||
     !isSupportedPaint(config.fill ?? { mode: 'solid', color: config.color }) ||
     !isSupportedPaint(config.stroke?.paint)
   ) {
@@ -171,11 +194,13 @@ function drawTextRegionCore(
       },
     )
     activeFont.setSize(layout.fontSize)
-    canvas.clipRect(
-      canvasKit.LTRBRect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width / 2, region.rect.height / 2),
-      canvasKit.ClipOp.Intersect,
-      true,
-    )
+    if (config.overflow !== 'visible') {
+      canvas.clipRect(
+        canvasKit.LTRBRect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width / 2, region.rect.height / 2),
+        canvasKit.ClipOp.Intersect,
+        true,
+      )
+    }
     const startY = config.verticalAlign === 'top'
       ? -region.rect.height / 2 + layout.lineHeight / 2
       : config.verticalAlign === 'bottom'
@@ -183,9 +208,10 @@ function drawTextRegionCore(
         : -layout.height / 2 + layout.lineHeight / 2
     const metrics = activeFont.getMetrics()
     const baselineOffset = -(metrics.ascent + metrics.descent) / 2
+    const letterSpacing = config.letterSpacing ?? 0
     const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
     for (const [index, line] of layout.lines.entries()) {
-      const width = lineWidth(activeFont, line)
+      const width = spacedLineWidth(activeFont, line, letterSpacing)
       const x = config.align === 'left' ? -region.rect.width / 2 : config.align === 'right' ? region.rect.width / 2 - width : -width / 2
       const baseline = startY + index * layout.lineHeight + baselineOffset
       for (const shadow of shadows) {
@@ -202,14 +228,22 @@ function drawTextRegionCore(
           : undefined
         try {
           if (filter) shadowPaint.paint.setMaskFilter(filter)
-          canvas.drawText(line, x + shadow.offsetX, baseline + shadow.offsetY, shadowPaint.paint, activeFont)
+          drawLine(
+            canvas,
+            line,
+            x + shadow.offsetX,
+            baseline + shadow.offsetY,
+            shadowPaint.paint,
+            activeFont,
+            letterSpacing,
+          )
         } finally {
           filter?.delete()
           disposePaint(shadowPaint)
         }
       }
-      if (stroke) canvas.drawText(line, x, baseline, stroke.paint, activeFont)
-      if (fill) canvas.drawText(line, x, baseline, fill.paint, activeFont)
+      if (stroke) drawLine(canvas, line, x, baseline, stroke.paint, activeFont, letterSpacing)
+      if (fill) drawLine(canvas, line, x, baseline, fill.paint, activeFont, letterSpacing)
     }
   } finally {
     if (saved) canvas.restore()

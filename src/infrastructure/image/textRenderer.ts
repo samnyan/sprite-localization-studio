@@ -42,18 +42,13 @@ function paintStyle(
   return gradient
 }
 
-function drawLine(
+function forEachCharacter(
   context: CanvasRenderingContext2D,
   text: string,
   x: number,
-  width: number,
-  letterSpacing = 0,
+  letterSpacing: number,
+  draw: (character: string, x: number) => void,
 ): void {
-  if (letterSpacing === 0) {
-    context.strokeText(text, x, 0, width)
-    context.fillText(text, x, 0, width)
-    return
-  }
   const characters = Array.from(text)
   const totalWidth = characters.reduce((total, character) => total + context.measureText(character).width, 0) +
     Math.max(0, characters.length - 1) * letterSpacing
@@ -66,10 +61,51 @@ function drawLine(
   context.textAlign = 'left'
   let cursor = start
   for (const character of characters) {
-    context.strokeText(character, cursor, 0)
-    context.fillText(character, cursor, 0)
+    draw(character, cursor)
     cursor += context.measureText(character).width + letterSpacing
   }
+  context.restore()
+}
+
+function drawLine(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  letterSpacing = 0,
+): void {
+  if (letterSpacing === 0) {
+    context.strokeText(text, x, 0)
+    context.fillText(text, x, 0)
+    return
+  }
+  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+    context.strokeText(character, characterX, 0)
+    context.fillText(character, characterX, 0)
+  })
+}
+
+function drawInsideLine(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  letterSpacing: number,
+): void {
+  if (letterSpacing === 0) {
+    context.fillText(text, x, 0)
+    context.save()
+    context.globalCompositeOperation = 'source-atop'
+    context.strokeText(text, x, 0)
+    context.restore()
+    return
+  }
+  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+    context.fillText(character, characterX, 0)
+  })
+  context.save()
+  context.globalCompositeOperation = 'source-atop'
+  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+    context.strokeText(character, characterX, 0)
+  })
   context.restore()
 }
 
@@ -83,9 +119,11 @@ export function drawTextRegion(
   context.save()
   context.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
   context.rotate((region.rotation * Math.PI) / 180)
-  context.beginPath()
-  context.rect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width, region.rect.height)
-  context.clip()
+  if (config.overflow !== 'visible') {
+    context.beginPath()
+    context.rect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width, region.rect.height)
+    context.clip()
+  }
   const fill = paintStyle(
     context,
     config.fill ?? { mode: 'solid', color: config.color },
@@ -136,19 +174,15 @@ export function drawTextRegion(
       context.shadowBlur = shadow.blur
       context.shadowOffsetX = shadow.offsetX
       context.shadowOffsetY = shadow.offsetY
-      drawLine(context, line, x, region.rect.width, config.letterSpacing)
+      drawLine(context, line, x, config.letterSpacing)
       context.restore()
     }
     context.shadowColor = 'transparent'
     context.shadowBlur = 0
     if (config.stroke?.position === 'inside' && stroke) {
-      context.fillText(line, x, 0, region.rect.width)
-      context.save()
-      context.globalCompositeOperation = 'source-atop'
-      context.strokeText(line, x, 0, region.rect.width)
-      context.restore()
+      drawInsideLine(context, line, x, config.letterSpacing ?? 0)
     } else {
-      drawLine(context, line, x, region.rect.width, config.letterSpacing)
+      drawLine(context, line, x, config.letterSpacing)
     }
     context.restore()
   }

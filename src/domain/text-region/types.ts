@@ -2,7 +2,7 @@ import type { Rect } from '@/domain/shared/geometry'
 
 export type TextAlign = 'left' | 'center' | 'right'
 export type TextVerticalAlign = 'top' | 'middle' | 'bottom'
-export type TextOverflow = 'clip' | 'ellipsis'
+export type TextOverflow = 'visible' | 'clip' | 'ellipsis'
 export type PaintMode = 'transparent' | 'solid' | 'gradient'
 export type StrokePosition = 'inside' | 'outside'
 

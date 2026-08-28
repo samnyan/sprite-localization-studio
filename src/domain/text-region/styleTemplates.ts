@@ -11,7 +11,7 @@ export const DEFAULT_TEXT_RENDER: TextRenderConfig = {
   lineHeight: 1.2,
   letterSpacing: 0,
   wrap: false,
-  overflow: 'clip',
+  overflow: 'visible',
   fill: { mode: 'solid', color: '#ffffff', alpha: 1, gradientAngle: 0 },
   stroke: { width: 0, position: 'outside', paint: { mode: 'solid', color: '#000000', alpha: 1, gradientAngle: 0 } },
   shadow: { color: '#000000', alpha: 0, blur: 0, offsetX: 0, offsetY: 0 },

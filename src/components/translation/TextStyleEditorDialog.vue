@@ -327,6 +327,7 @@ function saveTemplate(overwrite: boolean): void {
                 <Select v-model="draft.overflow">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent><SelectGroup>
+                    <SelectItem value="visible">{{ t('style.visible') }}</SelectItem>
                     <SelectItem value="clip">{{ t('style.clip') }}</SelectItem>
                     <SelectItem value="ellipsis">{{ t('style.ellipsis') }}</SelectItem>
                   </SelectGroup></SelectContent>

@@ -82,6 +82,7 @@ export default {
     wrap: '自动换行',
     maxLines: '最大行数',
     overflow: '溢出处理',
+    visible: '可见',
     clip: '裁剪',
     ellipsis: '省略号',
     autoFit: '自动缩放',

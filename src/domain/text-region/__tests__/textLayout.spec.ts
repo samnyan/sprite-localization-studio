@@ -29,4 +29,22 @@ describe('layoutText', () => {
     expect(result.fontSize).toBe(10)
     expect(result.overflowed).toBe(false)
   })
+
+  it('ellipsizes a single overflowing line and height-limited content', () => {
+    const singleLine = layoutText('abcdef', 20, 100, {
+      ...DEFAULT_TEXT_RENDER,
+      fontSize: 10,
+      overflow: 'ellipsis',
+    }, measure)
+    const heightLimited = layoutText('a\nb\nc', 100, 24, {
+      ...DEFAULT_TEXT_RENDER,
+      fontSize: 10,
+      overflow: 'ellipsis',
+    }, measure)
+
+    expect(singleLine.lines).toEqual(['a…'])
+    expect(singleLine.overflowed).toBe(true)
+    expect(heightLimited.lines).toEqual(['a', 'b…'])
+    expect(heightLimited.overflowed).toBe(true)
+  })
 })

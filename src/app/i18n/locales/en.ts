@@ -82,6 +82,7 @@ export default {
     wrap: 'Wrap text',
     maxLines: 'Max lines',
     overflow: 'Overflow',
+    visible: 'Visible',
     clip: 'Clip',
     ellipsis: 'Ellipsis',
     autoFit: 'Auto fit',
