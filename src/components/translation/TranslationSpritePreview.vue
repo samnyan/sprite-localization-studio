@@ -6,6 +6,7 @@ import type { Sprite } from '@/domain/sprite/types'
 import type { SpriteTranslation } from '@/domain/text-region/types'
 import type { PreviewBackground } from '@/app/stores/workspace'
 import { drawTranslationText } from '@/infrastructure/image/textRenderer'
+import { drawCanvasKitTextOverlay } from '@/infrastructure/rendering/CanvasKitTextOverlay'
 import {
   getLogicalSpriteSize,
   getLogicalTrimmedSize,
@@ -65,7 +66,8 @@ async function render(): Promise<void> {
     extracted.width = storedSize.width
     extracted.height = storedSize.height
     const extractedContext = extracted.getContext('2d')
-    const context = canvas.value.getContext('2d')
+    const target = canvas.value
+    const context = target.getContext('2d')
     if (!extractedContext || !context) return
 
     const transform = getStoredToLogicalTransform(props.sprite)
@@ -89,8 +91,8 @@ async function render(): Promise<void> {
       props.sprite.frame.height,
     )
 
-    canvas.value.width = logicalSize.width
-    canvas.value.height = logicalSize.height
+    target.width = logicalSize.width
+    target.height = logicalSize.height
     context.clearRect(0, 0, logicalSize.width, logicalSize.height)
     if (props.output && props.backgroundUrl) {
       const background = await loadImage(props.backgroundUrl)
@@ -99,8 +101,22 @@ async function render(): Promise<void> {
     } else if (!props.outputBlank) {
       context.drawImage(extracted, props.sprite.trimOffset?.x ?? 0, props.sprite.trimOffset?.y ?? 0)
     }
-    if (props.output && props.translation)
-      drawTranslationText(context, props.translation.textRegions)
+    if (props.output && props.translation) {
+      try {
+        const rendered = await drawCanvasKitTextOverlay(
+          target,
+          props.translation.textRegions,
+          () => currentRenderId === renderId && canvas.value === target,
+        )
+        if (currentRenderId !== renderId) return
+        if (!rendered) {
+          drawTranslationText(context, props.translation.textRegions)
+        }
+      } catch {
+        if (currentRenderId !== renderId || canvas.value !== target) return
+        drawTranslationText(context, props.translation.textRegions)
+      }
+    }
   } catch {
     return
   }

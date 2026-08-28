@@ -37,7 +37,7 @@ import {
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
-import { BrowserFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
+import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
@@ -55,7 +55,6 @@ type BackgroundImageUrls = Record<string, string>
 const AUTOSAVE_DELAY_MS = 5_000
 let activeRepository: ProjectRepository | undefined
 let activeStorage: ProjectStorage | undefined
-const fontRegistry = new BrowserFontRegistry()
 
 function workspaceErrorFrom(error: unknown): WorkspaceError {
   if (error instanceof SpriteTableFormatError) {
@@ -345,7 +344,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       ...(loadedProject.spriteBackgrounds ?? []),
     ])
     const loadedFonts = await scanProjectFonts(storage)
-    const fontRegistration = await fontRegistry.register(storage, loadedFonts.fonts)
+    const fontRegistration = await projectFontRegistry.register(storage, loadedFonts.fonts)
     const firstSpriteTable = loadedSpriteTables[0]
     const firstSprite = firstSpriteTable?.sprites[0]
 

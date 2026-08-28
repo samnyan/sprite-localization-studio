@@ -8,6 +8,7 @@ import type { ProjectManifest } from '@/domain/project/types'
 import type { Sprite } from '@/domain/sprite/types'
 import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 import { drawTranslationText } from '@/infrastructure/image/textRenderer'
+import { drawCanvasKitTextOverlay } from '@/infrastructure/rendering/CanvasKitTextOverlay'
 import {
   getLogicalSpriteSize,
   getLogicalToStoredTransform,
@@ -160,7 +161,13 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
       drawStoredSprite(logicalContext, source, sprite)
     }
 
-    drawTranslationText(logicalContext, translation.textRegions)
+    try {
+      if (!(await drawCanvasKitTextOverlay(logical, translation.textRegions))) {
+        drawTranslationText(logicalContext, translation.textRegions)
+      }
+    } catch {
+      drawTranslationText(logicalContext, translation.textRegions)
+    }
     storeLogicalSprite(outputContext, logical, sprite)
   }
 

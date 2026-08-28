@@ -2,6 +2,11 @@
 import { computed, nextTick, ref, watch } from 'vue'
 
 import { drawTextRegion } from '@/infrastructure/image/textRenderer'
+import {
+  drawTextRegionWithCanvasKit,
+  isCanvasKitTextRenderSupported,
+} from '@/infrastructure/rendering/CanvasKitTextRenderer'
+import { loadCanvasKit } from '@/infrastructure/rendering/CanvasKitRuntime'
 import type { TextRenderConfig } from '@/domain/text-region/types'
 import type { PreviewBackground } from '@/app/stores/workspace'
 
@@ -10,34 +15,62 @@ const props = withDefaults(
   { previewBackground: 'transparent' },
 )
 const canvas = ref<HTMLCanvasElement>()
+let renderId = 0
 const backgroundClass = computed(() => {
   if (props.previewBackground === 'black') return 'bg-black'
   if (props.previewBackground === 'white') return 'bg-white'
   return 'bg-checkerboard'
 })
 
-function renderCanvas(): void {
+async function renderCanvas(): Promise<void> {
+  const currentRenderId = ++renderId
   void nextTick(() => {
-    const context = canvas.value?.getContext('2d')
-    if (!context || !canvas.value) return
-    canvas.value.width = 640
-    canvas.value.height = 144
-    context.clearRect(0, 0, canvas.value.width, canvas.value.height)
-    drawTextRegion(
-      context,
-      props.text || 'Preview',
-      {
-        id: 'preview',
-        rect: { x: 20, y: 20, width: 600, height: 104 },
-        rotation: 0,
-        translationKey: 'preview',
-      },
-      props.render,
-    )
+    void renderWithCanvasKit(currentRenderId)
   })
 }
 
-watch(() => [props.text, props.render] as const, renderCanvas, { immediate: true, deep: true })
+async function renderWithCanvasKit(currentRenderId: number): Promise<void> {
+  const target = canvas.value
+  if (!target) return
+  target.width = 640
+  target.height = 144
+  const region = {
+    id: 'preview',
+    rect: { x: 20, y: 20, width: 600, height: 104 },
+    rotation: 0,
+    translationKey: 'preview',
+  }
+  try {
+    if (!isCanvasKitTextRenderSupported(props.render)) throw new Error('CanvasKit style is unsupported.')
+    const canvasKit = await loadCanvasKit()
+    if (currentRenderId !== renderId || target !== canvas.value) return
+    const surface = canvasKit.MakeSWCanvasSurface(target)
+    if (!surface) throw new Error('CanvasKit surface unavailable.')
+    try {
+      surface.getCanvas().clear(canvasKit.TRANSPARENT)
+      drawTextRegionWithCanvasKit(
+        canvasKit,
+        surface.getCanvas(),
+        props.text || 'Preview',
+        region,
+        props.render,
+      )
+      surface.flush()
+    } finally {
+      surface.dispose()
+    }
+  } catch {
+    if (currentRenderId !== renderId || target !== canvas.value) return
+    const context = target.getContext('2d')
+    if (!context) return
+    target.width = 640
+    target.height = 144
+    context.clearRect(0, 0, target.width, target.height)
+    drawTextRegion(context, props.text || 'Preview', region, props.render)
+  }
+}
+
+watch(() => [props.text, props.render] as const, () => void renderCanvas(), { immediate: true, deep: true })
 </script>
 
 <template>
