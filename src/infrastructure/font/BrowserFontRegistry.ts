@@ -6,6 +6,10 @@ export class BrowserFontRegistry {
   private readonly data = new Map<string, ArrayBuffer>()
   private generation = 0
 
+  get version(): number {
+    return this.generation
+  }
+
   async register(
     storage: ProjectStorage,
     fonts: ProjectFont[],

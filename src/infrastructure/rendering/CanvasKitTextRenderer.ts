@@ -4,6 +4,7 @@ import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { layoutText } from '@/domain/text-region/textLayout'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
+import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
 const genericFamilies = new Set(['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'])
 
@@ -107,12 +108,7 @@ function drawLine(
 }
 
 function resolveTypeface(canvasKit: CanvasKit, config: TextRenderConfig) {
-  const data = projectFontRegistry.findData(
-    config.fontFamily,
-    config.fontWeight,
-    config.fontStyle ?? 'normal',
-  )
-  return data ? canvasKit.Typeface.MakeTypefaceFromData(data) : canvasKit.Typeface.GetDefault()
+  return canvasKitTypefaceCache.resolve(canvasKit, config)
 }
 
 function isSupportedPaint(paint: TextPaint | undefined): boolean {
@@ -250,7 +246,6 @@ function drawTextRegionCore(
     disposePaint(fill)
     disposePaint(stroke)
     font?.delete()
-    typeface?.delete()
   }
 }
 
