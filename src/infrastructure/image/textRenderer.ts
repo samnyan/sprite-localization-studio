@@ -1,5 +1,6 @@
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
+import { layoutText } from '@/domain/text-region/textLayout'
 
 function withAlpha(value: string, alpha?: number): string {
   if (alpha === undefined) return value
@@ -41,9 +42,35 @@ function paintStyle(
   return gradient
 }
 
-function drawLine(context: CanvasRenderingContext2D, text: string, x: number, width: number): void {
-  context.strokeText(text, x, 0, width)
-  context.fillText(text, x, 0, width)
+function drawLine(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  width: number,
+  letterSpacing = 0,
+): void {
+  if (letterSpacing === 0) {
+    context.strokeText(text, x, 0, width)
+    context.fillText(text, x, 0, width)
+    return
+  }
+  const characters = Array.from(text)
+  const totalWidth = characters.reduce((total, character) => total + context.measureText(character).width, 0) +
+    Math.max(0, characters.length - 1) * letterSpacing
+  const start = context.textAlign === 'left'
+    ? x
+    : context.textAlign === 'right'
+      ? x - totalWidth
+      : x - totalWidth / 2
+  context.save()
+  context.textAlign = 'left'
+  let cursor = start
+  for (const character of characters) {
+    context.strokeText(character, cursor, 0)
+    context.fillText(character, cursor, 0)
+    cursor += context.measureText(character).width + letterSpacing
+  }
+  context.restore()
 }
 
 export function drawTextRegion(
@@ -56,6 +83,9 @@ export function drawTextRegion(
   context.save()
   context.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
   context.rotate((region.rotation * Math.PI) / 180)
+  context.beginPath()
+  context.rect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width, region.rect.height)
+  context.clip()
   const fill = paintStyle(
     context,
     config.fill ?? { mode: 'solid', color: config.color },
@@ -66,7 +96,20 @@ export function drawTextRegion(
     config.stroke && config.stroke.width > 0
       ? paintStyle(context, config.stroke.paint, region.rect.width, region.rect.height)
       : undefined
-  context.font = `${config.fontStyle ?? 'normal'} ${config.fontWeight} ${config.fontSize}px ${config.fontFamily}`
+  const setFont = (fontSize: number): void => {
+    context.font = `${config.fontStyle ?? 'normal'} ${config.fontWeight} ${fontSize}px ${config.fontFamily}`
+  }
+  const layout = layoutText(
+    text,
+    region.rect.width,
+    region.rect.height,
+    config,
+    (line, fontSize) => {
+      setFont(fontSize)
+      return context.measureText(line).width + Math.max(0, Array.from(line).length - 1) * (config.letterSpacing ?? 0)
+    },
+  )
+  setFont(layout.fontSize)
   context.textAlign = config.align
   context.textBaseline = 'middle'
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
@@ -76,12 +119,14 @@ export function drawTextRegion(
       : config.align === 'right'
         ? region.rect.width / 2
         : 0
-  const lines = text.split(/\r?\n/)
-  const lineHeight = config.fontSize * (config.lineHeight ?? 1.2)
-  const startY = -((lines.length - 1) * lineHeight) / 2
-  for (const [index, line] of lines.entries()) {
+  const startY = config.verticalAlign === 'top'
+    ? -region.rect.height / 2 + layout.lineHeight / 2
+    : config.verticalAlign === 'bottom'
+      ? region.rect.height / 2 - layout.height + layout.lineHeight / 2
+      : -layout.height / 2 + layout.lineHeight / 2
+  for (const [index, line] of layout.lines.entries()) {
     context.save()
-    context.translate(0, startY + index * lineHeight)
+    context.translate(0, startY + index * layout.lineHeight)
     context.lineWidth = config.stroke && config.stroke.width > 0 ? config.stroke.width * 2 : 0
     context.strokeStyle = stroke ?? 'transparent'
     context.fillStyle = fill ?? 'transparent'
@@ -91,7 +136,7 @@ export function drawTextRegion(
       context.shadowBlur = shadow.blur
       context.shadowOffsetX = shadow.offsetX
       context.shadowOffsetY = shadow.offsetY
-      drawLine(context, line, x, region.rect.width)
+      drawLine(context, line, x, region.rect.width, config.letterSpacing)
       context.restore()
     }
     context.shadowColor = 'transparent'
@@ -103,7 +148,7 @@ export function drawTextRegion(
       context.strokeText(line, x, 0, region.rect.width)
       context.restore()
     } else {
-      drawLine(context, line, x, region.rect.width)
+      drawLine(context, line, x, region.rect.width, config.letterSpacing)
     }
     context.restore()
   }
