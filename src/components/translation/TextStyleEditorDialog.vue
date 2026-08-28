@@ -102,6 +102,12 @@ function updateGradientStopPosition(stop: GradientStop, value: string | number):
   stop.position = Number.isFinite(percent) ? Math.max(0, Math.min(1, percent / 100)) : 0
 }
 
+function setAutoFit(enabled: boolean): void {
+  draft.value.autoFit = enabled
+    ? { minFontSize: Math.min(8, draft.value.fontSize), maxFontSize: draft.value.fontSize }
+    : undefined
+}
+
 function selectProjectFont(value: unknown): void {
   if (typeof value !== 'string') return
   const id = value
@@ -300,6 +306,49 @@ function saveTemplate(overwrite: boolean): void {
                     ></SelectContent
                   >
                 </Select>
+              </FormField>
+              <FormField :label="t('style.verticalAlign')">
+                <Select v-model="draft.verticalAlign">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectGroup>
+                    <SelectItem value="top">{{ t('style.top') }}</SelectItem>
+                    <SelectItem value="middle">{{ t('style.middle') }}</SelectItem>
+                    <SelectItem value="bottom">{{ t('style.bottom') }}</SelectItem>
+                  </SelectGroup></SelectContent>
+                </Select>
+              </FormField>
+              <FormField :label="t('style.letterSpacing')">
+                <Input v-model.number="draft.letterSpacing" type="number" step="0.1" />
+              </FormField>
+              <FormField :label="t('style.maxLines')">
+                <Input v-model.number="draft.maxLines" type="number" min="1" />
+              </FormField>
+              <FormField :label="t('style.overflow')">
+                <Select v-model="draft.overflow">
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectGroup>
+                    <SelectItem value="clip">{{ t('style.clip') }}</SelectItem>
+                    <SelectItem value="ellipsis">{{ t('style.ellipsis') }}</SelectItem>
+                  </SelectGroup></SelectContent>
+                </Select>
+              </FormField>
+              <label class="flex items-center gap-2 text-sm">
+                <input v-model="draft.wrap" type="checkbox" />
+                {{ t('style.wrap') }}
+              </label>
+              <label class="flex items-center gap-2 text-sm">
+                <input
+                  :checked="Boolean(draft.autoFit)"
+                  type="checkbox"
+                  @change="setAutoFit(($event.target as HTMLInputElement).checked)"
+                />
+                {{ t('style.autoFit') }}
+              </label>
+              <FormField v-if="draft.autoFit" :label="t('style.minFontSize')">
+                <Input v-model.number="draft.autoFit.minFontSize" type="number" min="1" />
+              </FormField>
+              <FormField v-if="draft.autoFit" :label="t('style.maxFontSize')">
+                <Input v-model.number="draft.autoFit.maxFontSize" type="number" min="1" />
               </FormField>
             </div>
             <fieldset class="grid grid-cols-3 gap-3 rounded border p-3">

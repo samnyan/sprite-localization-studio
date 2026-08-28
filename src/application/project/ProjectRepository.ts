@@ -150,8 +150,25 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
       config.fontStyle === 'oblique') &&
     isNonEmptyString(config.color) &&
     (config.align === 'left' || config.align === 'center' || config.align === 'right') &&
+    (config.verticalAlign === undefined ||
+      config.verticalAlign === 'top' ||
+      config.verticalAlign === 'middle' ||
+      config.verticalAlign === 'bottom') &&
     (config.lineHeight === undefined ||
       (Number.isFinite(config.lineHeight) && (config.lineHeight as number) > 0)) &&
+    (config.letterSpacing === undefined || Number.isFinite(config.letterSpacing)) &&
+    (config.wrap === undefined || typeof config.wrap === 'boolean') &&
+    (config.maxLines === undefined ||
+      (Number.isInteger(config.maxLines) && (config.maxLines as number) > 0)) &&
+    (config.overflow === undefined || config.overflow === 'clip' || config.overflow === 'ellipsis') &&
+    (config.autoFit === undefined ||
+      (typeof config.autoFit === 'object' &&
+        !Array.isArray(config.autoFit) &&
+        Number.isFinite((config.autoFit as Record<string, unknown>).minFontSize) &&
+        Number.isFinite((config.autoFit as Record<string, unknown>).maxFontSize) &&
+        ((config.autoFit as Record<string, unknown>).minFontSize as number) > 0 &&
+        ((config.autoFit as Record<string, unknown>).maxFontSize as number) >=
+          ((config.autoFit as Record<string, unknown>).minFontSize as number))) &&
     (config.fill === undefined || isPaint(config.fill)) &&
     (config.stroke === undefined || isStroke(config.stroke)) &&
     (config.shadow === undefined || isShadow(config.shadow)) &&

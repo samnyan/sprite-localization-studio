@@ -224,6 +224,36 @@ describe('parseProjectManifest', () => {
     ).toThrowError(expect.objectContaining({ code: 'invalidTextStyleTemplates' }))
   })
 
+  it('validates persisted text layout options', () => {
+    const render = {
+      fontFamily: 'sans-serif',
+      fontSize: 24,
+      fontWeight: 700,
+      color: '#ffffff',
+      align: 'center',
+      verticalAlign: 'bottom',
+      letterSpacing: 1.5,
+      wrap: true,
+      maxLines: 2,
+      overflow: 'ellipsis',
+      autoFit: { minFontSize: 12, maxFontSize: 24 },
+    }
+    expect(parseProjectManifest(JSON.stringify({
+      schemaVersion: 3,
+      name: 'Sample',
+      textStyleTemplates: [{ id: 'layout', name: 'Layout', render }],
+    }))).toMatchObject({ textStyleTemplates: [{ id: 'layout' }] })
+    expect(() => parseProjectManifest(JSON.stringify({
+      schemaVersion: 3,
+      name: 'Sample',
+      textStyleTemplates: [{
+        id: 'invalid-layout',
+        name: 'Invalid layout',
+        render: { ...render, autoFit: { minFontSize: 24, maxFontSize: 12 } },
+      }],
+    }))).toThrowError(expect.objectContaining({ code: 'invalidTextStyleTemplates' }))
+  })
+
   it('rejects duplicate sprite translation metadata and invalid regions', () => {
     expect(() =>
       parseProjectManifest(

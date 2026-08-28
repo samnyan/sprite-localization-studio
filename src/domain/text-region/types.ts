@@ -1,6 +1,8 @@
 import type { Rect } from '@/domain/shared/geometry'
 
 export type TextAlign = 'left' | 'center' | 'right'
+export type TextVerticalAlign = 'top' | 'middle' | 'bottom'
+export type TextOverflow = 'clip' | 'ellipsis'
 export type PaintMode = 'transparent' | 'solid' | 'gradient'
 export type StrokePosition = 'inside' | 'outside'
 
@@ -49,7 +51,16 @@ export interface TextRenderConfig {
   fontStyle?: 'normal' | 'italic' | 'oblique'
   color: string
   align: TextAlign
+  verticalAlign?: TextVerticalAlign
   lineHeight?: number
+  letterSpacing?: number
+  wrap?: boolean
+  maxLines?: number
+  overflow?: TextOverflow
+  autoFit?: {
+    minFontSize: number
+    maxFontSize: number
+  }
   fill?: TextPaint
   stroke?: TextStroke
   shadow?: TextShadow
