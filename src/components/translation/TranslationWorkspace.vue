@@ -382,6 +382,8 @@ onUnmounted(finishResize)
       :render="editingStyle?.render"
       :style-id="editingStyle?.styleId"
       :templates="workspace.project?.textStyleTemplates"
+      :fonts="workspace.projectFonts"
+      :font-diagnostics="workspace.fontDiagnostics"
       :preview-background="workspace.previewBackground"
       @close="editingStyle = undefined"
       @save="saveStyle"

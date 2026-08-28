@@ -46,6 +46,7 @@ export interface TextRenderConfig {
   fontFamily: string
   fontSize: number
   fontWeight: number
+  fontStyle?: 'normal' | 'italic' | 'oblique'
   color: string
   align: TextAlign
   lineHeight?: number

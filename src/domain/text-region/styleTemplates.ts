@@ -4,6 +4,7 @@ export const DEFAULT_TEXT_RENDER: TextRenderConfig = {
   fontFamily: 'sans-serif',
   fontSize: 24,
   fontWeight: 700,
+  fontStyle: 'normal',
   color: '#ffffff',
   align: 'center',
   lineHeight: 1.2,

@@ -144,6 +144,10 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
     (config.fontSize as number) > 0 &&
     Number.isFinite(config.fontWeight) &&
     (config.fontWeight as number) > 0 &&
+    (config.fontStyle === undefined ||
+      config.fontStyle === 'normal' ||
+      config.fontStyle === 'italic' ||
+      config.fontStyle === 'oblique') &&
     isNonEmptyString(config.color) &&
     (config.align === 'left' || config.align === 'center' || config.align === 'right') &&
     (config.lineHeight === undefined ||

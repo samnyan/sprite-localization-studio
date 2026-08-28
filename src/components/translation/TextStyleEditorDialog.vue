@@ -31,6 +31,8 @@ import type {
 } from '@/domain/text-region/types'
 import TextStyleCanvasPreview from '@/components/translation/TextStyleCanvasPreview.vue'
 import type { PreviewBackground } from '@/app/stores/workspace'
+import type { ProjectFont } from '@/domain/font/types'
+import type { FontDiagnostic } from '@/domain/font/types'
 
 const props = defineProps<{
   open: boolean
@@ -38,6 +40,8 @@ const props = defineProps<{
   render?: TextRenderConfig
   styleId?: string
   templates?: TextStyleTemplate[]
+  fonts?: ProjectFont[]
+  fontDiagnostics?: FontDiagnostic[]
   previewBackground?: PreviewBackground
 }>()
 const emit = defineEmits<{
@@ -51,6 +55,7 @@ const draft = ref<TextRenderConfig>({ ...DEFAULT_TEXT_RENDER })
 const selectedTemplateId = ref<string>()
 const templatesOpen = ref(false)
 const templateName = ref('')
+const selectedProjectFontId = ref<string>()
 const availableTemplates = computed(() => [...textStyleTemplates, ...(props.templates ?? [])])
 const selectedProjectTemplate = computed(() =>
   props.templates?.find((template) => template.id === selectedTemplateId.value),
@@ -97,6 +102,17 @@ function updateGradientStopPosition(stop: GradientStop, value: string | number):
   stop.position = Number.isFinite(percent) ? Math.max(0, Math.min(1, percent / 100)) : 0
 }
 
+function selectProjectFont(value: unknown): void {
+  if (typeof value !== 'string') return
+  const id = value
+  const font = props.fonts?.find((item) => item.id === id)
+  if (!font) return
+  selectedProjectFontId.value = id
+  draft.value.fontFamily = font.family
+  if (font.weight) draft.value.fontWeight = font.weight
+  if (font.style) draft.value.fontStyle = font.style
+}
+
 watch(
   () => [props.open, props.render, props.styleId] as const,
   () => {
@@ -105,6 +121,12 @@ watch(
       JSON.stringify({ ...DEFAULT_TEXT_RENDER, ...props.render }),
     ) as TextRenderConfig
     selectedTemplateId.value = props.styleId
+    selectedProjectFontId.value = props.fonts?.find(
+      (font) =>
+        font.family === draft.value.fontFamily &&
+        (!font.weight || font.weight === draft.value.fontWeight) &&
+        (!font.style || font.style === (draft.value.fontStyle ?? 'normal')),
+    )?.id
     templateName.value = selectedProjectTemplate.value?.name ?? ''
   },
   { immediate: true, deep: true },
@@ -215,8 +237,41 @@ function saveTemplate(overwrite: boolean): void {
               <FormField :label="t('style.fontFamily')"
                 ><Input
                   v-model="draft.fontFamily"
+                  list="project-fonts"
                   class="h-8 w-full rounded border bg-background px-2 text-foreground"
               /></FormField>
+              <FormField :label="t('style.projectFont')">
+                <Select :model-value="selectedProjectFontId" @update:model-value="selectProjectFont">
+                  <SelectTrigger><SelectValue :placeholder="t('style.manualFont')" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectItem v-for="font in fonts" :key="font.id" :value="font.id">
+                        {{ font.family }}{{ font.weight ? ` ${font.weight}` : '' }}
+                        {{ font.style === 'normal' ? '' : ` · ${font.style}` }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <datalist id="project-fonts">
+                <option v-for="font in fonts" :key="font.id" :value="font.family">
+                  {{ font.family }}{{ font.subfamily ? ` · ${font.subfamily}` : '' }}
+                </option>
+              </datalist>
+              <p class="col-span-full -mt-2 text-xs text-muted-foreground">
+                {{ t('style.fontHint') }}
+              </p>
+              <div v-if="fonts?.length" class="col-span-full flex flex-wrap gap-1 text-xs text-muted-foreground">
+                <span v-for="font in fonts" :key="font.id" class="rounded border px-2 py-1">
+                  {{ font.family }}{{ font.weight ? ` ${font.weight}` : '' }} · {{ font.path }}
+                </span>
+              </div>
+              <div v-if="fontDiagnostics?.length" class="col-span-full rounded border border-destructive/30 p-2 text-xs text-destructive">
+                <p class="font-medium">{{ t('style.fontDiagnostics') }}</p>
+                <p v-for="diagnostic in fontDiagnostics" :key="diagnostic.path">
+                  {{ diagnostic.path }} · {{ diagnostic.message }}
+                </p>
+              </div>
               <FormField :label="t('style.fontSize')"
                 ><Input
                   v-model.number="draft.fontSize"

@@ -66,7 +66,7 @@ export function drawTextRegion(
     config.stroke && config.stroke.width > 0
       ? paintStyle(context, config.stroke.paint, region.rect.width, region.rect.height)
       : undefined
-  context.font = `${config.fontWeight} ${config.fontSize}px ${config.fontFamily}`
+  context.font = `${config.fontStyle ?? 'normal'} ${config.fontWeight} ${config.fontSize}px ${config.fontFamily}`
   context.textAlign = config.align
   context.textBaseline = 'middle'
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])

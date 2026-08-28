@@ -2,6 +2,7 @@ import { computed, markRaw, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
+import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
 import {
   createBackgroundTemplatePath,
   createSpriteBackgroundPath,
@@ -22,6 +23,7 @@ import {
 } from '@/application/sprite-table/SpriteTableRepository'
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { ProjectManifest } from '@/domain/project/types'
+import type { FontDiagnostic, ProjectFont } from '@/domain/font/types'
 import type { BackgroundTemplate, ImageResource, SpriteBackground } from '@/domain/resource/types'
 import type { Rect } from '@/domain/shared/geometry'
 import type { SpriteTable } from '@/domain/sprite-table/types'
@@ -35,6 +37,7 @@ import {
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
+import { BrowserFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
@@ -52,6 +55,7 @@ type BackgroundImageUrls = Record<string, string>
 const AUTOSAVE_DELAY_MS = 5_000
 let activeRepository: ProjectRepository | undefined
 let activeStorage: ProjectStorage | undefined
+const fontRegistry = new BrowserFontRegistry()
 
 function workspaceErrorFrom(error: unknown): WorkspaceError {
   if (error instanceof SpriteTableFormatError) {
@@ -73,6 +77,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const spriteTables = ref<SpriteTable[]>([])
   const textureImageUrls = ref<TextureImageUrls>({})
   const backgroundImageUrls = ref<BackgroundImageUrls>({})
+  const projectFonts = ref<ProjectFont[]>([])
+  const fontDiagnostics = ref<FontDiagnostic[]>([])
   const selectedSpriteTableId = ref<string>()
   const selectedSpriteId = ref<string>()
   const selectedTextRegionId = ref<string>()
@@ -338,6 +344,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       ...(loadedProject.backgroundTemplates ?? []),
       ...(loadedProject.spriteBackgrounds ?? []),
     ])
+    const loadedFonts = await scanProjectFonts(storage)
+    const fontRegistration = await fontRegistry.register(storage, loadedFonts.fonts)
     const firstSpriteTable = loadedSpriteTables[0]
     const firstSprite = firstSpriteTable?.sprites[0]
 
@@ -351,6 +359,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     spriteTables.value = loadedSpriteTables
     textureImageUrls.value = loadedImageUrls
     backgroundImageUrls.value = loadedBackgroundUrls
+    projectFonts.value = loadedFonts.fonts.filter((font) => fontRegistration.registeredIds.includes(font.id))
+    fontDiagnostics.value = [...loadedFonts.diagnostics, ...fontRegistration.diagnostics]
     selectedSpriteTableId.value = firstSpriteTable?.id
     selectedSpriteId.value = firstSprite?.id
     selectedTextRegionId.value = undefined
@@ -937,6 +947,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     spriteTables,
     textureImageUrls,
     backgroundImageUrls,
+    projectFonts,
+    fontDiagnostics,
     selectedSpriteTableId,
     selectedSpriteId,
     selectedTextRegionId,
