@@ -5,6 +5,7 @@ export class BrowserFontRegistry {
   private readonly faces = new Map<string, FontFace>()
   private readonly data = new Map<string, ArrayBuffer>()
   private generation = 0
+  private request = 0
 
   get version(): number {
     return this.generation
@@ -14,8 +15,7 @@ export class BrowserFontRegistry {
     storage: ProjectStorage,
     fonts: ProjectFont[],
   ): Promise<{ registeredIds: string[]; diagnostics: FontDiagnostic[] }> {
-    await this.dispose(false)
-    const generation = ++this.generation
+    const request = ++this.request
     const results = await Promise.all(
       fonts.map(async (font) => {
         try {
@@ -25,11 +25,7 @@ export class BrowserFontRegistry {
             ...(font.style ? { style: font.style } : {}),
           })
           const loaded = await face.load()
-          if (generation !== this.generation) return undefined
-          document.fonts.add(loaded)
-          this.faces.set(font.id, face)
-          this.data.set(font.id, data)
-          return { id: font.id }
+          return { id: font.id, face: loaded, data }
         } catch (error) {
           return {
             path: font.path,
@@ -38,10 +34,22 @@ export class BrowserFontRegistry {
         }
       }),
     )
+    if (request !== this.request) return { registeredIds: [], diagnostics: [] }
+    await this.dispose(false)
+    const registeredIds: string[] = []
+    const registered = results.filter(
+      (result): result is { id: string; face: FontFace; data: ArrayBuffer } =>
+        result !== undefined && 'face' in result,
+    )
+    for (const result of registered) {
+      document.fonts.add(result.face)
+      this.faces.set(result.id, result.face)
+      this.data.set(result.id, result.data)
+      registeredIds.push(result.id)
+    }
+    this.generation += 1
     return {
-      registeredIds: results.flatMap((result) =>
-        result && 'id' in result && result.id ? [result.id] : [],
-      ),
+      registeredIds,
       diagnostics: results.filter(
         (result): result is FontDiagnostic => result !== undefined && !('id' in result),
       ),
@@ -49,7 +57,10 @@ export class BrowserFontRegistry {
   }
 
   async dispose(invalidate = true): Promise<void> {
-    if (invalidate) this.generation += 1
+    if (invalidate) {
+      this.request += 1
+      this.generation += 1
+    }
     for (const face of this.faces.values()) document.fonts.delete(face)
     this.faces.clear()
     this.data.clear()

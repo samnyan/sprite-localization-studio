@@ -38,6 +38,7 @@ import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
+import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
@@ -55,6 +56,7 @@ type BackgroundImageUrls = Record<string, string>
 const AUTOSAVE_DELAY_MS = 5_000
 let activeRepository: ProjectRepository | undefined
 let activeStorage: ProjectStorage | undefined
+let projectActivation = 0
 
 function workspaceErrorFrom(error: unknown): WorkspaceError {
   if (error instanceof SpriteTableFormatError) {
@@ -334,22 +336,44 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     storage: ProjectStorage,
     repository: ProjectRepository,
     loadedProject: ProjectManifest,
-  ): Promise<void> {
+    activation: number,
+  ): Promise<boolean> {
     const loadedSpriteTables = await new SpriteTableRepository(storage).loadMany(
       loadedProject.spriteTableManifestPaths ?? [],
     )
+    if (activation !== projectActivation) return false
     const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables)
+    if (activation !== projectActivation) {
+      revokeTextureImageUrls(loadedImageUrls)
+      return false
+    }
     const loadedBackgroundUrls = await loadBackgroundImages(storage, [
       ...(loadedProject.backgroundTemplates ?? []),
       ...(loadedProject.spriteBackgrounds ?? []),
     ])
+    if (activation !== projectActivation) {
+      revokeTextureImageUrls(loadedImageUrls)
+      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      return false
+    }
     const loadedFonts = await scanProjectFonts(storage)
+    if (activation !== projectActivation) {
+      revokeTextureImageUrls(loadedImageUrls)
+      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      return false
+    }
     const fontRegistration = await projectFontRegistry.register(storage, loadedFonts.fonts)
+    if (activation !== projectActivation) {
+      revokeTextureImageUrls(loadedImageUrls)
+      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      return false
+    }
     const firstSpriteTable = loadedSpriteTables[0]
     const firstSprite = firstSpriteTable?.sprites[0]
 
     revokeTextureImageUrls(textureImageUrls.value)
     revokeBackgroundImageUrls(backgroundImageUrls.value)
+    canvasKitTypefaceCache.dispose()
     documentSession += 1
     activeRepository = repository
     activeStorage = storage
@@ -364,6 +388,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedSpriteId.value = firstSprite?.id
     selectedTextRegionId.value = undefined
     directoryName.value = directory.name
+    return true
   }
 
   async function openLocalProject(): Promise<boolean> {
@@ -373,18 +398,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return false
     }
 
+    const activation = ++projectActivation
     status.value = 'opening'
     error.value = undefined
     try {
       const directory = await window.showDirectoryPicker({ mode: 'readwrite' })
+      if (activation !== projectActivation) return false
       if (isDirty.value && !(await saveProject())) return false
       status.value = 'opening'
       const storage = markRaw(new LocalFolderStorage(directory))
       const repository = markRaw(new ProjectRepository(storage))
-      await activateProject(directory, storage, repository, await repository.load())
+      const loadedProject = await repository.load()
+      if (activation !== projectActivation) return false
+      if (!(await activateProject(directory, storage, repository, loadedProject, activation))) return false
       status.value = 'ready'
       return true
     } catch (caughtError) {
+      if (activation !== projectActivation) return false
       if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
         status.value = project.value ? 'ready' : 'idle'
         return false
@@ -402,18 +432,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return false
     }
 
+    const activation = ++projectActivation
     status.value = 'opening'
     error.value = undefined
     try {
       const directory = await window.showDirectoryPicker({ mode: 'readwrite' })
+      if (activation !== projectActivation) return false
       if (isDirty.value && !(await saveProject())) return false
       status.value = 'opening'
       const storage = markRaw(new LocalFolderStorage(directory))
       const repository = markRaw(new ProjectRepository(storage))
-      await activateProject(directory, storage, repository, await repository.create(name))
+      const loadedProject = await repository.create(name)
+      if (activation !== projectActivation) return false
+      if (!(await activateProject(directory, storage, repository, loadedProject, activation))) return false
       status.value = 'ready'
       return true
     } catch (caughtError) {
+      if (activation !== projectActivation) return false
       if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
         status.value = project.value ? 'ready' : 'idle'
         return false
