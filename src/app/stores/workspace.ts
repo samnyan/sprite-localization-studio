@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
-import { collectTextDiagnostics } from '@/application/qa/TextDiagnostics'
+import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import {
   createBackgroundTemplatePath,
   createSpriteBackgroundPath,
@@ -964,6 +964,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedTextRegionId.value = regionId
   }
 
+  function selectTextDiagnostic(diagnostic: TextDiagnostic): boolean {
+    const spriteTable = spriteTables.value.find((item) => item.id === diagnostic.spriteTableId)
+    const sprite = spriteTable?.sprites.find((item) => item.id === diagnostic.spriteId)
+    const textRegion = project.value?.translations
+      ?.find(
+        (item) =>
+          item.spriteTableId === diagnostic.spriteTableId && item.spriteId === diagnostic.spriteId,
+      )
+      ?.textRegions.find((item) => item.id === diagnostic.regionId)
+    if (!spriteTable || !sprite || !textRegion) return false
+
+    selectedSpriteTableId.value = spriteTable.id
+    selectedSpriteId.value = sprite.id
+    selectedTextRegionId.value = textRegion.id
+    return true
+  }
+
   function selectProject(): void {
     selectedSpriteTableId.value = undefined
     selectedSpriteId.value = undefined
@@ -1036,6 +1053,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectSpriteTable,
     selectSprite,
     selectTextRegion,
+    selectTextDiagnostic,
     selectProject,
     setMode,
     setPreviewBackground,

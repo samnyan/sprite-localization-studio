@@ -31,6 +31,9 @@ export default {
   },
   translation: {
     issues: '{count} 个翻译问题',
+    missingTranslation: '缺少翻译：{label}',
+    goToIssue: '跳转到翻译问题：{label}',
+    showMoreIssues: '显示另外 {count} 项',
     selectManifest: '请选择 Sprite Table。',
     noSprites: '当前 Sprite Table 没有需要翻译的贴图。',
     originalSprite: '原 Sprite',

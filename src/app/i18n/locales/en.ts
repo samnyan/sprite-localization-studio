@@ -30,7 +30,10 @@ export default {
     translations: 'Translation',
   },
   translation: {
-    issues: '{count} translation issues',
+    issues: 'No translation issues | 1 translation issue | {count} translation issues',
+    missingTranslation: 'Missing: {label}',
+    goToIssue: 'Go to translation issue: {label}',
+    showMoreIssues: 'Show {count} more',
     selectManifest: 'Select a sprite table.',
     noSprites: 'No sprites need translation in this sprite table.',
     originalSprite: 'Original sprite',

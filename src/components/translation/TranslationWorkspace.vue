@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onUnmounted, ref, type ComponentPublicInstance } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
+import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import TranslationSpritePreview from '@/components/translation/TranslationSpritePreview.vue'
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
@@ -27,6 +28,8 @@ const editingBackground = ref<{
   backgroundId?: string
 }>()
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
+const diagnosticDisplayCount = ref(12)
+const translatedTextInputs = new Map<string, HTMLTextAreaElement>()
 let resizingColumn: number | undefined
 let resizeStartX = 0
 let resizeStartRatios: number[] = []
@@ -48,6 +51,42 @@ const translationRows = computed(() => {
     return translation && texture && imageUrl ? [{ sprite, translation, texture, imageUrl }] : []
   })
 })
+const visibleDiagnostics = computed(() =>
+  workspace.textDiagnostics.slice(0, diagnosticDisplayCount.value),
+)
+const remainingDiagnosticCount = computed(() =>
+  Math.max(0, workspace.textDiagnostics.length - visibleDiagnostics.value.length),
+)
+const diagnosticItems = computed(() => {
+  const spriteTablesById = new Map(workspace.spriteTables.map((item) => [item.id, item]))
+  const spritesByKey = new Map(
+    workspace.spriteTables.flatMap((spriteTable) =>
+      spriteTable.sprites.map((sprite) => [spriteKey(spriteTable.id, sprite.id), sprite]),
+    ),
+  )
+  const regionsBySprite = new Map(
+    (workspace.project?.translations ?? []).map((translation) => [
+      spriteKey(translation.spriteTableId, translation.spriteId),
+      new Map(translation.textRegions.map((region) => [region.id, region.translationKey])),
+    ]),
+  )
+
+  return visibleDiagnostics.value.map((diagnostic) => {
+    const spriteTable = spriteTablesById.get(diagnostic.spriteTableId)
+    const sprite = spritesByKey.get(spriteKey(diagnostic.spriteTableId, diagnostic.spriteId))
+    const region = regionsBySprite
+      .get(spriteKey(diagnostic.spriteTableId, diagnostic.spriteId))
+      ?.get(diagnostic.regionId)
+    return {
+      diagnostic,
+      label: [
+        spriteTable?.name ?? diagnostic.spriteTableId,
+        sprite?.id ?? diagnostic.spriteId,
+        region ?? diagnostic.regionId,
+      ].join(' / '),
+    }
+  })
+})
 
 function backgroundUrl(backgroundId?: string): string | undefined {
   return backgroundId ? workspace.backgroundImageUrls[backgroundId] : undefined
@@ -59,6 +98,48 @@ function styleName(styleId?: string): string {
       (template) => template.id === styleId,
     )?.name ?? t('style.custom')
   )
+}
+
+function spriteKey(spriteTableId: string, spriteId: string): string {
+  return JSON.stringify([spriteTableId, spriteId])
+}
+
+function textRegionKey(spriteTableId: string, spriteId: string, regionId: string): string {
+  return JSON.stringify([spriteTableId, spriteId, regionId])
+}
+
+function setTranslatedTextInput(
+  key: string,
+  element: Element | ComponentPublicInstance | null,
+): void {
+  if (element instanceof HTMLTextAreaElement) {
+    translatedTextInputs.set(key, element)
+  } else {
+    translatedTextInputs.delete(key)
+  }
+}
+
+function isSelectedTextRegion(spriteTableId: string, spriteId: string, regionId: string): boolean {
+  return (
+    workspace.selectedSpriteTableId === spriteTableId &&
+    workspace.selectedSpriteId === spriteId &&
+    workspace.selectedTextRegionId === regionId
+  )
+}
+
+async function selectDiagnostic(diagnostic: TextDiagnostic): Promise<void> {
+  if (!workspace.selectTextDiagnostic(diagnostic)) return
+
+  await nextTick()
+  const input = translatedTextInputs.get(
+    textRegionKey(diagnostic.spriteTableId, diagnostic.spriteId, diagnostic.regionId),
+  )
+  input?.scrollIntoView({ block: 'center' })
+  input?.focus({ preventScroll: true })
+}
+
+function showMoreDiagnostics(): void {
+  diagnosticDisplayCount.value += 12
 }
 
 function startResize(index: number, event: PointerEvent): void {
@@ -118,10 +199,10 @@ function saveStyle(render: TextRenderConfig, styleId?: string): void {
   const editing = editingStyle.value
   if (
     !workspace.updateTranslationRegion(
-    selectedSpriteTable.value.id,
-    editing.spriteId,
-    editing.regionId,
-    { render, styleId },
+      selectedSpriteTable.value.id,
+      editing.spriteId,
+      editing.regionId,
+      { render, styleId },
     )
   ) {
     return
@@ -221,8 +302,41 @@ onUnmounted(finishResize)
       {{ t('translation.selectManifest') }}
     </div>
     <template v-else>
-      <div v-if="workspace.textDiagnostics.length" class="border-b px-3 py-2 text-xs text-amber-700">
-        {{ t('translation.issues', { count: workspace.textDiagnostics.length }) }}
+      <div
+        v-if="workspace.textDiagnostics.length"
+        class="border-b bg-muted/40 px-3 py-2"
+        role="region"
+        :aria-label="t('translation.issues', workspace.textDiagnostics.length)"
+      >
+        <p class="text-xs font-medium" role="status" aria-live="polite">
+          {{ t('translation.issues', workspace.textDiagnostics.length) }}
+        </p>
+        <div class="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto" role="list">
+          <div
+            v-for="item in diagnosticItems"
+            :key="textRegionKey(item.diagnostic.spriteTableId, item.diagnostic.spriteId, item.diagnostic.regionId)"
+            role="listitem"
+          >
+            <Button
+              variant="outline"
+              size="sm"
+              class="max-w-72"
+              :aria-label="t('translation.goToIssue', { label: item.label })"
+              @click="selectDiagnostic(item.diagnostic)"
+            >
+              <span class="truncate">{{ t('translation.missingTranslation', { label: item.label }) }}</span>
+            </Button>
+          </div>
+        </div>
+        <Button
+          v-if="remainingDiagnosticCount"
+          variant="ghost"
+          size="sm"
+          class="mt-1.5"
+          @click="showMoreDiagnostics"
+        >
+          {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
+        </Button>
       </div>
       <div class="min-h-0 flex-1 overflow-auto">
         <div class="sticky top-0 z-20 min-w-max border-b bg-background">
@@ -294,6 +408,20 @@ onUnmounted(finishResize)
                 :key="region.id"
                 class="min-h-16 w-full resize-y rounded border bg-background px-2 py-1.5 text-xs"
                 :aria-label="t('translation.translatedText')"
+                :class="{
+                  'ring-2 ring-primary': isSelectedTextRegion(
+                    row.translation.spriteTableId,
+                    row.sprite.id,
+                    region.id,
+                  ),
+                }"
+                :ref="
+                  (element) =>
+                    setTranslatedTextInput(
+                      textRegionKey(row.translation.spriteTableId, row.sprite.id, region.id),
+                      element,
+                    )
+                "
                 :value="region.translatedText ?? ''"
                 @input="updateText(row.sprite.id, region.id, 'translatedText', $event)"
               ></textarea>
@@ -400,10 +528,7 @@ onUnmounted(finishResize)
       :templates="workspace.project?.backgroundTemplates ?? []"
       :sprite-backgrounds="
         selectedSpriteTable && editingBackground
-          ? workspace.spriteBackgroundsForSprite(
-              selectedSpriteTable.id,
-              editingBackground.spriteId,
-            )
+          ? workspace.spriteBackgroundsForSprite(selectedSpriteTable.id, editingBackground.spriteId)
           : []
       "
       :image-urls="workspace.backgroundImageUrls"
