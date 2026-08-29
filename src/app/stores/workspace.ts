@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
+import { collectTextDiagnostics } from '@/application/qa/TextDiagnostics'
 import {
   createBackgroundTemplatePath,
   createSpriteBackgroundPath,
@@ -103,6 +104,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
   )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
+  const textDiagnostics = computed(() => project.value ? collectTextDiagnostics(project.value) : [])
   const selectedSpriteTable = computed(() =>
     spriteTables.value.find((spriteTable) => spriteTable.id === selectedSpriteTableId.value),
   )
@@ -983,6 +985,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     backgroundImageUrls,
     projectFonts,
     fontDiagnostics,
+    textDiagnostics,
     selectedSpriteTableId,
     selectedSpriteId,
     selectedTextRegionId,
