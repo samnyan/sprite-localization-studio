@@ -9,6 +9,15 @@ import TranslationSpritePreview from '@/components/translation/TranslationSprite
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import type { TextRenderConfig } from '@/domain/text-region/types'
 import { textStyleTemplates } from '@/domain/text-region/styleTemplates'
 
@@ -30,9 +39,13 @@ const editingBackground = ref<{
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
 const diagnosticDisplayCount = ref(12)
 const translatedTextInputs = new Map<string, HTMLTextAreaElement>()
+const searchQuery = ref('')
+const translationFilter = ref<'all' | 'complete' | 'incomplete' | 'issues'>('all')
+const editingSpriteKey = ref<string>()
 let resizingColumn: number | undefined
 let resizeStartX = 0
 let resizeStartRatios: number[] = []
+let editingClearTimer: ReturnType<typeof setTimeout> | undefined
 
 const tableStyle = computed(() => ({
   gridTemplateColumns: columnRatios.value.map((ratio) => `minmax(0, ${ratio}fr)`).join(' '),
@@ -48,7 +61,48 @@ const translationRows = computed(() => {
     )
     const texture = spriteTable.textures.find((item) => item.id === sprite.textureId)
     const imageUrl = texture ? workspace.textureImageUrls[spriteTable.id]?.[texture.id] : undefined
-    return translation && texture && imageUrl ? [{ sprite, translation, texture, imageUrl }] : []
+    return translation && texture && imageUrl
+      ? [{
+          sprite,
+          translation,
+          texture,
+          imageUrl,
+          searchText: [
+            sprite.id,
+            sprite.name,
+            ...translation.textRegions.flatMap((region) => [
+              region.translationKey,
+              region.sourceText ?? '',
+              region.translatedText ?? '',
+            ]),
+          ]
+            .join('\u0000')
+            .toLocaleLowerCase(),
+        }]
+      : []
+  })
+})
+const diagnosticSprites = computed(
+  () => new Set(workspace.textDiagnostics.map((item) => spriteKey(item.spriteTableId, item.spriteId))),
+)
+const filteredTranslationRows = computed(() => {
+  const query = searchQuery.value.trim().toLocaleLowerCase()
+  return translationRows.value.filter((row) => {
+    if (editingSpriteKey.value === spriteKey(row.translation.spriteTableId, row.sprite.id)) {
+      return true
+    }
+    const regions = row.translation.textRegions
+    const complete = regions.length > 0 && regions.every((region) => region.translatedText?.trim())
+    const hasIssue = diagnosticSprites.value.has(spriteKey(row.translation.spriteTableId, row.sprite.id))
+    if (
+      (translationFilter.value === 'complete' && !complete) ||
+      (translationFilter.value === 'incomplete' && complete) ||
+      (translationFilter.value === 'issues' && !hasIssue)
+    ) {
+      return false
+    }
+    if (!query) return true
+    return row.searchText.includes(query)
   })
 })
 const visibleDiagnostics = computed(() =>
@@ -130,12 +184,26 @@ function isSelectedTextRegion(spriteTableId: string, spriteId: string, regionId:
 async function selectDiagnostic(diagnostic: TextDiagnostic): Promise<void> {
   if (!workspace.selectTextDiagnostic(diagnostic)) return
 
+  searchQuery.value = ''
+  translationFilter.value = 'all'
   await nextTick()
   const input = translatedTextInputs.get(
     textRegionKey(diagnostic.spriteTableId, diagnostic.spriteId, diagnostic.regionId),
   )
   input?.scrollIntoView({ block: 'center' })
   input?.focus({ preventScroll: true })
+}
+
+function beginTextEdit(spriteTableId: string, spriteId: string): void {
+  if (editingClearTimer) clearTimeout(editingClearTimer)
+  editingSpriteKey.value = spriteKey(spriteTableId, spriteId)
+}
+
+function finishTextEdit(spriteTableId: string, spriteId: string): void {
+  const key = spriteKey(spriteTableId, spriteId)
+  editingClearTimer = setTimeout(() => {
+    if (editingSpriteKey.value === key) editingSpriteKey.value = undefined
+  })
 }
 
 function showMoreDiagnostics(): void {
@@ -284,7 +352,10 @@ async function deleteTemplate(id: string): Promise<void> {
   await workspace.deleteBackgroundTemplate(id)
 }
 
-onUnmounted(finishResize)
+onUnmounted(() => {
+  finishResize()
+  if (editingClearTimer) clearTimeout(editingClearTimer)
+})
 </script>
 
 <template>
@@ -338,6 +409,27 @@ onUnmounted(finishResize)
           {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
         </Button>
       </div>
+      <div class="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+        <Input
+          v-model="searchQuery"
+          class="max-w-64"
+          :aria-label="t('translation.filterPlaceholder')"
+          :placeholder="t('translation.filterPlaceholder')"
+        />
+        <Select v-model="translationFilter">
+          <SelectTrigger class="w-36" :aria-label="t('translation.filterStatus')">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectItem value="all">{{ t('translation.filterAll') }}</SelectItem>
+              <SelectItem value="incomplete">{{ t('translation.filterIncomplete') }}</SelectItem>
+              <SelectItem value="complete">{{ t('translation.filterComplete') }}</SelectItem>
+              <SelectItem value="issues">{{ t('translation.filterIssues') }}</SelectItem>
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
       <div class="min-h-0 flex-1 overflow-auto">
         <div class="sticky top-0 z-20 min-w-max border-b bg-background">
           <div
@@ -366,15 +458,20 @@ onUnmounted(finishResize)
             </div>
           </div>
         </div>
-        <div
-          v-if="translationRows.length === 0"
-          class="p-6 text-center text-sm text-muted-foreground"
-        >
+        <div v-if="translationRows.length === 0" class="p-6 text-center text-sm text-muted-foreground">
           {{ t('translation.noSprites') }}
+        </div>
+        <div
+          v-else-if="filteredTranslationRows.length === 0"
+          class="p-6 text-center text-sm text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {{ t('translation.noMatches') }}
         </div>
         <template v-else>
           <article
-            v-for="row in translationRows"
+            v-for="row in filteredTranslationRows"
             :key="row.sprite.id"
             class="grid min-w-[900px] border-b bg-card last:border-b-0"
             :style="tableStyle"
@@ -394,6 +491,8 @@ onUnmounted(finishResize)
                 class="min-h-16 w-full resize-y rounded border bg-background px-2 py-1.5 text-xs"
                 :aria-label="t('translation.sourceText')"
                 :value="region.sourceText ?? ''"
+                @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
+                @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @input="updateText(row.sprite.id, region.id, 'sourceText', $event)"
               ></textarea>
               <span
@@ -423,6 +522,8 @@ onUnmounted(finishResize)
                     )
                 "
                 :value="region.translatedText ?? ''"
+                @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
+                @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @input="updateText(row.sprite.id, region.id, 'translatedText', $event)"
               ></textarea>
               <span

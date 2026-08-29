@@ -6,6 +6,7 @@ import { nextTick } from 'vue'
 import { i18n, setLocale } from '@/app/i18n'
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
+import { Select } from '@/components/ui/select'
 import type { SpriteTable } from '@/domain/sprite-table/types'
 
 let mountedWrapper: VueWrapper | undefined
@@ -93,6 +94,23 @@ describe('TranslationWorkspace', () => {
     })
     mountedWrapper = wrapper
 
+    const filter = wrapper.get('[data-slot="input"]')
+    await filter.setValue('not-present')
+    expect(wrapper.text()).toContain('No translations match the filters.')
+    await filter.setValue('ready')
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe(
+      'Ready',
+    )
+    await filter.setValue('')
+    const statusFilter = wrapper.findComponent(Select)
+    expect(statusFilter.exists()).toBe(true)
+    expect(wrapper.get('[data-slot="select-trigger"]').attributes('aria-label')).toBe(
+      'Translation status',
+    )
+    await statusFilter.vm.$emit('update:modelValue', 'complete')
+    await filter.setValue('ready')
+    await nextTick()
+
     const issue = wrapper.get(
       '[aria-label="Go to translation issue: Second / second-sprite / start"]',
     )
@@ -110,6 +128,10 @@ describe('TranslationWorkspace', () => {
     expect(input.classes()).toContain('ring-2')
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
 
+    await statusFilter.vm.$emit('update:modelValue', 'incomplete')
+    await nextTick()
+    expect(wrapper.get('textarea[aria-label="Translation"]')).toBeDefined()
+
     workspace.project = {
       ...workspace.project,
       translations: workspace.project.translations?.map((translation) =>
@@ -125,6 +147,13 @@ describe('TranslationWorkspace', () => {
     }
     await nextTick()
     expect(wrapper.find('[aria-label="Go to translation issue: Second / second-sprite / start"]').exists()).toBe(false)
+    const completedInput = wrapper.get('textarea[aria-label="Translation"]')
+    expect(completedInput).toBeDefined()
+    await completedInput.trigger('blur')
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+    expect(wrapper.text()).toContain('No translations match the filters.')
+    await statusFilter.vm.$emit('update:modelValue', 'all')
 
     expect(
       workspace.selectTextDiagnostic({
