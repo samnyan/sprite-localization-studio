@@ -9,8 +9,7 @@ import {
   createSpriteBackgroundPath,
 } from '@/application/assets/backgroundPath'
 import {
-  buildLocalizedTextures,
-  createLocalizedTextureBuildPlan,
+  runLocalizedTextureBuild,
   type LocalizedTextureBuildReport,
 } from '@/application/build/LocalizedTextureBuild'
 import {
@@ -290,23 +289,31 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   async function buildTextures(): Promise<boolean> {
     if (!project.value || !activeStorage) return failProjectNotOpen()
+    const session = documentSession
     if (!(await saveProject())) return false
+    if (session !== documentSession || !project.value || !activeStorage) return false
 
     const projectSnapshot = structuredClone(project.value)
     const spriteTablesSnapshot = structuredClone(spriteTables.value)
     const storage = activeStorage
-    const session = documentSession
     status.value = 'building'
     error.value = undefined
 
     try {
-      const plan = createLocalizedTextureBuildPlan(projectSnapshot, spriteTablesSnapshot)
-      const report = await buildLocalizedTextures(
-        plan,
-        markRaw(new CanvasTextureBuilder(storage, projectSnapshot)),
+      const result = await runLocalizedTextureBuild(
+        projectSnapshot,
+        spriteTablesSnapshot,
+        () => markRaw(new CanvasTextureBuilder(storage, projectSnapshot)),
       )
+      if (result.status === 'blocked') {
+        if (session === documentSession) {
+          status.value = 'error'
+          error.value = { key: 'errors.build.blockedByTextDiagnostics' }
+        }
+        return false
+      }
       if (session === documentSession) {
-        lastBuildReport.value = report
+        lastBuildReport.value = result.report
         status.value = 'ready'
       }
       return true

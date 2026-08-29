@@ -47,6 +47,7 @@ const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
   if (workspace.status === 'building') return t('status.building')
+  if (workspace.status === 'error') return t('status.error')
   if (workspace.isDirty) return t('status.unsaved')
   return t('status.ready')
 })
@@ -232,6 +233,13 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
         {{ t('build.action') }}
       </Button>
     </div>
+    <p
+      v-if="errorText"
+      class="border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive"
+      role="alert"
+    >
+      {{ errorText }}
+    </p>
 
     <div class="flex min-h-0 flex-1">
       <aside class="flex w-64 shrink-0 flex-col border-r bg-card">
@@ -328,7 +336,6 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
               }}</Button
             >
           </div>
-          <p v-if="errorText" class="mt-4 text-sm text-destructive" role="alert">{{ errorText }}</p>
         </div>
         <SpritePreview
           v-else-if="workspace.selectedTexture && workspace.selectedSprite && selectedImageUrl"
@@ -559,7 +566,6 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
           <p v-if="saved && !errorText" class="text-center text-xs text-emerald-600">
             {{ t('project.saved') }}
           </p>
-          <p v-if="errorText" class="text-xs text-destructive" role="alert">{{ errorText }}</p>
         </form>
         <p v-else class="p-3 text-xs text-muted-foreground">{{ t('panel.empty') }}</p>
       </aside>

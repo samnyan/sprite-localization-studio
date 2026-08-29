@@ -1,5 +1,6 @@
 import type { ProjectManifest } from '@/domain/project/types'
 import type { Texture, SpriteTable } from '@/domain/sprite-table/types'
+import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 
 export interface LocalizedTextureBuildTask {
@@ -28,6 +29,10 @@ export interface LocalizedTextureBuildReport {
   textures: BuiltTexture[]
   modifiedSpriteCount: number
 }
+
+export type LocalizedTextureBuildResult =
+  | { status: 'blocked'; diagnostics: TextDiagnostic[] }
+  | { status: 'completed'; report: LocalizedTextureBuildReport }
 
 function outputLocale(project: ProjectManifest): string {
   const locale = project.targetLocales?.[0]?.trim()
@@ -85,4 +90,19 @@ export async function buildLocalizedTextures(
       0,
     ),
   }
+}
+
+export async function runLocalizedTextureBuild(
+  project: ProjectManifest,
+  spriteTables: SpriteTable[],
+  createBuilder: () => LocalizedTextureBuilder,
+): Promise<LocalizedTextureBuildResult> {
+  const diagnostics = collectTextDiagnostics(project)
+  if (diagnostics.length) return { status: 'blocked', diagnostics }
+
+  const report = await buildLocalizedTextures(
+    createLocalizedTextureBuildPlan(project, spriteTables),
+    createBuilder(),
+  )
+  return { status: 'completed', report }
 }

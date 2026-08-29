@@ -206,11 +206,15 @@ export default {
     opening: 'Opening…',
     saving: 'Saving…',
     building: 'Building textures…',
+    error: 'Action required',
     unsaved: 'Unsaved changes',
   },
   errors: {
     unsupportedBrowser: 'Local folders are not supported by this browser.',
     projectNotOpen: 'Open a project first.',
+    build: {
+      blockedByTextDiagnostics: 'Resolve translation issues before building textures.',
+    },
     unknown: 'Operation failed: {message}',
     project: {
       invalidJson: 'project.json is not valid JSON.',

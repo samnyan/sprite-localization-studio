@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createLocalizedTextureBuildPlan,
   isSpriteTranslationModified,
+  runLocalizedTextureBuild,
 } from '@/application/build/LocalizedTextureBuild'
 import type { ProjectManifest } from '@/domain/project/types'
 import type { SpriteTable } from '@/domain/sprite-table/types'
@@ -77,5 +78,55 @@ describe('localized texture build plan', () => {
     expect(
       createLocalizedTextureBuildPlan({ ...project([]), targetLocales: [] }, [spriteTable]).locale,
     ).toBe('default')
+  })
+
+  it('does not create a builder when translation diagnostics block the build', async () => {
+    let builderCreated = false
+    const result = await runLocalizedTextureBuild(
+      project([{
+        ...unchanged,
+        textRegions: [{
+          id: 'region',
+          rect: { x: 0, y: 0, width: 32, height: 32 },
+          rotation: 0,
+          translationKey: 'ui.button',
+        }],
+      }]),
+      [spriteTable],
+      () => {
+        builderCreated = true
+        return { buildTexture: async () => ({ outputPath: 'unexpected', modifiedSpriteCount: 0 }) }
+      },
+    )
+
+    expect(result).toMatchObject({ status: 'blocked', diagnostics: [{ code: 'missingTranslation' }] })
+    expect(builderCreated).toBe(false)
+  })
+
+  it('creates a builder and reports a completed build after QA passes', async () => {
+    const changed: SpriteTranslation = {
+      ...unchanged,
+      textRegions: [{
+        id: 'region',
+        rect: { x: 0, y: 0, width: 32, height: 32 },
+        rotation: 0,
+        translationKey: 'ui.button',
+        translatedText: 'Start',
+      }],
+    }
+    const builtPaths: string[] = []
+
+    const result = await runLocalizedTextureBuild(project([changed]), [spriteTable], () => ({
+      buildTexture: async (task) => {
+        builtPaths.push(task.outputPath)
+        return { outputPath: task.outputPath, modifiedSpriteCount: 1 }
+      },
+    }))
+
+    expect(result).toMatchObject({
+      status: 'completed',
+      report: { locale: 'zh-CN', modifiedSpriteCount: 1 },
+    })
+    expect(builtPaths).toEqual(['output_textures/zh-CN/ui.png'])
   })
 })

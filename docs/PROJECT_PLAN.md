@@ -262,7 +262,7 @@ interface ProjectFont {
 ### M10：QA、代码质量与用户体验
 
 - Region 诊断：缺译文、overflow、AutoFit 触底、缺字体/glyph、缺底图、悬空模板、渲染失败。
-- 构建前运行项目 QA；错误可阻止导出，点击可跳到对应 Sprite/Region。
+- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region，继续补齐 overflow、缺字、缺资源和悬空引用。
 - 显示脏状态、保存中/失败和最近成功保存时间。
 - 支持按 manifest、完成状态、错误和关键词筛选；Grid/List 虚拟化或按需生成缩略图。
 - 补齐上一项/下一项、保存、撤销/重做、删除、Region 微调和快速聚焦译文快捷键。

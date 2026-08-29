@@ -84,4 +84,25 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('180 × 100')
     expect(wrapper.find('[data-testid="sprite-preview"]').exists()).toBe(true)
   })
+
+  it('shows workspace errors above every workspace mode', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.mode = 'translations'
+    workspace.status = 'error'
+    workspace.error = { key: 'errors.build.blockedByTextDiagnostics' }
+
+    const wrapper = mount(WorkspaceView, {
+      global: { plugins: [pinia, i18n] },
+    })
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'Resolve translation issues before building textures.',
+    )
+    expect(wrapper.find('footer').text()).toContain('Action required')
+  })
 })

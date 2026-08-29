@@ -206,11 +206,15 @@ export default {
     opening: '正在打开…',
     saving: '正在保存…',
     building: '正在构造贴图…',
+    error: '需要处理',
     unsaved: '有未保存的更改',
   },
   errors: {
     unsupportedBrowser: '当前浏览器不支持本地文件夹。',
     projectNotOpen: '请先打开工程。',
+    build: {
+      blockedByTextDiagnostics: '请先修复翻译问题，再构造贴图。',
+    },
     unknown: '操作失败：{message}',
     project: {
       invalidJson: 'project.json 不是有效的 JSON。',
