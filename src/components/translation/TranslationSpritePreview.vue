@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { Size } from '@/domain/shared/geometry'
 import type { Sprite } from '@/domain/sprite/types'
@@ -31,6 +31,8 @@ const props = withDefaults(
 
 const canvas = ref<HTMLCanvasElement>()
 let renderId = 0
+let frame: number | undefined
+let disposed = false
 
 const backgroundClass = computed(() => {
   if (props.previewBackground === 'black') return 'bg-black'
@@ -47,9 +49,19 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   })
 }
 
-async function render(): Promise<void> {
-  const currentRenderId = ++renderId
-  await nextTick()
+function scheduleRender(): void {
+  renderId += 1
+  if (frame !== undefined) return
+  void nextTick(() => {
+    if (disposed) return
+    frame = window.requestAnimationFrame(() => {
+      frame = undefined
+      void render(renderId)
+    })
+  })
+}
+
+async function render(currentRenderId: number): Promise<void> {
 
   try {
     const image = await loadImage(props.imageUrl)
@@ -132,9 +144,14 @@ watch(
       props.backgroundUrl,
       props.output,
     ] as const,
-  () => void render(),
+  scheduleRender,
   { immediate: true, deep: true },
 )
+
+onBeforeUnmount(() => {
+  disposed = true
+  if (frame !== undefined) window.cancelAnimationFrame(frame)
+})
 </script>
 
 <template>
