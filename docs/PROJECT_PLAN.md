@@ -43,13 +43,13 @@ Project → Fonts
 | Sprite 数据 | sprite-table manifest、列表、裁剪与方向预览 | 基本完成 |
 | TextRegion | 创建、变换、撤销/重做、持久化 | 基本完成 |
 | 翻译工作区 | 连续编辑、预览、底图和样式入口 | 基本完成 |
-| 样式 | Canvas 2D、填充/二色渐变、描边、多阴影、图层 | 原型完成 |
-| 底图 | 原图/透明/共享上传图 | 原型完成，缺完整资源模型与 CRUD |
-| CanvasKit | `canvaskit-wasm` 依赖已加入 | 未接入业务渲染 |
-| 字体 | 手工输入 `fontFamily` | 未实现工程字体发现与加载 |
-| 构建 | 已预留 `output_textures/` | 未实现 |
+| 样式 | 多点渐变、描边、多阴影、图层、模板 CRUD 与布局参数 | 已完成 |
+| 底图 | 共享模板与 Sprite 专属图片的持久化、选择与 CRUD | 已完成 |
+| CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退 | 进行中，复杂脚本 shaping 待收口 |
+| 字体 | `fonts/` 扫描、元数据、浏览器注册与编辑器选择 | 已完成 |
+| 构建 | localized Texture 回填、输出目录与构建报告 | 已完成 |
 
-当前形成了 M0–M4 的可操作纵向切片，但早期里程碑尚有收口项：确定性换行、AutoFit、CanvasKit、字体加载和最终 Atlas 构建仍未完成。
+当前已形成覆盖 M0–M8 的可操作纵向切片；早期里程碑仍待收口的重点是 Sprite/Region 编辑体验，以及 M9 的复杂脚本 shaping 与性能验收。
 
 ## 4. 目标分层
 
@@ -89,7 +89,7 @@ src/
 | M7 | 字体样式模板与多点渐变 | 已完成 |
 | M8 | 工程字体管理 | 已完成 |
 | M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线已完成；SkParagraph 与性能收口待完成 |
-| M10 | QA、性能、代码质量与体验 | 计划中 |
+| M10 | QA、性能、代码质量与体验 | 进行中：缺译文诊断、定位与可访问性已完成 |
 | M11+ | 批量、Rich Text、OCR/AI、协作 | 后续 |
 
 ## 6. M0–M4 收口事项
@@ -235,6 +235,7 @@ interface ProjectFont {
 - 已建立软件 Surface 释放、异步旧结果丢弃、项目字体二进制传递与 Canvas 2D 保真回退边界。
 - 不支持的系统/CSS 字体、`inside` 描边和非 Hex 颜色必须走 Canvas 2D，不能静默替换为默认 Typeface。
 - 仍需以 SkParagraph 收口复杂脚本 shaping、换行、overflow、字距、垂直对齐和 AutoFit；完成前不得宣称 M9 通过统一渲染验收。
+- CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；在有可验证的替代实现前，不能以 mock 结果替代复杂脚本文字验收。
 - 仍需补 Typeface/Paragraph/Surface 复用与释放计数测试，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
 
 #### 架构与功能
