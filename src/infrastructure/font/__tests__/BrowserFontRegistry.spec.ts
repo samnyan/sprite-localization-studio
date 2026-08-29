@@ -52,4 +52,44 @@ describe('BrowserFontRegistry', () => {
     expect(add).toHaveBeenCalledTimes(2)
     expect(registry.findData('Demo', 700, 'normal')).toBeInstanceOf(ArrayBuffer)
   })
+
+  it('does not publish a stale concurrent registration', async () => {
+    const add = vi.fn<(font: FontFace) => void>()
+    let releaseFirst: (() => void) | undefined
+    let signalFirstRead: (() => void) | undefined
+    const firstRead = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    const firstReadStarted = new Promise<void>((resolve) => {
+      signalFirstRead = resolve
+    })
+    const storage: ProjectStorage = {
+      ...createStorage(),
+      async readBinary(path) {
+        if (path === 'fonts/first.ttf') {
+          signalFirstRead?.()
+          await firstRead
+        }
+        return new Uint8Array([1]).buffer
+      },
+    }
+    vi.stubGlobal('FontFace', FakeFontFace)
+    vi.stubGlobal('document', { fonts: { add, delete: vi.fn<(font: FontFace) => void>() } })
+    const registry = new BrowserFontRegistry()
+
+    const first = registry.register(storage, [
+      { id: 'first', path: 'fonts/first.ttf', family: 'First', weight: 400, style: 'normal' },
+    ])
+    await firstReadStarted
+    const second = registry.register(storage, [
+      { id: 'second', path: 'fonts/second.ttf', family: 'Second', weight: 400, style: 'normal' },
+    ])
+    releaseFirst?.()
+
+    await expect(first).resolves.toEqual({ registeredIds: [], diagnostics: [] })
+    await expect(second).resolves.toMatchObject({ registeredIds: ['second'] })
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(registry.findData('First', 400, 'normal')).toBeUndefined()
+    expect(registry.findData('Second', 400, 'normal')).toBeInstanceOf(ArrayBuffer)
+  })
 })
