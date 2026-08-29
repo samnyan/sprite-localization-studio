@@ -221,6 +221,9 @@ onUnmounted(finishResize)
       {{ t('translation.selectManifest') }}
     </div>
     <template v-else>
+      <div v-if="workspace.textDiagnostics.length" class="border-b px-3 py-2 text-xs text-amber-700">
+        {{ t('translation.issues', { count: workspace.textDiagnostics.length }) }}
+      </div>
       <div class="min-h-0 flex-1 overflow-auto">
         <div class="sticky top-0 z-20 min-w-max border-b bg-background">
           <div

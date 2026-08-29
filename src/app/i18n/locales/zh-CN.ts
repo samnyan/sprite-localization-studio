@@ -30,6 +30,7 @@ export default {
     translations: '翻译',
   },
   translation: {
+    issues: '{count} 个翻译问题',
     selectManifest: '请选择 Sprite Table。',
     noSprites: '当前 Sprite Table 没有需要翻译的贴图。',
     originalSprite: '原 Sprite',
