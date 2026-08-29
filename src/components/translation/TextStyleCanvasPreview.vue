@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import { drawTextRegion } from '@/infrastructure/image/textRenderer'
 import {
@@ -16,16 +16,23 @@ const props = withDefaults(
 )
 const canvas = ref<HTMLCanvasElement>()
 let renderId = 0
+let frame: number | undefined
+let disposed = false
 const backgroundClass = computed(() => {
   if (props.previewBackground === 'black') return 'bg-black'
   if (props.previewBackground === 'white') return 'bg-white'
   return 'bg-checkerboard'
 })
 
-async function renderCanvas(): Promise<void> {
-  const currentRenderId = ++renderId
+function renderCanvas(): void {
+  renderId += 1
+  if (frame !== undefined) return
   void nextTick(() => {
-    void renderWithCanvasKit(currentRenderId)
+    if (disposed) return
+    frame = window.requestAnimationFrame(() => {
+      frame = undefined
+      void renderWithCanvasKit(renderId)
+    })
   })
 }
 
@@ -70,7 +77,12 @@ async function renderWithCanvasKit(currentRenderId: number): Promise<void> {
   }
 }
 
-watch(() => [props.text, props.render] as const, () => void renderCanvas(), { immediate: true, deep: true })
+watch(() => [props.text, props.render] as const, renderCanvas, { immediate: true, deep: true })
+
+onBeforeUnmount(() => {
+  disposed = true
+  if (frame !== undefined) window.cancelAnimationFrame(frame)
+})
 </script>
 
 <template>
