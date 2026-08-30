@@ -45,7 +45,7 @@ Project → Fonts
 | 翻译工作区 | 连续编辑、预览、底图和样式入口 | 基本完成 |
 | 样式 | 多点渐变、描边、多阴影、图层、模板 CRUD 与布局参数 | 已完成 |
 | 底图 | 共享模板与 Sprite 专属图片的持久化、选择与 CRUD | 已完成 |
-| CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退 | 进行中，复杂脚本 shaping 待收口 |
+| CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退、受限 SkParagraph complex shaping | 进行中，复杂效果与性能验收待收口 |
 | 字体 | `fonts/` 扫描、元数据、浏览器注册与编辑器选择 | 已完成 |
 | 构建 | localized Texture 回填、输出目录与构建报告 | 已完成 |
 
@@ -88,7 +88,7 @@ src/
 | M6 | 工程资源与底图模板 | 已完成 |
 | M7 | 字体样式模板与多点渐变 | 已完成 |
 | M8 | 工程字体管理 | 已完成 |
-| M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线已完成；SkParagraph 与性能收口待完成 |
+| M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线与受限 SkParagraph 已完成；复杂效果与性能收口待完成 |
 | M10 | QA、性能、代码质量与体验 | 进行中：缺译文诊断/定位、构建阻断、保存状态与可访问性已完成 |
 | M11+ | 批量、Rich Text、OCR/AI、协作 | 后续 |
 
@@ -234,8 +234,9 @@ interface ProjectFont {
 - 已接入按需加载的 CanvasKit runtime，并让样式预览、Sprite 预览和 localized texture 导出共享文本渲染核心。
 - 已建立软件 Surface 释放、异步旧结果丢弃、项目字体二进制传递与 Canvas 2D 保真回退边界。
 - 不支持的系统/CSS 字体、`inside` 描边和非 Hex 颜色必须走 Canvas 2D，不能静默替换为默认 Typeface。
-- 仍需以 SkParagraph 收口复杂脚本 shaping、换行、overflow、字距、垂直对齐和 AutoFit；完成前不得宣称 M9 通过统一渲染验收。
-- CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；在有可验证的替代实现前，不能以 mock 结果替代复杂脚本文字验收。
+- 已使用 SkParagraph 为项目字体的复杂脚本提供换行、字距、行高、物理对齐、垂直对齐、maxLines/ellipsis 与基准方向 shaping；unresolved glyph 会原子回退 Canvas 2D。
+- SkParagraph 目前只承接纯实色填充、无有效描边/阴影/图层、`wrap=true` 且无 AutoFit 的 Region；渐变、效果、未知方向脚本和不满足等价条件的文字保持完整 Canvas 2D 回退。
+- CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；复杂文本使用已验证的 Paragraph 路径，不能以 mock 结果替代视觉验收。
 - 仍需补 Typeface/Paragraph/Surface 复用与释放计数测试，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
 
 #### 架构与功能
