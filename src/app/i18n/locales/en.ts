@@ -159,6 +159,9 @@ export default {
   build: {
     action: 'Build Textures',
     completed: 'Built {textures} textures · {sprites} sprites',
+    partial: 'Built {textures} textures · {sprites} sprites · {failures} failed',
+    failure: '{spriteTableId} / {textureId} ({texturePath}): {message}',
+    failures: 'Build failures',
   },
   spriteTable: {
     textures: 'Textures',
@@ -217,6 +220,7 @@ export default {
     projectNotOpen: 'Open a project first.',
     build: {
       blockedByTextDiagnostics: 'Resolve translation issues before building textures.',
+      partialFailure: 'Texture build failed ({count} total). See details below.',
     },
     unknown: 'Operation failed: {message}',
     project: {

@@ -159,6 +159,9 @@ export default {
   build: {
     action: '构造贴图',
     completed: '已构造 {textures} 张贴图 · {sprites} 个 Sprite',
+    partial: '已构造 {textures} 张贴图 · {sprites} 个 Sprite · {failures} 项失败',
+    failure: '{spriteTableId} / {textureId} ({texturePath})：{message}',
+    failures: '构造失败详情',
   },
   spriteTable: {
     textures: '贴图',
@@ -217,6 +220,7 @@ export default {
     projectNotOpen: '请先打开工程。',
     build: {
       blockedByTextDiagnostics: '请先修复翻译问题，再构造贴图。',
+      partialFailure: '{count} 张贴图构造失败，请查看下方详情。',
     },
     unknown: '操作失败：{message}',
     project: {

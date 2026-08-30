@@ -20,6 +20,13 @@ export interface BuiltTexture {
   modifiedSpriteCount: number
 }
 
+export interface LocalizedTextureBuildFailure {
+  spriteTableId: string
+  textureId: string
+  texturePath: string
+  message: string
+}
+
 export interface LocalizedTextureBuilder {
   buildTexture(task: LocalizedTextureBuildTask): Promise<BuiltTexture>
 }
@@ -27,12 +34,13 @@ export interface LocalizedTextureBuilder {
 export interface LocalizedTextureBuildReport {
   locale: string
   textures: BuiltTexture[]
+  failures: LocalizedTextureBuildFailure[]
   modifiedSpriteCount: number
 }
 
 export type LocalizedTextureBuildResult =
   | { status: 'blocked'; diagnostics: TextDiagnostic[] }
-  | { status: 'completed'; report: LocalizedTextureBuildReport }
+  | { status: 'completed' | 'failed'; report: LocalizedTextureBuildReport }
 
 function outputLocale(project: ProjectManifest): string {
   const locale = project.targetLocales?.[0]?.trim()
@@ -79,12 +87,25 @@ export async function buildLocalizedTextures(
   builder: LocalizedTextureBuilder,
 ): Promise<LocalizedTextureBuildReport> {
   const textures: BuiltTexture[] = []
+  const failures: LocalizedTextureBuildFailure[] = []
 
-  for (const task of plan.tasks) textures.push(await builder.buildTexture(task))
+  for (const task of plan.tasks) {
+    try {
+      textures.push(await builder.buildTexture(task))
+    } catch (error) {
+      failures.push({
+        spriteTableId: task.spriteTable.id,
+        textureId: task.texture.id,
+        texturePath: task.texture.imagePath,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
 
   return {
     locale: plan.locale,
     textures,
+    failures,
     modifiedSpriteCount: textures.reduce(
       (count, texture) => count + texture.modifiedSpriteCount,
       0,
@@ -104,5 +125,5 @@ export async function runLocalizedTextureBuild(
     createLocalizedTextureBuildPlan(project, spriteTables),
     createBuilder(),
   )
-  return { status: 'completed', report }
+  return { status: report.failures.length ? 'failed' : 'completed', report }
 }

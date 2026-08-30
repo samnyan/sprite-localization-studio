@@ -53,12 +53,18 @@ const statusText = computed(() => {
 })
 const lastBuildText = computed(() => {
   const report = workspace.lastBuildReport
-  return report
-    ? t('build.completed', {
+  if (!report) return undefined
+
+  return report.failures.length
+    ? t('build.partial', {
+        textures: report.textures.length,
+        sprites: report.modifiedSpriteCount,
+        failures: report.failures.length,
+      })
+    : t('build.completed', {
         textures: report.textures.length,
         sprites: report.modifiedSpriteCount,
       })
-    : undefined
 })
 const lastSavedText = computed(() => {
   const savedAt = workspace.lastSavedAt
@@ -248,6 +254,25 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
     >
       {{ errorText }}
     </p>
+    <ul
+      v-if="workspace.lastBuildReport?.failures.length"
+      class="max-h-36 space-y-1 overflow-auto border-b bg-destructive/5 px-3 py-2 text-xs text-destructive"
+      :aria-label="t('build.failures')"
+    >
+      <li
+        v-for="failure in workspace.lastBuildReport.failures"
+        :key="JSON.stringify([failure.spriteTableId, failure.textureId])"
+      >
+        {{
+          t('build.failure', {
+            spriteTableId: failure.spriteTableId,
+            textureId: failure.textureId,
+            texturePath: failure.texturePath,
+            message: failure.message,
+          })
+        }}
+      </li>
+    </ul>
 
     <div class="flex min-h-0 flex-1">
       <aside class="flex w-64 shrink-0 flex-col border-r bg-card">

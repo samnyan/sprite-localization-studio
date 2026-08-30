@@ -47,7 +47,7 @@ Project → Fonts
 | 底图 | 共享模板与 Sprite 专属图片的持久化、选择与 CRUD | 已完成 |
 | CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退、受限 SkParagraph complex shaping | 进行中，复杂效果与性能验收待收口 |
 | 字体 | `fonts/` 扫描、元数据、浏览器注册与编辑器选择 | 已完成 |
-| 构建 | localized Texture 回填、输出目录与构建报告 | 已完成 |
+| 构建 | localized Texture 回填、输出目录、部分失败报告与失败 Texture 定位 | 已完成 |
 
 当前已形成覆盖 M0–M8 的可操作纵向切片；早期里程碑仍待收口的重点是 Sprite/Region 编辑体验，以及 M9 的复杂脚本 shaping 与性能验收。
 
@@ -89,7 +89,7 @@ src/
 | M7 | 字体样式模板与多点渐变 | 已完成 |
 | M8 | 工程字体管理 | 已完成 |
 | M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线与受限 SkParagraph 已完成；复杂效果与性能收口待完成 |
-| M10 | QA、性能、代码质量与体验 | 进行中：缺译文构建阻断、布局风险诊断、保存状态与快捷录入已完成 |
+| M10 | QA、性能、代码质量与体验 | 进行中：缺译文构建阻断、布局风险诊断、部分构建失败定位、保存状态与快捷录入已完成 |
 | M11+ | 批量、Rich Text、OCR/AI、协作 | 后续 |
 
 ## 6. M0–M4 收口事项
@@ -263,7 +263,7 @@ interface ProjectFont {
 ### M10：QA、代码质量与用户体验
 
 - Region 诊断：缺译文、overflow、AutoFit 触底、缺字体/glyph、缺底图、悬空模板、渲染失败。
-- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow 与 AutoFit 最小字号警告；继续补齐缺字、缺资源和渲染失败诊断。
+- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow 与 AutoFit 最小字号警告；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径和错误消息；继续补齐缺字、缺资源和渲染失败诊断。
 - 显示脏状态、保存中/失败和最近成功保存时间（已完成）。
 - 支持按 manifest、完成状态、错误和关键词筛选；Grid/List 虚拟化或按需生成缩略图。
 - 补齐上一项/下一项、保存、撤销/重做、删除、Region 微调和快速聚焦译文快捷键。

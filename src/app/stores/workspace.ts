@@ -359,6 +359,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   async function buildTextures(): Promise<boolean> {
     if (!project.value || !activeStorage) return failProjectNotOpen()
     const session = documentSession
+    lastBuildReport.value = undefined
     if (!(await saveProject())) return false
     if (session !== documentSession || !project.value || !activeStorage) return false
 
@@ -378,6 +379,17 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         if (session === documentSession) {
           status.value = 'error'
           error.value = { key: 'errors.build.blockedByTextDiagnostics' }
+        }
+        return false
+      }
+      if (result.status === 'failed') {
+        if (session === documentSession) {
+          lastBuildReport.value = result.report
+          status.value = 'error'
+          error.value = {
+            key: 'errors.build.partialFailure',
+            params: { count: result.report.failures.length },
+          }
         }
         return false
       }
@@ -453,6 +465,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     revokeBackgroundImageUrls(backgroundImageUrls.value)
     canvasKitTypefaceCache.dispose()
     documentSession += 1
+    lastBuildReport.value = undefined
     activeRepository = repository
     activeStorage = storage
     project.value = loadedProject

@@ -129,4 +129,39 @@ describe('localized texture build plan', () => {
     })
     expect(builtPaths).toEqual(['output_textures/zh-CN/ui.png'])
   })
+
+  it('continues after a texture failure and reports its source identifiers', async () => {
+    const spriteTableWithTwoTextures: SpriteTable = {
+      ...spriteTable,
+      textures: [
+        ...spriteTable.textures,
+        { id: 'atlas-2', imagePath: 'ui-2.png', size: { width: 64, height: 64 } },
+      ],
+    }
+    const builtPaths: string[] = []
+
+    const result = await runLocalizedTextureBuild(project([]), [spriteTableWithTwoTextures], () => ({
+      buildTexture: async (task) => {
+        if (task.texture.id === 'atlas') throw new Error('Source image could not be loaded.')
+        builtPaths.push(task.outputPath)
+        return { outputPath: task.outputPath, modifiedSpriteCount: 0 }
+      },
+    }))
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      report: {
+        textures: [{ outputPath: 'output_textures/zh-CN/ui-2.png' }],
+        failures: [
+          {
+            spriteTableId: 'ui',
+            textureId: 'atlas',
+            texturePath: 'ui.png',
+            message: 'Source image could not be loaded.',
+          },
+        ],
+      },
+    })
+    expect(builtPaths).toEqual(['output_textures/zh-CN/ui-2.png'])
+  })
 })

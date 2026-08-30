@@ -106,6 +106,40 @@ describe('WorkspaceView', () => {
     expect(wrapper.find('footer').text()).toContain('Action required')
   })
 
+  it('shows partial build failures with their source texture identifiers', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.status = 'error'
+    workspace.error = { key: 'errors.build.partialFailure', params: { count: 1 } }
+    workspace.lastBuildReport = {
+      locale: 'zh-CN',
+      textures: [],
+      failures: [
+        {
+          spriteTableId: 'ui',
+          textureId: 'atlas',
+          texturePath: 'ui.png',
+          message: 'Source image could not be loaded.',
+        },
+      ],
+      modifiedSpriteCount: 0,
+    }
+
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.get('[role="alert"]').text()).toBe(
+      'Texture build failed (1 total). See details below.',
+    )
+    expect(wrapper.get('[aria-label="Build failures"]').text()).toContain(
+      'ui / atlas (ui.png): Source image could not be loaded.',
+    )
+    expect(wrapper.find('footer').text()).toContain('1 failed')
+  })
+
   it('shows the most recent successful save time in the status bar', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
