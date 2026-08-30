@@ -32,6 +32,8 @@ export default {
   translation: {
     issues: '{count} 个翻译问题',
     missingTranslation: '缺少翻译：{label}',
+    textOverflow: '文字溢出：{label}',
+    autoFitAtMinimum: '自动缩放已到最小字号：{label}',
     goToIssue: '跳转到翻译问题：{label}',
     showMoreIssues: '显示另外 {count} 项',
     filterPlaceholder: '筛选翻译',

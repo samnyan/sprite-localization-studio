@@ -1,7 +1,7 @@
 import type { ProjectManifest } from '@/domain/project/types'
 
 export interface TextDiagnostic {
-  code: 'missingTranslation'
+  code: 'missingTranslation' | 'textOverflow' | 'autoFitAtMinimum'
   spriteTableId: string
   spriteId: string
   regionId: string

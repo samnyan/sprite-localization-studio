@@ -2,13 +2,9 @@ import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { layoutText } from '@/domain/text-region/textLayout'
 import type { TextRenderConfig } from '@/domain/text-region/types'
 import type { ProjectManifest } from '@/domain/project/types'
+import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 
-export interface TextLayoutDiagnostic {
-  code: 'textOverflow' | 'autoFitAtMinimum'
-  spriteTableId: string
-  spriteId: string
-  regionId: string
-}
+export type TextLayoutDiagnostic = TextDiagnostic & { code: 'textOverflow' | 'autoFitAtMinimum' }
 
 export type TextMeasureForRender = (text: string, fontSize: number, render: TextRenderConfig) => number
 

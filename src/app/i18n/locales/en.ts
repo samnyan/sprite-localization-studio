@@ -32,6 +32,8 @@ export default {
   translation: {
     issues: 'No translation issues | 1 translation issue | {count} translation issues',
     missingTranslation: 'Missing: {label}',
+    textOverflow: 'Text overflows: {label}',
+    autoFitAtMinimum: 'AutoFit minimum: {label}',
     goToIssue: 'Go to translation issue: {label}',
     showMoreIssues: 'Show {count} more',
     filterPlaceholder: 'Filter translations',

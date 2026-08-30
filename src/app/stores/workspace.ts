@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
 import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
+import { collectTextLayoutDiagnostics } from '@/application/qa/TextLayoutDiagnostics'
 import {
   createBackgroundTemplatePath,
   createSpriteBackgroundPath,
@@ -37,6 +38,7 @@ import {
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
+import { createCanvasTextMeasure } from '@/infrastructure/image/CanvasTextMeasure'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
@@ -102,6 +104,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const canUndo = ref(false)
   const canRedo = ref(false)
   const history = new ActionHistory<ProjectManifest>()
+  const measureText = createCanvasTextMeasure()
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
   let savePromise: Promise<boolean> | undefined
   let documentSession = 0
@@ -112,7 +115,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
   )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
-  const textDiagnostics = computed(() => project.value ? collectTextDiagnostics(project.value) : [])
+  const textDiagnostics = computed<TextDiagnostic[]>(() => {
+    if (!project.value) return []
+    const missing = collectTextDiagnostics(project.value)
+    const layout = measureText ? collectTextLayoutDiagnostics(project.value, measureText) : []
+    return [...missing, ...layout]
+  })
   const selectedSpriteTable = computed(() =>
     spriteTables.value.find((spriteTable) => spriteTable.id === selectedSpriteTableId.value),
   )
