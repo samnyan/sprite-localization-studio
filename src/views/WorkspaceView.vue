@@ -29,7 +29,7 @@ import {
 import type { Rect } from '@/domain/shared/geometry'
 
 const workspace = useWorkspaceStore()
-const { t } = useI18n()
+const { locale, t } = useI18n()
 const projectName = ref(workspace.project?.name ?? '')
 const saved = ref(false)
 
@@ -57,6 +57,14 @@ const lastBuildText = computed(() => {
     ? t('build.completed', {
         textures: report.textures.length,
         sprites: report.modifiedSpriteCount,
+      })
+    : undefined
+})
+const lastSavedText = computed(() => {
+  const savedAt = workspace.lastSavedAt
+  return savedAt
+    ? t('status.savedAt', {
+        time: savedAt.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit' }),
       })
     : undefined
 })
@@ -466,6 +474,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                   size="icon"
                   class="size-8"
                   :title="t('textRegion.delete')"
+                  :disabled="workspace.isBusy"
                   @click="workspace.removeTextRegion(workspace.selectedTextRegion.id)"
                 >
                   <Trash2 class="size-3.5" />
@@ -476,6 +485,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                 <input
                   class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
                   :value="workspace.selectedTextRegion.translationKey"
+                  :disabled="workspace.isBusy"
                   @blur="updateTranslationKey"
                 />
               </label>
@@ -492,6 +502,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                     step="1"
                     class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
                     :value="workspace.selectedTextRegion.rect[field]"
+                    :disabled="workspace.isBusy"
                     @change="numericRegionField(field, $event)"
                   />
                 </label>
@@ -503,6 +514,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                   step="1"
                   class="mt-1 h-8 w-full rounded border bg-background px-2 text-foreground"
                   :value="workspace.selectedTextRegion.rotation"
+                  :disabled="workspace.isBusy"
                   @change="numericRegionField('rotation', $event)"
                 />
               </label>
@@ -573,7 +585,16 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
     <footer
       class="flex h-6 shrink-0 items-center border-t bg-card px-2 text-[11px] text-muted-foreground"
     >
-      <span>{{ statusText }}</span>
+      <div role="status" aria-live="polite" aria-atomic="true" class="flex items-center">
+        <span>{{ statusText }}</span>
+        <time
+          v-if="lastSavedText && workspace.lastSavedAt"
+          class="ml-3"
+          :datetime="workspace.lastSavedAt.toISOString()"
+        >
+          {{ lastSavedText }}
+        </time>
+      </div>
       <span v-if="lastBuildText" class="ml-3">{{ lastBuildText }}</span>
       <span v-if="workspace.selectedSprite" class="ml-3">{{ workspace.selectedSprite.name }}</span>
       <span v-if="workspace.directoryName" class="ml-auto truncate">{{

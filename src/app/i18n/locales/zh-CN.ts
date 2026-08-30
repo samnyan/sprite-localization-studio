@@ -207,6 +207,7 @@ export default {
     saving: '正在保存…',
     building: '正在构造贴图…',
     error: '需要处理',
+    savedAt: '已保存 {time}',
     unsaved: '有未保存的更改',
   },
   errors: {

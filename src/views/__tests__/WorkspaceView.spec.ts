@@ -105,4 +105,23 @@ describe('WorkspaceView', () => {
     )
     expect(wrapper.find('footer').text()).toContain('Action required')
   })
+
+  it('shows the most recent successful save time in the status bar', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.lastSavedAt = new Date('2026-08-30T09:15:00.000Z')
+
+    const wrapper = mount(WorkspaceView, {
+      global: { plugins: [pinia, i18n] },
+    })
+
+    expect(wrapper.find('time').text()).toMatch(/^Saved /)
+    expect(wrapper.get('time').attributes('datetime')).toBe('2026-08-30T09:15:00.000Z')
+    expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
+    expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+  })
 })

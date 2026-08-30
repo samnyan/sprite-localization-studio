@@ -207,6 +207,7 @@ export default {
     saving: 'Saving…',
     building: 'Building textures…',
     error: 'Action required',
+    savedAt: 'Saved {time}',
     unsaved: 'Unsaved changes',
   },
   errors: {

@@ -491,6 +491,7 @@ onUnmounted(() => {
                 class="min-h-16 w-full resize-y rounded border bg-background px-2 py-1.5 text-xs"
                 :aria-label="t('translation.sourceText')"
                 :value="region.sourceText ?? ''"
+                :disabled="workspace.isBusy"
                 @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @input="updateText(row.sprite.id, region.id, 'sourceText', $event)"
@@ -522,6 +523,7 @@ onUnmounted(() => {
                     )
                 "
                 :value="region.translatedText ?? ''"
+                :disabled="workspace.isBusy"
                 @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @input="updateText(row.sprite.id, region.id, 'translatedText', $event)"

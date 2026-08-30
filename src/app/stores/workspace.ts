@@ -50,6 +50,13 @@ interface WorkspaceError {
   params?: Record<string, string | number>
 }
 
+interface ResourceOperation {
+  project: ProjectManifest
+  revision: number
+  session: number
+  storage: ProjectStorage
+}
+
 type TextureImageUrls = Record<string, Record<string, string>>
 type BackgroundImageUrls = Record<string, string>
 
@@ -89,6 +96,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const mode = ref<WorkspaceMode>('sprites')
   const previewBackground = ref<PreviewBackground>('transparent')
   const lastBuildReport = ref<LocalizedTextureBuildReport>()
+  const lastSavedAt = ref<Date>()
   const documentRevision = ref(0)
   const persistedRevision = ref(0)
   const canUndo = ref(false)
@@ -97,6 +105,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
   let savePromise: Promise<boolean> | undefined
   let documentSession = 0
+  let activeResourceOperation: ResourceOperation | undefined
 
   const hasProject = computed(() => project.value !== undefined)
   const isBusy = computed(
@@ -199,12 +208,48 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     history.clear()
     documentRevision.value = 0
     persistedRevision.value = 0
+    lastSavedAt.value = undefined
     syncHistoryState()
   }
 
   function scheduleProjectSave(): void {
     clearAutosave()
     autosaveTimer = setTimeout(() => void saveProject(), AUTOSAVE_DELAY_MS)
+  }
+
+  function beginResourceOperation(): ResourceOperation | undefined {
+    if (!project.value || !activeStorage) {
+      failProjectNotOpen()
+      return undefined
+    }
+    if (activeResourceOperation) return undefined
+
+    clearAutosave()
+    const operation: ResourceOperation = {
+      project: project.value,
+      revision: documentRevision.value,
+      session: documentSession,
+      storage: activeStorage,
+    }
+    activeResourceOperation = operation
+    return operation
+  }
+
+  function finishResourceOperation(operation: ResourceOperation): void {
+    if (activeResourceOperation === operation) activeResourceOperation = undefined
+  }
+
+  function isCurrentResourceOperation(operation: ResourceOperation): boolean {
+    return (
+      operation.session === documentSession &&
+      operation.storage === activeStorage &&
+      operation.project === project.value &&
+      operation.revision === documentRevision.value
+    )
+  }
+
+  function isCurrentResourceSession(operation: ResourceOperation): boolean {
+    return operation.session === documentSession && operation.storage === activeStorage
   }
 
   function acceptDocumentState(updated: ProjectManifest): void {
@@ -216,9 +261,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     scheduleProjectSave()
   }
 
-  function dispatchProjectAction(type: string, updated: ProjectManifest): boolean {
+  function dispatchProjectAction(
+    type: string,
+    updated: ProjectManifest,
+    allowDuringResourceOperation = false,
+  ): boolean {
     const current = project.value
     if (!current || !activeRepository) return failProjectNotOpen()
+    if (activeResourceOperation && !allowDuringResourceOperation) return false
     if (updated === current) return true
     acceptDocumentState(history.execute(current, createSnapshotAction(type, current, updated)))
     return true
@@ -248,6 +298,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         }
         if (session !== documentSession) return true
         clearAutosave()
+        lastSavedAt.value = new Date()
         status.value = 'ready'
         return true
       } catch (caughtError) {
@@ -261,27 +312,37 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return savePromise
   }
 
-  async function persistAssetProject(updated: ProjectManifest): Promise<boolean> {
-    if (!activeRepository) return failProjectNotOpen()
+  async function persistAssetProject(
+    operation: { project: ProjectManifest; revision: number; session: number; storage: ProjectStorage },
+    updated: ProjectManifest,
+  ): Promise<boolean> {
+    const repository = activeRepository
+    if (!repository || !isCurrentResourceOperation(operation)) return false
+    if (savePromise && !(await savePromise)) return false
+    if (!isCurrentResourceOperation(operation) || activeRepository !== repository) return false
 
     status.value = 'saving'
     error.value = undefined
     try {
-      await activeRepository.save(updated)
+      await repository.save(updated)
+      if (!isCurrentResourceOperation(operation) || activeRepository !== repository) return false
       project.value = updated
       resetDocumentHistory()
+      lastSavedAt.value = new Date()
       status.value = 'ready'
       return true
     } catch (caughtError) {
-      status.value = 'error'
-      error.value = workspaceErrorFrom(caughtError)
+      if (isCurrentResourceOperation(operation) && activeRepository === repository) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
       return false
     }
   }
 
-  async function removeResourceFile(path: string): Promise<void> {
+  async function removeResourceFile(storage: ProjectStorage, path: string): Promise<void> {
     try {
-      await activeStorage?.delete(path)
+      await storage.delete(path)
     } catch {
       return
     }
@@ -328,14 +389,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   function undo(): boolean {
     const current = project.value
-    if (!current || !history.canUndo) return false
+    if (activeResourceOperation || !current || !history.canUndo) return false
     acceptDocumentState(history.undo(current))
     return true
   }
 
   function redo(): boolean {
     const current = project.value
-    if (!current || !history.canRedo) return false
+    if (activeResourceOperation || !current || !history.canRedo) return false
     acceptDocumentState(history.redo(current))
     return true
   }
@@ -754,11 +815,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function addBackgroundTemplate(file: File): Promise<string | undefined> {
-    if (!project.value || !activeStorage) {
-      failProjectNotOpen()
-      return undefined
-    }
     if (!file.type.startsWith('image/')) return undefined
+    const operation = beginResourceOperation()
+    if (!operation) return undefined
+    status.value = 'saving'
+    error.value = undefined
 
     const id = crypto.randomUUID()
     const background: BackgroundTemplate = {
@@ -769,17 +830,24 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
 
     try {
-      await activeStorage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
+      await operation.storage.writeBinary(
+        background.path,
+        new Uint8Array(await file.arrayBuffer()),
+      )
+      if (!isCurrentResourceOperation(operation)) {
+        await removeResourceFile(operation.storage, background.path)
+        return undefined
+      }
       const url = URL.createObjectURL(file)
-      const backgroundTemplates = [...(project.value.backgroundTemplates ?? []), background]
+      const backgroundTemplates = [...(operation.project.backgroundTemplates ?? []), background]
       if (
         !dispatchProjectAction('backgroundTemplate.add', {
-          ...project.value,
+          ...operation.project,
           backgroundTemplates,
-        })
+        }, true)
       ) {
         URL.revokeObjectURL(url)
-        await activeStorage.delete(background.path)
+        await removeResourceFile(operation.storage, background.path)
         return undefined
       }
       backgroundImageUrls.value = {
@@ -788,9 +856,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       return background.id
     } catch (caughtError) {
-      status.value = 'error'
-      error.value = workspaceErrorFrom(caughtError)
+      if (isCurrentResourceOperation(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
       return undefined
+    } finally {
+      finishResourceOperation(operation)
     }
   }
 
@@ -799,7 +871,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     spriteId: string,
     file: File,
   ): Promise<string | undefined> {
-    if (!project.value || !activeStorage || !file.type.startsWith('image/')) return undefined
+    if (!file.type.startsWith('image/')) return undefined
+    const operation = beginResourceOperation()
+    if (!operation) return undefined
+    status.value = 'saving'
+    error.value = undefined
 
     const id = crypto.randomUUID()
     const background: SpriteBackground = {
@@ -812,20 +888,35 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
 
     try {
-      await activeStorage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
+      await operation.storage.writeBinary(
+        background.path,
+        new Uint8Array(await file.arrayBuffer()),
+      )
+      if (!isCurrentResourceOperation(operation)) {
+        await removeResourceFile(operation.storage, background.path)
+        return undefined
+      }
       const url = URL.createObjectURL(file)
-      const spriteBackgrounds = [...(project.value.spriteBackgrounds ?? []), background]
-      if (!dispatchProjectAction('spriteBackground.add', { ...project.value, spriteBackgrounds })) {
+      const spriteBackgrounds = [...(operation.project.spriteBackgrounds ?? []), background]
+      if (!dispatchProjectAction(
+        'spriteBackground.add',
+        { ...operation.project, spriteBackgrounds },
+        true,
+      )) {
         URL.revokeObjectURL(url)
-        await activeStorage.delete(background.path)
+        await removeResourceFile(operation.storage, background.path)
         return undefined
       }
       backgroundImageUrls.value = { ...backgroundImageUrls.value, [background.id]: url }
       return background.id
     } catch (caughtError) {
-      status.value = 'error'
-      error.value = workspaceErrorFrom(caughtError)
+      if (isCurrentResourceOperation(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
       return undefined
+    } finally {
+      finishResourceOperation(operation)
     }
   }
 
@@ -862,53 +953,85 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function replaceBackgroundTemplate(id: string, file: File): Promise<boolean> {
-    const current = project.value?.backgroundTemplates?.find((background) => background.id === id)
-    if (!project.value || !activeStorage || !current || !file.type.startsWith('image/'))
-      return false
+    if (!file.type.startsWith('image/')) return false
+    const existing = project.value?.backgroundTemplates?.find((background) => background.id === id)
+    if (!existing) return false
+    const operation = beginResourceOperation()
+    const current = operation?.project.backgroundTemplates?.find((background) => background.id === id)
+    if (!operation || !current) return false
+    status.value = 'saving'
+    error.value = undefined
 
     const path = createBackgroundTemplatePath(`${id}-${crypto.randomUUID()}`, file.name)
     try {
-      await activeStorage.writeBinary(path, new Uint8Array(await file.arrayBuffer()))
+      await operation.storage.writeBinary(path, new Uint8Array(await file.arrayBuffer()))
+      if (!isCurrentResourceOperation(operation)) {
+        await removeResourceFile(operation.storage, path)
+        return false
+      }
       const updated: BackgroundTemplate = { ...current, name: file.name, path }
-      const backgroundTemplates = project.value.backgroundTemplates?.map((background) =>
+      const backgroundTemplates = operation.project.backgroundTemplates?.map((background) =>
         background.id === id ? updated : background,
       )
       if (!backgroundTemplates) return false
-      if (!(await persistAssetProject({ ...project.value, backgroundTemplates }))) return false
-      await removeResourceFile(current.path)
+      if (!(await persistAssetProject(operation, { ...operation.project, backgroundTemplates }))) {
+        await removeResourceFile(operation.storage, path)
+        return false
+      }
+      status.value = 'saving'
+      await removeResourceFile(operation.storage, current.path)
+      if (!isCurrentResourceSession(operation)) return false
       const oldUrl = backgroundImageUrls.value[id]
       if (oldUrl) URL.revokeObjectURL(oldUrl)
       backgroundImageUrls.value = { ...backgroundImageUrls.value, [id]: URL.createObjectURL(file) }
+      status.value = 'ready'
       return true
     } catch (caughtError) {
-      status.value = 'error'
-      error.value = workspaceErrorFrom(caughtError)
+      if (isCurrentResourceOperation(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
       return false
+    } finally {
+      finishResourceOperation(operation)
     }
   }
 
   async function deleteBackgroundTemplate(id: string): Promise<boolean> {
-    const current = project.value?.backgroundTemplates?.find((background) => background.id === id)
-    if (!project.value || !activeStorage || !current || backgroundTemplateReferenceCount(id) > 0)
-      return false
+    const existing = project.value?.backgroundTemplates?.find((background) => background.id === id)
+    if (!existing || backgroundTemplateReferenceCount(id) > 0) return false
+    const operation = beginResourceOperation()
+    const current = operation?.project.backgroundTemplates?.find((background) => background.id === id)
+    if (!operation || !current) return false
+    status.value = 'saving'
+    error.value = undefined
 
-    const backgroundTemplates = project.value.backgroundTemplates?.filter(
+    const backgroundTemplates = operation.project.backgroundTemplates?.filter(
       (background) => background.id !== id,
     )
     if (!backgroundTemplates) return false
     try {
-      if (!(await persistAssetProject({ ...project.value, backgroundTemplates }))) return false
-      await removeResourceFile(current.path)
+      if (!(await persistAssetProject(operation, { ...operation.project, backgroundTemplates }))) {
+        return false
+      }
+      status.value = 'saving'
+      await removeResourceFile(operation.storage, current.path)
+      if (!isCurrentResourceSession(operation)) return false
       const url = backgroundImageUrls.value[id]
       if (url) URL.revokeObjectURL(url)
       backgroundImageUrls.value = Object.fromEntries(
         Object.entries(backgroundImageUrls.value).filter(([resourceId]) => resourceId !== id),
       )
+      status.value = 'ready'
       return true
     } catch (caughtError) {
-      status.value = 'error'
-      error.value = workspaceErrorFrom(caughtError)
+      if (isCurrentResourceOperation(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
       return false
+    } finally {
+      finishResourceOperation(operation)
     }
   }
 
@@ -1030,6 +1153,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     mode,
     previewBackground,
     lastBuildReport,
+    lastSavedAt,
     openLocalProject,
     createLocalProject,
     saveProject,
