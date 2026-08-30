@@ -237,7 +237,7 @@ interface ProjectFont {
 - 已使用 SkParagraph 为项目字体的复杂脚本提供换行、字距、行高、物理对齐、垂直对齐、maxLines/ellipsis 与基准方向 shaping；unresolved glyph 会原子回退 Canvas 2D。
 - SkParagraph 目前只承接纯实色填充、无有效描边/阴影/图层、`wrap=true` 且无 AutoFit 的 Region；渐变、效果、未知方向脚本和不满足等价条件的文字保持完整 Canvas 2D 回退。
 - CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；复杂文本使用已验证的 Paragraph 路径，不能以 mock 结果替代视觉验收。
-- 仍需补 Typeface/Paragraph/Surface 复用与释放计数测试，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
+- Typeface、Paragraph 与 Surface 的释放路径已有回归覆盖；仍需在真实运行时采样复用与内存曲线，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
 
 #### 架构与功能
 
