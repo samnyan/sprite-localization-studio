@@ -224,7 +224,7 @@ function handleTranslatedTextKeydown(
   spriteId: string,
   regionId: string,
 ): void {
-  if (!event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.isComposing || event.shiftKey || !event.altKey || event.ctrlKey || event.metaKey) return
   if (event.key === 'ArrowDown') {
     event.preventDefault()
     void moveTranslatedTextFocus(spriteTableId, spriteId, regionId, 1)
@@ -548,6 +548,7 @@ onUnmounted(() => {
                 :key="region.id"
                 class="min-h-16 w-full resize-y rounded border bg-background px-2 py-1.5 text-xs"
                 :aria-label="t('translation.translatedText')"
+                aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
                 :class="{
                   'ring-2 ring-primary': isSelectedTextRegion(
                     row.translation.spriteTableId,
