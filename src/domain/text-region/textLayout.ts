@@ -10,15 +10,32 @@ export interface TextLayoutResult {
 
 export type TextMeasure = (text: string, fontSize: number) => number
 
+interface GraphemeSegmenter {
+  segment(text: string): Iterable<{ segment: string }>
+}
+
+const Segmenter = (Intl as typeof Intl & {
+  Segmenter?: new (locales?: string | string[], options?: { granularity: 'grapheme' }) => GraphemeSegmenter
+}).Segmenter
+const graphemeSegmenter = Segmenter
+  ? new Segmenter(undefined, { granularity: 'grapheme' })
+  : undefined
+
+export function splitTextGraphemes(text: string): string[] {
+  return graphemeSegmenter
+    ? Array.from(graphemeSegmenter.segment(text), (segment) => segment.segment)
+    : [text]
+}
+
 function wrapLine(line: string, width: number, fontSize: number, measure: TextMeasure): string[] {
   if (!line || measure(line, fontSize) <= width) return [line]
   const lines: string[] = []
   let current = ''
-  for (const character of Array.from(line)) {
-    const next = current + character
+  for (const grapheme of splitTextGraphemes(line)) {
+    const next = current + grapheme
     if (current && measure(next, fontSize) > width) {
       lines.push(current)
-      current = character
+      current = grapheme
     } else {
       current = next
     }
@@ -29,9 +46,11 @@ function wrapLine(line: string, width: number, fontSize: number, measure: TextMe
 
 function ellipsize(line: string, width: number, fontSize: number, measure: TextMeasure): string {
   const suffix = '…'
-  let result = line
-  while (result && measure(`${result}${suffix}`, fontSize) > width) result = result.slice(0, -1)
-  return `${result}${suffix}`
+  const graphemes = splitTextGraphemes(line)
+  while (graphemes.length && measure(`${graphemes.join('')}${suffix}`, fontSize) > width) {
+    graphemes.pop()
+  }
+  return `${graphemes.join('')}${suffix}`
 }
 
 function layoutAtSize(

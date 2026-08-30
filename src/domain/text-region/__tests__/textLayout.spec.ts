@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
-import { layoutText } from '@/domain/text-region/textLayout'
+import { layoutText, splitTextGraphemes } from '@/domain/text-region/textLayout'
 
 const measure = (text: string, fontSize: number) => Array.from(text).length * fontSize
 
@@ -46,5 +46,35 @@ describe('layoutText', () => {
     expect(singleLine.overflowed).toBe(true)
     expect(heightLimited.lines).toEqual(['a', 'b…'])
     expect(heightLimited.overflowed).toBe(true)
+  })
+
+  it('keeps grapheme clusters intact when wrapping and ellipsizing', () => {
+    const measureGraphemes = (text: string, fontSize: number) =>
+      splitTextGraphemes(text).length * fontSize
+    const result = layoutText('ábc', 20, 100, {
+      ...DEFAULT_TEXT_RENDER,
+      fontSize: 10,
+      wrap: true,
+      maxLines: 1,
+      overflow: 'ellipsis',
+    }, measureGraphemes)
+
+    expect(splitTextGraphemes('👨‍👩‍👧‍👦')).toEqual(['👨‍👩‍👧‍👦'])
+    expect(result.lines).toEqual(['á…'])
+  })
+
+  it('keeps a whole line intact when Intl.Segmenter is unavailable', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(Intl, 'Segmenter')
+    Object.defineProperty(Intl, 'Segmenter', { configurable: true, value: undefined })
+    vi.resetModules()
+    try {
+      const { splitTextGraphemes: splitWithoutSegmenter } = await import(
+        '@/domain/text-region/textLayout'
+      )
+      expect(splitWithoutSegmenter('á👨‍👩‍👧‍👦🇨🇳')).toEqual(['á👨‍👩‍👧‍👦🇨🇳'])
+    } finally {
+      if (descriptor) Object.defineProperty(Intl, 'Segmenter', descriptor)
+      vi.resetModules()
+    }
   })
 })
