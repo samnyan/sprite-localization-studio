@@ -194,6 +194,46 @@ async function selectDiagnostic(diagnostic: TextDiagnostic): Promise<void> {
   input?.focus({ preventScroll: true })
 }
 
+async function moveTranslatedTextFocus(
+  spriteTableId: string,
+  spriteId: string,
+  regionId: string,
+  direction: -1 | 1,
+): Promise<void> {
+  const regions = filteredTranslationRows.value.flatMap((row) =>
+    row.translation.textRegions.map((region) => ({
+      regionId: region.id,
+      spriteId: row.sprite.id,
+      spriteTableId: row.translation.spriteTableId,
+    })),
+  )
+  const index = regions.findIndex((region) =>
+    region.spriteTableId === spriteTableId && region.spriteId === spriteId && region.regionId === regionId,
+  )
+  const next = index < 0 ? undefined : regions[index + direction]
+  if (!next) return
+  workspace.selectSprite(next.spriteTableId, next.spriteId)
+  workspace.selectTextRegion(next.regionId)
+  await nextTick()
+  translatedTextInputs.get(textRegionKey(next.spriteTableId, next.spriteId, next.regionId))?.focus()
+}
+
+function handleTranslatedTextKeydown(
+  event: KeyboardEvent,
+  spriteTableId: string,
+  spriteId: string,
+  regionId: string,
+): void {
+  if (!event.altKey || event.ctrlKey || event.metaKey) return
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    void moveTranslatedTextFocus(spriteTableId, spriteId, regionId, 1)
+  } else if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    void moveTranslatedTextFocus(spriteTableId, spriteId, regionId, -1)
+  }
+}
+
 function beginTextEdit(spriteTableId: string, spriteId: string): void {
   if (editingClearTimer) clearTimeout(editingClearTimer)
   editingSpriteKey.value = spriteKey(spriteTableId, spriteId)
@@ -527,6 +567,7 @@ onUnmounted(() => {
                 @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @input="updateText(row.sprite.id, region.id, 'translatedText', $event)"
+                @keydown="handleTranslatedTextKeydown($event, row.translation.spriteTableId, row.sprite.id, region.id)"
               ></textarea>
               <span
                 v-if="row.translation.textRegions.length === 0"
