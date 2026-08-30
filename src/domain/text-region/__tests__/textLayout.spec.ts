@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
-import { layoutText, splitTextGraphemes } from '@/domain/text-region/textLayout'
+import { layoutText, planTextRun, splitTextGraphemes } from '@/domain/text-region/textLayout'
 
 const measure = (text: string, fontSize: number) => Array.from(text).length * fontSize
 
@@ -76,5 +76,19 @@ describe('layoutText', () => {
       if (descriptor) Object.defineProperty(Intl, 'Segmenter', descriptor)
       vi.resetModules()
     }
+  })
+
+  it('plans actual grapheme advances and preserves whole shaped runs', () => {
+    const measure = (unit: string) => unit === 'AV' ? 15 : unit.length * 10
+    expect(planTextRun('AV', 3, measure)).toEqual({
+      units: ['A', 'V'],
+      advances: [13, 10],
+      width: 23,
+    })
+    expect(planTextRun('مرحبا', 3, measure, true)).toEqual({
+      units: ['مرحبا'],
+      advances: [50],
+      width: 50,
+    })
   })
 })

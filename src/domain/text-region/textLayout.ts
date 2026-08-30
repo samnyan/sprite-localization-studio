@@ -10,6 +10,12 @@ export interface TextLayoutResult {
 
 export type TextMeasure = (text: string, fontSize: number) => number
 
+export interface TextRunPlan {
+  advances: number[]
+  units: string[]
+  width: number
+}
+
 interface GraphemeSegmenter {
   segment(text: string): Iterable<{ segment: string }>
 }
@@ -25,6 +31,20 @@ export function splitTextGraphemes(text: string): string[] {
   return graphemeSegmenter
     ? Array.from(graphemeSegmenter.segment(text), (segment) => segment.segment)
     : [text]
+}
+
+export function planTextRun(
+  text: string,
+  letterSpacing: number,
+  measureUnit: (unit: string) => number,
+  preserveWholeRun = false,
+): TextRunPlan {
+  const units = letterSpacing === 0 || preserveWholeRun ? [text] : splitTextGraphemes(text)
+  const effectiveSpacing = preserveWholeRun ? 0 : letterSpacing
+  const advances = units.map((unit, index) =>
+    measureUnit(unit) + (index < units.length - 1 ? effectiveSpacing : 0),
+  )
+  return { units, advances, width: advances.reduce((total, advance) => total + advance, 0) }
 }
 
 function wrapLine(line: string, width: number, fontSize: number, measure: TextMeasure): string[] {
