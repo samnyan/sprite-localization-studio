@@ -1,6 +1,6 @@
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
-import { layoutText, planTextRun } from '@/domain/text-region/textLayout'
+import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
 
 function withAlpha(value: string, alpha?: number): string {
   if (alpha === undefined) return value
@@ -42,20 +42,17 @@ function paintStyle(
   return gradient
 }
 
-function forEachCharacter(
+function drawPlannedCharacters(
   context: CanvasRenderingContext2D,
-  text: string,
+  plan: TextRunPlan,
   x: number,
-  letterSpacing: number,
   draw: (character: string, x: number) => void,
 ): void {
-  const plan = planTextRun(text, letterSpacing, (unit) => context.measureText(unit).width)
-  const totalWidth = plan.width
   const start = context.textAlign === 'left'
     ? x
     : context.textAlign === 'right'
-      ? x - totalWidth
-      : x - totalWidth / 2
+      ? x - plan.width
+      : x - plan.width / 2
   context.save()
   context.textAlign = 'left'
   let cursor = start
@@ -69,15 +66,15 @@ function forEachCharacter(
 function drawLine(
   context: CanvasRenderingContext2D,
   text: string,
+  plan: TextRunPlan | undefined,
   x: number,
-  letterSpacing = 0,
 ): void {
-  if (letterSpacing === 0) {
+  if (!plan || plan.units.length === 1) {
     context.strokeText(text, x, 0)
     context.fillText(text, x, 0)
     return
   }
-  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+  drawPlannedCharacters(context, plan, x, (character, characterX) => {
     context.strokeText(character, characterX, 0)
     context.fillText(character, characterX, 0)
   })
@@ -86,10 +83,10 @@ function drawLine(
 function drawInsideLine(
   context: CanvasRenderingContext2D,
   text: string,
+  plan: TextRunPlan | undefined,
   x: number,
-  letterSpacing: number,
 ): void {
-  if (letterSpacing === 0) {
+  if (!plan || plan.units.length === 1) {
     context.fillText(text, x, 0)
     context.save()
     context.globalCompositeOperation = 'source-atop'
@@ -97,12 +94,12 @@ function drawInsideLine(
     context.restore()
     return
   }
-  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+  drawPlannedCharacters(context, plan, x, (character, characterX) => {
     context.fillText(character, characterX, 0)
   })
   context.save()
   context.globalCompositeOperation = 'source-atop'
-  forEachCharacter(context, text, x, letterSpacing, (character, characterX) => {
+  drawPlannedCharacters(context, plan, x, (character, characterX) => {
     context.strokeText(character, characterX, 0)
   })
   context.restore()
@@ -151,6 +148,14 @@ export function drawTextRegion(
     },
   )
   setFont(layout.fontSize)
+  const letterSpacing = config.letterSpacing ?? 0
+  const linePlans = letterSpacing
+    ? layout.lines.map((line) => planTextRun(
+        line,
+        letterSpacing,
+        (unit) => context.measureText(unit).width,
+      ))
+    : undefined
   context.textAlign = config.align
   context.textBaseline = 'middle'
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
@@ -166,6 +171,7 @@ export function drawTextRegion(
       ? region.rect.height / 2 - layout.height + layout.lineHeight / 2
       : -layout.height / 2 + layout.lineHeight / 2
   for (const [index, line] of layout.lines.entries()) {
+    const plan = linePlans?.[index]
     context.save()
     context.translate(0, startY + index * layout.lineHeight)
     context.lineWidth = config.stroke && config.stroke.width > 0 ? config.stroke.width * 2 : 0
@@ -177,15 +183,15 @@ export function drawTextRegion(
       context.shadowBlur = shadow.blur
       context.shadowOffsetX = shadow.offsetX
       context.shadowOffsetY = shadow.offsetY
-      drawLine(context, line, x, config.letterSpacing)
+      drawLine(context, line, plan, x)
       context.restore()
     }
     context.shadowColor = 'transparent'
     context.shadowBlur = 0
     if (config.stroke?.position === 'inside' && stroke) {
-      drawInsideLine(context, line, x, config.letterSpacing ?? 0)
+      drawInsideLine(context, line, plan, x)
     } else {
-      drawLine(context, line, x, config.letterSpacing)
+      drawLine(context, line, plan, x)
     }
     context.restore()
   }

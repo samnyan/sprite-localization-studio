@@ -2,7 +2,7 @@ import type { Canvas, CanvasKit, Font, Paint, Shader } from 'canvaskit-wasm'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
-import { layoutText, planTextRun } from '@/domain/text-region/textLayout'
+import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
@@ -89,18 +89,16 @@ function spacedLineWidth(font: Font, text: string, letterSpacing: number): numbe
 
 function drawLine(
   canvas: Canvas,
-  text: string,
+  plan: TextRunPlan,
   x: number,
   y: number,
   paint: Paint,
   font: Font,
-  letterSpacing: number,
 ): void {
-  if (letterSpacing === 0) {
-    canvas.drawText(text, x, y, paint, font)
+  if (plan.units.length === 1) {
+    canvas.drawText(plan.units[0]!, x, y, paint, font)
     return
   }
-  const plan = planTextRun(text, letterSpacing, (unit) => lineWidth(font, unit))
   let cursor = x
   for (const [index, character] of plan.units.entries()) {
     canvas.drawText(character, cursor, y, paint, font)
@@ -191,6 +189,11 @@ function drawTextRegionCore(
       },
     )
     activeFont.setSize(layout.fontSize)
+    const linePlans = layout.lines.map((line) => planTextRun(
+      line,
+      config.letterSpacing ?? 0,
+      (unit) => lineWidth(activeFont, unit),
+    ))
     if (config.overflow !== 'visible') {
       canvas.clipRect(
         canvasKit.LTRBRect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width / 2, region.rect.height / 2),
@@ -205,10 +208,9 @@ function drawTextRegionCore(
         : -layout.height / 2 + layout.lineHeight / 2
     const metrics = activeFont.getMetrics()
     const baselineOffset = -(metrics.ascent + metrics.descent) / 2
-    const letterSpacing = config.letterSpacing ?? 0
     const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
-    for (const [index, line] of layout.lines.entries()) {
-      const width = spacedLineWidth(activeFont, line, letterSpacing)
+    for (const [index, plan] of linePlans.entries()) {
+      const width = plan.width
       const x = config.align === 'left' ? -region.rect.width / 2 : config.align === 'right' ? region.rect.width / 2 - width : -width / 2
       const baseline = startY + index * layout.lineHeight + baselineOffset
       for (const shadow of shadows) {
@@ -227,20 +229,19 @@ function drawTextRegionCore(
           if (filter) shadowPaint.paint.setMaskFilter(filter)
           drawLine(
             canvas,
-            line,
+            plan,
             x + shadow.offsetX,
             baseline + shadow.offsetY,
             shadowPaint.paint,
             activeFont,
-            letterSpacing,
           )
         } finally {
           filter?.delete()
           disposePaint(shadowPaint)
         }
       }
-      if (stroke) drawLine(canvas, line, x, baseline, stroke.paint, activeFont, letterSpacing)
-      if (fill) drawLine(canvas, line, x, baseline, fill.paint, activeFont, letterSpacing)
+      if (stroke) drawLine(canvas, plan, x, baseline, stroke.paint, activeFont)
+      if (fill) drawLine(canvas, plan, x, baseline, fill.paint, activeFont)
     }
   } finally {
     if (saved) canvas.restore()
