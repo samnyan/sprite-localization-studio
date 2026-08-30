@@ -1,6 +1,6 @@
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
-import { layoutText } from '@/domain/text-region/textLayout'
+import { layoutText, planTextRun } from '@/domain/text-region/textLayout'
 
 function withAlpha(value: string, alpha?: number): string {
   if (alpha === undefined) return value
@@ -49,9 +49,8 @@ function forEachCharacter(
   letterSpacing: number,
   draw: (character: string, x: number) => void,
 ): void {
-  const characters = Array.from(text)
-  const totalWidth = characters.reduce((total, character) => total + context.measureText(character).width, 0) +
-    Math.max(0, characters.length - 1) * letterSpacing
+  const plan = planTextRun(text, letterSpacing, (unit) => context.measureText(unit).width)
+  const totalWidth = plan.width
   const start = context.textAlign === 'left'
     ? x
     : context.textAlign === 'right'
@@ -60,9 +59,9 @@ function forEachCharacter(
   context.save()
   context.textAlign = 'left'
   let cursor = start
-  for (const character of characters) {
+  for (const [index, character] of plan.units.entries()) {
     draw(character, cursor)
-    cursor += context.measureText(character).width + letterSpacing
+    cursor += plan.advances[index] ?? 0
   }
   context.restore()
 }
@@ -144,7 +143,11 @@ export function drawTextRegion(
     config,
     (line, fontSize) => {
       setFont(fontSize)
-      return context.measureText(line).width + Math.max(0, Array.from(line).length - 1) * (config.letterSpacing ?? 0)
+      return planTextRun(
+        line,
+        config.letterSpacing ?? 0,
+        (unit) => context.measureText(unit).width,
+      ).width
     },
   )
   setFont(layout.fontSize)

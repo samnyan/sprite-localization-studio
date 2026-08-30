@@ -2,7 +2,7 @@ import type { Canvas, CanvasKit, Font, Paint, Shader } from 'canvaskit-wasm'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
-import { layoutText } from '@/domain/text-region/textLayout'
+import { layoutText, planTextRun } from '@/domain/text-region/textLayout'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
@@ -84,7 +84,7 @@ function lineWidth(font: Font, text: string): number {
 }
 
 function spacedLineWidth(font: Font, text: string, letterSpacing: number): number {
-  return lineWidth(font, text) + Math.max(0, Array.from(text).length - 1) * letterSpacing
+  return planTextRun(text, letterSpacing, (unit) => lineWidth(font, unit)).width
 }
 
 function drawLine(
@@ -100,10 +100,11 @@ function drawLine(
     canvas.drawText(text, x, y, paint, font)
     return
   }
+  const plan = planTextRun(text, letterSpacing, (unit) => lineWidth(font, unit))
   let cursor = x
-  for (const character of Array.from(text)) {
+  for (const [index, character] of plan.units.entries()) {
     canvas.drawText(character, cursor, y, paint, font)
-    cursor += lineWidth(font, character) + letterSpacing
+    cursor += plan.advances[index] ?? 0
   }
 }
 
@@ -186,7 +187,7 @@ function drawTextRegionCore(
       config,
       (line, fontSize) => {
         activeFont.setSize(fontSize)
-        return lineWidth(activeFont, line)
+        return spacedLineWidth(activeFont, line, config.letterSpacing ?? 0)
       },
     )
     activeFont.setSize(layout.fontSize)
