@@ -25,6 +25,41 @@ afterEach(() => {
 })
 
 describe('TranslationWorkspace', () => {
+  it('navigates translated text inputs with Alt+Arrow keys', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{
+        spriteTableId: 'ui',
+        spriteId: 'start',
+        textRegions: [
+          { id: 'first', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'first', translatedText: 'One' },
+          { id: 'second', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'second', translatedText: 'Two' },
+        ],
+      }],
+    }
+    workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
+    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.selectSpriteTable('ui')
+    const wrapper = mount(TranslationWorkspace, {
+      attachTo: document.body,
+      global: { plugins: [pinia, i18n], stubs: { TranslationSpritePreview: true, TextStyleEditorDialog: true, BackgroundEditorDialog: true } },
+    })
+    mountedWrapper = wrapper
+    const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
+
+    await inputs[0]!.trigger('keydown', { altKey: true, key: 'ArrowDown' })
+    await nextTick()
+
+    expect(workspace.selectedTextRegionId).toBe('second')
+    expect(document.activeElement).toBe(inputs[1]!.element)
+    expect(inputs[0]!.attributes('aria-keyshortcuts')).toBe('Alt+ArrowUp Alt+ArrowDown')
+  })
+
   it('navigates missing translations to their text region', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
