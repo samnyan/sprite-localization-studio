@@ -4,7 +4,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { drawTextRegion } from '@/infrastructure/image/textRenderer'
 import {
   drawTextRegionWithCanvasKit,
-  isCanvasKitTextRenderSupported,
+  isCanvasKitTextRegionSupported,
 } from '@/infrastructure/rendering/CanvasKitTextRenderer'
 import { loadCanvasKit } from '@/infrastructure/rendering/CanvasKitRuntime'
 import type { TextRenderConfig } from '@/domain/text-region/types'
@@ -48,7 +48,9 @@ async function renderWithCanvasKit(currentRenderId: number): Promise<void> {
     translationKey: 'preview',
   }
   try {
-    if (!isCanvasKitTextRenderSupported(props.render)) throw new Error('CanvasKit style is unsupported.')
+    if (!isCanvasKitTextRegionSupported(props.text || 'Preview', props.render)) {
+      throw new Error('CanvasKit text region is unsupported.')
+    }
     const canvasKit = await loadCanvasKit()
     if (currentRenderId !== renderId || target !== canvas.value) return
     const surface = canvasKit.MakeSWCanvasSurface(target)

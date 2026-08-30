@@ -3,6 +3,7 @@ import type { Canvas, CanvasKit, Font, Paint, Shader } from 'canvaskit-wasm'
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
+import { requiresComplexTextShaping } from '@/domain/text-region/textScript'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
@@ -139,10 +140,15 @@ export function isCanvasKitTextRenderSupported(render: TextRenderConfig): boolea
   return (config.layers ?? []).every((layer) => !layer.enabled || isCanvasKitTextRenderSupported(layer.render))
 }
 
+export function isCanvasKitTextRegionSupported(text: string, render: TextRenderConfig): boolean {
+  return !requiresComplexTextShaping(text) && isCanvasKitTextRenderSupported(render)
+}
+
 export function areCanvasKitTextRegionsSupported(regions: TextRegion[]): boolean {
-  return regions.every((region) => !region.translatedText?.trim() || isCanvasKitTextRenderSupported(
-    region.render ?? DEFAULT_TEXT_RENDER,
-  ))
+  return regions.every((region) => {
+    const text = region.translatedText?.trim()
+    return !text || isCanvasKitTextRegionSupported(text, region.render ?? DEFAULT_TEXT_RENDER)
+  })
 }
 
 function drawTextRegionCore(
@@ -258,6 +264,9 @@ export function drawTextRegionWithCanvasKit(
   region: TextRegion,
   render: TextRenderConfig,
 ): void {
+  if (!isCanvasKitTextRegionSupported(text, render)) {
+    throw new Error('CanvasKit text region is unsupported.')
+  }
   for (const layer of render.layers ?? []) {
     if (layer.enabled) drawTextRegionWithCanvasKit(canvasKit, canvas, text, region, layer.render)
   }
