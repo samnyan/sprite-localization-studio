@@ -66,6 +66,18 @@ const lastBuildText = computed(() => {
         sprites: report.modifiedSpriteCount,
       })
 })
+function buildFailureText(
+  failure: NonNullable<typeof workspace.lastBuildReport>['failures'][number],
+) {
+  const params = {
+    spriteTableId: failure.spriteTableId,
+    textureId: failure.textureId,
+    texturePath: failure.texturePath,
+    spriteId: failure.spriteId,
+    message: failure.message,
+  }
+  return t(failure.spriteId ? 'build.spriteFailure' : 'build.failure', params)
+}
 const lastSavedText = computed(() => {
   const savedAt = workspace.lastSavedAt
   return savedAt
@@ -263,14 +275,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
         v-for="failure in workspace.lastBuildReport.failures"
         :key="JSON.stringify([failure.spriteTableId, failure.textureId])"
       >
-        {{
-          t('build.failure', {
-            spriteTableId: failure.spriteTableId,
-            textureId: failure.textureId,
-            texturePath: failure.texturePath,
-            message: failure.message,
-          })
-        }}
+        {{ buildFailureText(failure) }}
       </li>
     </ul>
 

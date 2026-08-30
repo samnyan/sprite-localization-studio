@@ -24,7 +24,15 @@ export interface LocalizedTextureBuildFailure {
   spriteTableId: string
   textureId: string
   texturePath: string
+  spriteId?: string
   message: string
+}
+
+export class LocalizedTextureBuildSpriteError extends Error {
+  constructor(message: string, readonly spriteId: string) {
+    super(message)
+    this.name = 'LocalizedTextureBuildSpriteError'
+  }
 }
 
 export interface LocalizedTextureBuilder {
@@ -93,10 +101,12 @@ export async function buildLocalizedTextures(
     try {
       textures.push(await builder.buildTexture(task))
     } catch (error) {
+      const spriteId = error instanceof LocalizedTextureBuildSpriteError ? error.spriteId : undefined
       failures.push({
         spriteTableId: task.spriteTable.id,
         textureId: task.texture.id,
         texturePath: task.texture.imagePath,
+        ...(spriteId ? { spriteId } : {}),
         message: error instanceof Error ? error.message : String(error),
       })
     }

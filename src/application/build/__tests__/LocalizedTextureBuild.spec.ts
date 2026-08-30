@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createLocalizedTextureBuildPlan,
   isSpriteTranslationModified,
+  LocalizedTextureBuildSpriteError,
   runLocalizedTextureBuild,
 } from '@/application/build/LocalizedTextureBuild'
 import type { ProjectManifest } from '@/domain/project/types'
@@ -130,7 +131,7 @@ describe('localized texture build plan', () => {
     expect(builtPaths).toEqual(['output_textures/zh-CN/ui.png'])
   })
 
-  it('continues after a texture failure and reports its source identifiers', async () => {
+  it('continues after a sprite failure and reports its source identifiers', async () => {
     const spriteTableWithTwoTextures: SpriteTable = {
       ...spriteTable,
       textures: [
@@ -142,7 +143,9 @@ describe('localized texture build plan', () => {
 
     const result = await runLocalizedTextureBuild(project([]), [spriteTableWithTwoTextures], () => ({
       buildTexture: async (task) => {
-        if (task.texture.id === 'atlas') throw new Error('Source image could not be loaded.')
+        if (task.texture.id === 'atlas') {
+          throw new LocalizedTextureBuildSpriteError('Background image could not be loaded.', 'button')
+        }
         builtPaths.push(task.outputPath)
         return { outputPath: task.outputPath, modifiedSpriteCount: 0 }
       },
@@ -157,11 +160,31 @@ describe('localized texture build plan', () => {
             spriteTableId: 'ui',
             textureId: 'atlas',
             texturePath: 'ui.png',
-            message: 'Source image could not be loaded.',
+            spriteId: 'button',
+            message: 'Background image could not be loaded.',
           },
         ],
       },
     })
     expect(builtPaths).toEqual(['output_textures/zh-CN/ui-2.png'])
+  })
+
+  it('reports a source texture failure without a sprite identifier', async () => {
+    const result = await runLocalizedTextureBuild(project([]), [spriteTable], () => ({
+      buildTexture: async () => {
+        throw new Error('Source image could not be loaded.')
+      },
+    }))
+
+    expect(result).toMatchObject({ status: 'failed' })
+    if (result.status !== 'failed') throw new Error('Expected failed build result.')
+    expect(result.report.failures).toEqual([
+      {
+        spriteTableId: 'ui',
+        textureId: 'atlas',
+        texturePath: 'ui.png',
+        message: 'Source image could not be loaded.',
+      },
+    ])
   })
 })

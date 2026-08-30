@@ -123,6 +123,7 @@ describe('WorkspaceView', () => {
           spriteTableId: 'ui',
           textureId: 'atlas',
           texturePath: 'ui.png',
+          spriteId: 'button',
           message: 'Source image could not be loaded.',
         },
       ],
@@ -135,7 +136,7 @@ describe('WorkspaceView', () => {
       'Texture build failed (1 total). See details below.',
     )
     expect(wrapper.get('[aria-label="Build failures"]').text()).toContain(
-      'ui / atlas (ui.png): Source image could not be loaded.',
+      'ui / atlas (ui.png) / button: Source image could not be loaded.',
     )
     expect(wrapper.find('footer').text()).toContain('1 failed')
   })

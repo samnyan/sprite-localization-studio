@@ -1,7 +1,8 @@
-import type {
-  LocalizedTextureBuilder,
-  LocalizedTextureBuildTask,
-  BuiltTexture,
+import {
+  LocalizedTextureBuildSpriteError,
+  type BuiltTexture,
+  type LocalizedTextureBuilder,
+  type LocalizedTextureBuildTask,
 } from '@/application/build/LocalizedTextureBuild'
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { ProjectManifest } from '@/domain/project/types'
@@ -133,7 +134,16 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
         const sprite = task.spriteTable.sprites.find(
           (item) => item.id === translation.spriteId && item.textureId === task.texture.id,
         )
-        if (sprite) await this.applyTranslation(outputContext, source, sprite, translation)
+        if (!sprite) continue
+
+        try {
+          await this.applyTranslation(outputContext, source, sprite, translation)
+        } catch (error) {
+          throw new LocalizedTextureBuildSpriteError(
+            error instanceof Error ? error.message : String(error),
+            sprite.id,
+          )
+        }
       }
 
       await this.storage.writeBinary(task.outputPath, await canvasToPng(output))

@@ -161,6 +161,7 @@ export default {
     completed: 'Built {textures} textures · {sprites} sprites',
     partial: 'Built {textures} textures · {sprites} sprites · {failures} failed',
     failure: '{spriteTableId} / {textureId} ({texturePath}): {message}',
+    spriteFailure: '{spriteTableId} / {textureId} ({texturePath}) / {spriteId}: {message}',
     failures: 'Build failures',
   },
   spriteTable: {
