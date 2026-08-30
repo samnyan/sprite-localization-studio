@@ -1,6 +1,7 @@
 import type { TextRegion } from '@/domain/text-region/types'
 import {
   areCanvasKitTextRegionsSupported,
+  CanvasKitTextFallbackError,
   drawTranslationTextWithCanvasKit,
 } from '@/infrastructure/rendering/CanvasKitTextRenderer'
 import { loadCanvasKit } from '@/infrastructure/rendering/CanvasKitRuntime'
@@ -21,6 +22,9 @@ export async function drawCanvasKitTextOverlay(
     surface.getCanvas().clear(canvasKit.TRANSPARENT)
     drawTranslationTextWithCanvasKit(canvasKit, surface.getCanvas(), regions)
     surface.flush()
+  } catch (error) {
+    if (error instanceof CanvasKitTextFallbackError) return false
+    throw error
   } finally {
     surface.dispose()
   }

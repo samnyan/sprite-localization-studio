@@ -1,4 +1,13 @@
-import type { Canvas, CanvasKit, Font, Paint, Shader } from 'canvaskit-wasm'
+import type {
+  Canvas,
+  CanvasKit,
+  Font,
+  Paint,
+  Paragraph,
+  ParagraphBuilder,
+  Shader,
+  TypefaceFontProvider,
+} from 'canvaskit-wasm'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
@@ -8,6 +17,11 @@ import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
 const genericFamilies = new Set(['sans-serif', 'serif', 'monospace', 'cursive', 'fantasy'])
+const rtlLetter = /[\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Syriac}\p{Script=Thaana}\p{Script=Nko}\p{Script=Adlam}]/u
+const ltrParagraphLetter = /[\p{Script=Devanagari}\p{Script=Bengali}\p{Script=Gurmukhi}\p{Script=Gujarati}\p{Script=Tamil}\p{Script=Telugu}\p{Script=Kannada}\p{Script=Malayalam}\p{Script=Sinhala}\p{Script=Thai}\p{Script=Lao}\p{Script=Tibetan}\p{Script=Myanmar}\p{Script=Khmer}\p{Script=Mongolian}\p{Script=Javanese}\p{Script=Balinese}]/u
+const letter = /\p{L}/u
+
+export class CanvasKitTextFallbackError extends Error {}
 
 function isHexColor(value: string): boolean {
   return /^#[\da-f]{3,4}$|^#[\da-f]{6}(?:[\da-f]{2})?$/i.test(value)
@@ -118,6 +132,54 @@ function isSupportedPaint(paint: TextPaint | undefined): boolean {
     (!paint.gradientEnd || isHexColor(paint.gradientEnd))
 }
 
+function activeShadows(config: TextRenderConfig) {
+  return (config.shadows ?? (config.shadow ? [config.shadow] : [])).filter(
+    (shadow) => (shadow.alpha ?? 1) > 0,
+  )
+}
+
+function hasEnabledLayers(config: TextRenderConfig): boolean {
+  return config.layers?.some((layer) => layer.enabled) ?? false
+}
+
+function paragraphDirection(text: string, canvasKit: CanvasKit) {
+  for (const character of text) {
+    if (!letter.test(character)) continue
+    return rtlLetter.test(character) ? canvasKit.TextDirection.RTL : canvasKit.TextDirection.LTR
+  }
+  return canvasKit.TextDirection.LTR
+}
+
+function hasKnownParagraphDirection(text: string): boolean {
+  for (const character of text) {
+    if (letter.test(character) && requiresComplexTextShaping(character) &&
+      !rtlLetter.test(character) && !ltrParagraphLetter.test(character)) return false
+  }
+  return true
+}
+
+function paragraphMaxLines(region: TextRegion, config: TextRenderConfig): number | undefined {
+  if (config.overflow === 'visible') return config.maxLines
+  const capacity = Math.floor(region.rect.height / (config.fontSize * (config.lineHeight ?? 1.2)))
+  if (capacity < 1) return undefined
+  return Math.min(config.maxLines ?? Number.POSITIVE_INFINITY, capacity)
+}
+
+function isCanvasKitParagraphSupported(text: string, render: TextRenderConfig): boolean {
+  const config = { ...DEFAULT_TEXT_RENDER, ...render }
+  const fill = config.fill ?? { mode: 'solid', color: config.color }
+  return requiresComplexTextShaping(text) &&
+    config.wrap === true &&
+    !config.autoFit &&
+    hasKnownParagraphDirection(text) &&
+    fill.mode === 'solid' &&
+    isHexColor(fill.color) &&
+    !(config.stroke && config.stroke.width > 0) &&
+    activeShadows(config).length === 0 &&
+    !hasEnabledLayers(config) &&
+    projectFontRegistry.findData(config.fontFamily, config.fontWeight, config.fontStyle ?? 'normal') !== undefined
+}
+
 export function isCanvasKitTextRenderSupported(render: TextRenderConfig): boolean {
   const config = { ...DEFAULT_TEXT_RENDER, ...render }
   const family = config.fontFamily.trim().toLowerCase()
@@ -141,7 +203,9 @@ export function isCanvasKitTextRenderSupported(render: TextRenderConfig): boolea
 }
 
 export function isCanvasKitTextRegionSupported(text: string, render: TextRenderConfig): boolean {
-  return !requiresComplexTextShaping(text) && isCanvasKitTextRenderSupported(render)
+  return requiresComplexTextShaping(text)
+    ? isCanvasKitParagraphSupported(text, render)
+    : isCanvasKitTextRenderSupported(render)
 }
 
 export function areCanvasKitTextRegionsSupported(regions: TextRegion[]): boolean {
@@ -257,6 +321,80 @@ function drawTextRegionCore(
   }
 }
 
+function drawParagraphTextRegion(
+  canvasKit: CanvasKit,
+  canvas: Canvas,
+  text: string,
+  region: TextRegion,
+  render: TextRenderConfig,
+): void {
+  const config = { ...DEFAULT_TEXT_RENDER, ...render }
+  const data = projectFontRegistry.findData(config.fontFamily, config.fontWeight, config.fontStyle ?? 'normal')
+  if (!data) throw new CanvasKitTextFallbackError('CanvasKit paragraph font is unavailable.')
+  const fill = config.fill ?? { mode: 'solid', color: config.color }
+  if (fill.mode !== 'solid' || !isHexColor(fill.color)) {
+    throw new CanvasKitTextFallbackError('CanvasKit paragraph paint is unsupported.')
+  }
+  const maxLines = paragraphMaxLines(region, config)
+  if (config.overflow !== 'visible' && maxLines === undefined) {
+    throw new CanvasKitTextFallbackError('CanvasKit paragraph cannot fit the text region.')
+  }
+  let provider: TypefaceFontProvider | undefined
+  let builder: ParagraphBuilder | undefined
+  let paragraph: Paragraph | undefined
+  let saved = false
+  try {
+    provider = canvasKit.TypefaceFontProvider.Make()
+    provider.registerFont(data, config.fontFamily)
+    builder = canvasKit.ParagraphBuilder.MakeFromFontProvider({
+      textAlign: config.align === 'left'
+        ? canvasKit.TextAlign.Left
+        : config.align === 'right'
+          ? canvasKit.TextAlign.Right
+          : canvasKit.TextAlign.Center,
+      textDirection: paragraphDirection(text, canvasKit),
+      textStyle: {
+        color: colorFromHex(canvasKit, fill.color, fill.alpha),
+        fontFamilies: [config.fontFamily],
+        fontSize: config.fontSize,
+        heightMultiplier: config.lineHeight,
+        letterSpacing: config.letterSpacing,
+      },
+      ...(maxLines === undefined ? {} : { maxLines }),
+      ...(config.overflow === 'ellipsis' ? { ellipsis: '…' } : {}),
+    }, provider)
+    builder.addText(text)
+    paragraph = builder.build()
+    paragraph.layout(region.rect.width)
+    if (paragraph.unresolvedCodepoints().length) {
+      throw new CanvasKitTextFallbackError('CanvasKit paragraph has unresolved glyphs.')
+    }
+    const paragraphHeight = paragraph.getHeight()
+    const y = config.verticalAlign === 'top'
+      ? -region.rect.height / 2
+      : config.verticalAlign === 'bottom'
+        ? region.rect.height / 2 - paragraphHeight
+        : -paragraphHeight / 2
+    canvas.save()
+    saved = true
+    canvas.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
+    canvas.rotate(region.rotation, 0, 0)
+    if (config.overflow !== 'visible') {
+      canvas.clipRect(
+        canvasKit.LTRBRect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width / 2, region.rect.height / 2),
+        canvasKit.ClipOp.Intersect,
+        true,
+      )
+    }
+    canvas.drawParagraph(paragraph, -region.rect.width / 2, y)
+  } finally {
+    if (saved) canvas.restore()
+    paragraph?.delete()
+    builder?.delete()
+    provider?.delete()
+  }
+}
+
 export function drawTextRegionWithCanvasKit(
   canvasKit: CanvasKit,
   canvas: Canvas,
@@ -265,7 +403,11 @@ export function drawTextRegionWithCanvasKit(
   render: TextRenderConfig,
 ): void {
   if (!isCanvasKitTextRegionSupported(text, render)) {
-    throw new Error('CanvasKit text region is unsupported.')
+    throw new CanvasKitTextFallbackError('CanvasKit text region is unsupported.')
+  }
+  if (requiresComplexTextShaping(text)) {
+    drawParagraphTextRegion(canvasKit, canvas, text, region, render)
+    return
   }
   for (const layer of render.layers ?? []) {
     if (layer.enabled) drawTextRegionWithCanvasKit(canvasKit, canvas, text, region, layer.render)
