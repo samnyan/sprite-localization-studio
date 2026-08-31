@@ -236,6 +236,7 @@ interface ProjectFont {
 - 已建立软件 Surface 释放、异步旧结果丢弃、项目字体二进制传递与 Canvas 2D 保真回退边界。
 - 不支持的系统/CSS 字体、`inside` 描边和非 Hex 颜色必须走 Canvas 2D，不能静默替换为默认 Typeface。
 - 已使用 SkParagraph 为项目字体的复杂脚本提供换行、字距、行高、物理对齐、垂直对齐、maxLines/ellipsis 与基准方向 shaping；unresolved glyph 会原子回退 Canvas 2D。
+- CanvasKit 直接文本路径同样会在 Glyph ID 为 `0` 时原子回退 Canvas 2D，避免导出缺字占位符（已完成）。
 - SkParagraph 目前只承接纯实色填充、无有效描边/阴影/图层、`wrap=true` 且无 AutoFit 的 Region；渐变、效果、未知方向脚本和不满足等价条件的文字保持完整 Canvas 2D 回退。
 - CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；复杂文本使用已验证的 Paragraph 路径，不能以 mock 结果替代视觉验收。
 - Typeface、Paragraph 与 Surface 的释放路径已有回归覆盖；仍需在真实运行时采样复用与内存曲线，并基于 profile 决定是否引入 Worker/OffscreenCanvas。

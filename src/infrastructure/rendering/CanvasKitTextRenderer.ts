@@ -98,6 +98,10 @@ function lineWidth(font: Font, text: string): number {
   return font.getGlyphWidths(glyphs).reduce((total, width) => total + width, 0)
 }
 
+function hasUnresolvedGlyphs(font: Font, text: string): boolean {
+  return font.getGlyphIDs(text).some((glyph) => glyph === 0)
+}
+
 function spacedLineWidth(font: Font, text: string, letterSpacing: number): number {
   return planTextRun(text, letterSpacing, (unit) => lineWidth(font, unit)).width
 }
@@ -241,20 +245,6 @@ function drawTextRegionCore(
     if (!typeface) throw new Error('CanvasKit could not create the requested typeface.')
     font = new canvasKit.Font(typeface, config.fontSize)
     const activeFont = font
-    fill = createPaint(
-      canvasKit,
-      config.fill ?? { mode: 'solid', color: config.color },
-      region.rect.width,
-      region.rect.height,
-    )
-    stroke =
-      config.stroke && config.stroke.width > 0
-        ? createPaint(canvasKit, config.stroke.paint, region.rect.width, region.rect.height, config.stroke.width * 2)
-        : undefined
-    canvas.save()
-    saved = true
-    canvas.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
-    canvas.rotate(region.rotation, 0, 0)
     const layout = layoutText(
       text,
       region.rect.width,
@@ -271,6 +261,23 @@ function drawTextRegionCore(
       config.letterSpacing ?? 0,
       (unit) => lineWidth(activeFont, unit),
     ))
+    if (layout.lines.some((line) => hasUnresolvedGlyphs(activeFont, line))) {
+      throw new CanvasKitTextFallbackError('CanvasKit text has unresolved glyphs.')
+    }
+    fill = createPaint(
+      canvasKit,
+      config.fill ?? { mode: 'solid', color: config.color },
+      region.rect.width,
+      region.rect.height,
+    )
+    stroke =
+      config.stroke && config.stroke.width > 0
+        ? createPaint(canvasKit, config.stroke.paint, region.rect.width, region.rect.height, config.stroke.width * 2)
+        : undefined
+    canvas.save()
+    saved = true
+    canvas.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
+    canvas.rotate(region.rotation, 0, 0)
     if (config.overflow !== 'visible') {
       canvas.clipRect(
         canvasKit.LTRBRect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width / 2, region.rect.height / 2),

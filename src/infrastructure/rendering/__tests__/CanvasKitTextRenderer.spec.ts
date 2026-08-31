@@ -8,6 +8,7 @@ import {
   isCanvasKitTextRenderSupported,
 } from '@/infrastructure/rendering/CanvasKitTextRenderer'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
+import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -159,5 +160,88 @@ describe('isCanvasKitTextRenderSupported', () => {
       'provider.registerFont', 'builder.addText', 'paragraph.layout',
       'paragraph.delete', 'builder.delete', 'provider.delete',
     ])
+  })
+
+  it('falls back before direct CanvasKit text drawing when a glyph is unavailable', () => {
+    const calls: string[] = []
+    vi.spyOn(canvasKitTypefaceCache, 'resolve').mockReturnValue({} as never)
+    const font = {
+      delete: () => calls.push('font.delete'),
+      getGlyphIDs: () => [12, 0],
+      getGlyphWidths: () => [10, 10],
+      setSize: () => undefined,
+    }
+    const canvasKit = {
+      Font: class {
+        constructor() {
+          return font
+        }
+      },
+    }
+    const region = {
+      id: 'title', rect: { x: 0, y: 0, width: 200, height: 80 }, rotation: 0, translationKey: 'title',
+    }
+
+    expect(() => drawTextRegionWithCanvasKit(
+      canvasKit as never,
+      {} as never,
+      'Missing glyph',
+      region,
+      DEFAULT_TEXT_RENDER,
+    )).toThrow('CanvasKit text has unresolved glyphs.')
+    expect(calls).toEqual(['font.delete'])
+  })
+
+  it('does not treat layout-only newline controls as unresolved glyphs', () => {
+    vi.spyOn(canvasKitTypefaceCache, 'resolve').mockReturnValue({} as never)
+    const requested: string[] = []
+    const font = {
+      delete: () => undefined,
+      getGlyphIDs: (text: string) => {
+        requested.push(text)
+        return text.includes('\n') ? [0] : [12]
+      },
+      getGlyphWidths: () => [10],
+      getMetrics: () => ({ ascent: -8, descent: 2 }),
+      setSize: () => undefined,
+    }
+    const canvasKit = {
+      Color4f: () => [],
+      Font: class { constructor() { return font } },
+      Paint: class { delete() {} setAntiAlias() {} setColor() {} },
+    }
+    const canvas = {
+      drawText: () => undefined,
+      restore: () => undefined,
+      rotate: () => undefined,
+      save: () => undefined,
+      translate: () => undefined,
+    }
+    const region = { id: 'title', rect: { x: 0, y: 0, width: 200, height: 80 }, rotation: 0, translationKey: 'title' }
+
+    expect(() => drawTextRegionWithCanvasKit(canvasKit as never, canvas as never, 'A\nB', region, DEFAULT_TEXT_RENDER)).not.toThrow()
+    expect(requested).not.toContain('A\nB')
+  })
+
+  it('falls back when layout adds an ellipsis whose glyph is unavailable', () => {
+    const calls: string[] = []
+    vi.spyOn(canvasKitTypefaceCache, 'resolve').mockReturnValue({} as never)
+    const font = {
+      delete: () => calls.push('font.delete'),
+      getGlyphIDs: (text: string) => text.includes('…') ? [0] : Array.from(text, () => 12),
+      getGlyphWidths: (glyphs: number[]) => glyphs.map(() => 10),
+      setSize: () => undefined,
+    }
+    const canvasKit = { Font: class { constructor() { return font } } }
+    const region = { id: 'title', rect: { x: 0, y: 0, width: 15, height: 80 }, rotation: 0, translationKey: 'title' }
+
+    expect(() => drawTextRegionWithCanvasKit(
+      canvasKit as never,
+      {} as never,
+      'ABCD',
+      region,
+      { ...DEFAULT_TEXT_RENDER, overflow: 'ellipsis' },
+    )).toThrow('CanvasKit text has unresolved glyphs.')
+    expect(calls).toEqual(['font.delete'])
   })
 })
