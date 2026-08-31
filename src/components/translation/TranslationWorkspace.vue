@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { TextRenderConfig } from '@/domain/text-region/types'
+import { resolveBackgroundType, type TextRenderConfig } from '@/domain/text-region/types'
 import { textStyleTemplates } from '@/domain/text-region/styleTemplates'
 
 const workspace = useWorkspaceStore()
@@ -39,6 +39,7 @@ const editingBackground = ref<{
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
 const diagnosticDisplayCount = ref(12)
 const translatedTextInputs = new Map<string, HTMLTextAreaElement>()
+const translationRowsBySprite = new Map<string, HTMLElement>()
 const searchQuery = ref('')
 const translationFilter = ref<'all' | 'complete' | 'incomplete' | 'issues'>('all')
 const editingSpriteKey = ref<string>()
@@ -141,9 +142,47 @@ const diagnosticItems = computed(() => {
     }
   })
 })
+const backgroundDiagnosticItems = computed(() =>
+  workspace.backgroundDiagnostics.flatMap((diagnostic) => {
+    const translations = (workspace.project?.translations ?? []).filter(
+      (translation) =>
+        translation.backgroundId === diagnostic.resourceId &&
+        (resolveBackgroundType(translation) === 'template' ||
+          resolveBackgroundType(translation) === 'sprite'),
+    )
+    return translations.map((translation) => ({
+      diagnostic,
+      spriteTableId: translation.spriteTableId,
+      spriteId: translation.spriteId,
+      label: `${translation.spriteTableId} / ${translation.spriteId}`,
+    }))
+  }),
+)
 
 function backgroundUrl(backgroundId?: string): string | undefined {
   return backgroundId ? workspace.backgroundImageUrls[backgroundId] : undefined
+}
+
+function setTranslationRow(
+  key: string,
+  element: Element | ComponentPublicInstance | null,
+): void {
+  if (element instanceof HTMLElement) translationRowsBySprite.set(key, element)
+  else translationRowsBySprite.delete(key)
+}
+
+async function selectBackgroundDiagnostic(item: { spriteTableId: string; spriteId: string }): Promise<void> {
+  const sprite = workspace.spriteTables
+    .find((table) => table.id === item.spriteTableId)
+    ?.sprites.find((candidate) => candidate.id === item.spriteId)
+  if (!sprite) return
+  searchQuery.value = ''
+  translationFilter.value = 'all'
+  workspace.selectSprite(item.spriteTableId, item.spriteId)
+  await nextTick()
+  const row = translationRowsBySprite.get(spriteKey(item.spriteTableId, item.spriteId))
+  row?.scrollIntoView?.({ block: 'center' })
+  row?.focus?.({ preventScroll: true })
 }
 
 function styleName(styleId?: string): string {
@@ -424,9 +463,20 @@ onUnmounted(() => {
       >
         <p class="font-medium">{{ t('translation.backgroundDiagnostics') }}</p>
         <div class="mt-1 max-h-24 space-y-1 overflow-y-auto">
-          <p v-for="diagnostic in workspace.backgroundDiagnostics" :key="diagnostic.resourceId">
-          {{ diagnostic.path }} · {{ diagnostic.message }}
-          </p>
+          <template v-for="diagnostic in workspace.backgroundDiagnostics" :key="diagnostic.resourceId">
+            <p>{{ diagnostic.path }} · {{ diagnostic.message }}</p>
+            <Button
+              v-for="item in backgroundDiagnosticItems.filter((item) => item.diagnostic.resourceId === diagnostic.resourceId)"
+              :key="JSON.stringify([item.spriteTableId, item.spriteId])"
+              variant="outline"
+              size="sm"
+              class="max-w-72"
+              :aria-label="t('translation.goToIssue', { label: item.label })"
+              @click="selectBackgroundDiagnostic(item)"
+            >
+              <span class="truncate">{{ item.label }}</span>
+            </Button>
+          </template>
         </div>
       </div>
       <div
@@ -533,7 +583,10 @@ onUnmounted(() => {
           <article
             v-for="row in filteredTranslationRows"
             :key="row.sprite.id"
-            class="grid min-w-[900px] border-b bg-card last:border-b-0"
+            :ref="(element) => setTranslationRow(spriteKey(row.translation.spriteTableId, row.sprite.id), element)"
+            tabindex="-1"
+            class="grid min-w-[900px] border-b bg-card last:border-b-0 focus:outline-none"
+            :class="{ 'ring-2 ring-inset ring-primary': workspace.selectedSpriteId === row.sprite.id }"
             :style="tableStyle"
           >
             <div class="p-3">

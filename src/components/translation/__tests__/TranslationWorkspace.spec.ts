@@ -36,6 +36,8 @@ describe('TranslationWorkspace', () => {
       translations: [{
         spriteTableId: 'ui',
         spriteId: 'start',
+        backgroundType: 'template',
+        backgroundId: 'missing-template',
         textRegions: [
           { id: 'first', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'first', translatedText: 'One' },
           { id: 'second', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'second', translatedText: 'Two' },
@@ -56,6 +58,11 @@ describe('TranslationWorkspace', () => {
     })
     mountedWrapper = wrapper
     const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
+
+    expect(workspace.selectedSpriteId).toBeUndefined()
+    await wrapper.get('[aria-label="Go to translation issue: ui / start"]').trigger('click')
+    await nextTick()
+    expect(workspace.selectedSpriteId).toBe('start')
 
     await inputs[0]!.trigger('keydown', { altKey: true, key: 'ArrowDown' })
     await nextTick()
