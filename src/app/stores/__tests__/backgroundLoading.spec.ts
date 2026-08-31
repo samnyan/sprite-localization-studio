@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { loadBackgroundImages } from '@/app/stores/workspace'
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('loadBackgroundImages', () => {
   it('keeps readable backgrounds when another resource is unavailable', async () => {
