@@ -16,6 +16,7 @@ import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
+import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Button } from '@/components/ui/button'
@@ -87,6 +88,18 @@ const lastSavedText = computed(() => {
     : undefined
 })
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
+const selectedTextDiagnostics = computed(() => {
+  const spriteTableId = workspace.selectedSpriteTableId
+  const spriteId = workspace.selectedSpriteId
+  const regionId = workspace.selectedTextRegionId
+  if (!spriteTableId || !spriteId || !regionId) return []
+  return workspace.textDiagnostics.filter(
+    (diagnostic) =>
+      diagnostic.spriteTableId === spriteTableId &&
+      diagnostic.spriteId === spriteId &&
+      diagnostic.regionId === regionId,
+  )
+})
 
 watch(
   () => workspace.project?.name,
@@ -148,6 +161,13 @@ function numericRegionField(
 }
 function updateRegionRect(regionId: string, rect: Rect): void {
   void workspace.updateTextRegion(regionId, { rect })
+}
+
+function diagnosticText(diagnostic: TextDiagnostic): string {
+  return t(`translation.${diagnostic.code}`, {
+    label: workspace.selectedTextRegion?.translationKey ?? diagnostic.regionId,
+    fontId: diagnostic.fontId,
+  })
 }
 
 async function updateTranslationKey(event: FocusEvent): Promise<void> {
@@ -548,6 +568,21 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                   @change="numericRegionField('rotation', $event)"
                 />
               </label>
+              <div
+                v-if="selectedTextDiagnostics.length"
+                role="status"
+                aria-live="polite"
+                :aria-label="t('translation.issues', selectedTextDiagnostics.length)"
+              >
+                <ul class="space-y-1 rounded border border-destructive/30 bg-destructive/5 p-2 text-destructive">
+                  <li
+                    v-for="diagnostic in selectedTextDiagnostics"
+                    :key="JSON.stringify([diagnostic.code, diagnostic.fontId])"
+                  >
+                    {{ diagnosticText(diagnostic) }}
+                  </li>
+                </ul>
+              </div>
             </div>
             <p class="text-[11px] text-muted-foreground">{{ t('textRegion.sourceSpace') }}</p>
           </template>

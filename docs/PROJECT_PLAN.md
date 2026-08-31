@@ -96,7 +96,7 @@ src/
 
 - **M0**：CanvasKit bootstrap 延后到 M9；不能把依赖已安装视为接入完成。
 - **M1**：补齐包含 `0/90/180/270` 旋转、trim offset、透明边缘和多 Texture 的回归样本。
-- **M2**：键盘微调已完成（方向键 1px、Shift+方向键 10px，边界内约束且有无障碍提示）；剩余复制粘贴、稳定缩放坐标换算和 overflow 提示。
+- **M2**：键盘微调与选中 Region 的就地诊断提示已完成（方向键 1px、Shift+方向键 10px，边界内约束且有无障碍提示）；剩余复制粘贴和稳定缩放坐标换算。
 - **M3**：多点渐变、模板 CRUD、字距、换行、垂直对齐、AutoFit、缺字检查在 M7/M9 收口。
 - **M4**：筛选、完成状态、批量选择、脏状态、快捷录入和虚拟滚动在 M10 收口。
 
@@ -267,6 +267,7 @@ interface ProjectFont {
 - 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow、AutoFit 最小字号与显式工程字体缺失警告；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径、可用时的 Sprite ID 和错误消息；继续补齐 glyph、缺资源和渲染失败诊断。
 - 显示脏状态、保存中/失败和最近成功保存时间（已完成）。
 - 选中的 TextRegion 支持键盘精确移动：方向键移动 1px，Shift+方向键移动 10px，并在 Sprite 边界内约束（已完成）。
+- Sprite 检查器直接展示选中 TextRegion 的缺译文、overflow、AutoFit 和工程字体诊断（已完成）。
 - 支持按 manifest、完成状态、错误和关键词筛选；Grid/List 虚拟化或按需生成缩略图。
 - 补齐上一项/下一项、保存、撤销/重做、删除、Region 微调和快速聚焦译文快捷键。
 - 删除、覆盖模板、替换资源时显示准确影响范围。

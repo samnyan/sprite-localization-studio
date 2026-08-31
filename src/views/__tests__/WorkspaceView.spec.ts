@@ -106,6 +106,48 @@ describe('WorkspaceView', () => {
     expect(wrapper.find('footer').text()).toContain('Action required')
   })
 
+  it('shows diagnostics for the selected text region in the sprite inspector', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{
+        spriteTableId: 'ui',
+        spriteId: 'button-start',
+        textRegions: [{
+          id: 'title',
+          rect: { x: 0, y: 0, width: 80, height: 20 },
+          rotation: 0,
+          translationKey: 'title',
+        }],
+      }],
+    }
+    workspace.spriteTables = [{
+      schemaVersion: 1,
+      id: 'ui',
+      name: 'UI Table',
+      textures: [{ id: 'page-00', imagePath: 'ui/page-00.png', size: { width: 100, height: 100 } }],
+      sprites: [{
+        id: 'button-start',
+        name: 'button_start',
+        textureId: 'page-00',
+        frame: { x: 0, y: 0, width: 80, height: 20 },
+        rotation: 0,
+        trimmed: false,
+      }],
+    }]
+    workspace.selectSprite('ui', 'button-start')
+    workspace.selectTextRegion('title')
+
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.get('[aria-label="1 translation issue"]').text()).toBe('Missing: title')
+  })
+
   it('shows partial build failures with their source texture identifiers', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
