@@ -88,18 +88,7 @@ const lastSavedText = computed(() => {
     : undefined
 })
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
-const selectedTextDiagnostics = computed(() => {
-  const spriteTableId = workspace.selectedSpriteTableId
-  const spriteId = workspace.selectedSpriteId
-  const regionId = workspace.selectedTextRegionId
-  if (!spriteTableId || !spriteId || !regionId) return []
-  return workspace.textDiagnostics.filter(
-    (diagnostic) =>
-      diagnostic.spriteTableId === spriteTableId &&
-      diagnostic.spriteId === spriteId &&
-      diagnostic.regionId === regionId,
-  )
-})
+const selectedTextDiagnostics = computed(() => workspace.selectedTextDiagnostics)
 
 watch(
   () => workspace.project?.name,

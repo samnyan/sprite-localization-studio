@@ -124,6 +124,15 @@ describe('WorkspaceView', () => {
           rotation: 0,
           translationKey: 'title',
         }],
+      }, {
+        spriteTableId: 'ui',
+        spriteId: 'other-button',
+        textRegions: [{
+          id: 'title',
+          rect: { x: 0, y: 0, width: 80, height: 20 },
+          rotation: 0,
+          translationKey: 'other-title',
+        }],
       }],
     }
     workspace.spriteTables = [{
@@ -145,6 +154,9 @@ describe('WorkspaceView', () => {
 
     const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
 
+    expect(workspace.selectedTextDiagnostics).toEqual([
+      { code: 'missingTranslation', spriteTableId: 'ui', spriteId: 'button-start', regionId: 'title' },
+    ])
     expect(wrapper.get('[aria-label="1 translation issue"]').text()).toBe('Missing: title')
   })
 

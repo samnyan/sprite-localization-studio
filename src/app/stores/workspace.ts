@@ -116,15 +116,18 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
   )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
-  const textDiagnostics = computed<TextDiagnostic[]>(() => {
-    if (!project.value) return []
-    const missing = collectTextDiagnostics(project.value)
-    const layout = measureText ? collectTextLayoutDiagnostics(project.value, measureText) : []
+  function collectProjectTextDiagnostics(document: ProjectManifest): TextDiagnostic[] {
+    const missing = collectTextDiagnostics(document)
+    const layout = measureText ? collectTextLayoutDiagnostics(document, measureText) : []
     const fonts = collectTextFontDiagnostics(
-      project.value,
+      document,
       new Set(projectFonts.value.map((font) => font.id)),
     )
     return [...missing, ...layout, ...fonts]
+  }
+  const textDiagnostics = computed<TextDiagnostic[]>(() => {
+    const document = project.value
+    return document ? collectProjectTextDiagnostics(document) : []
   })
   const selectedSpriteTable = computed(() =>
     spriteTables.value.find((spriteTable) => spriteTable.id === selectedSpriteTableId.value),
@@ -149,6 +152,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       (region) => region.id === selectedTextRegionId.value,
     ),
   )
+  const selectedTextDiagnostics = computed<TextDiagnostic[]>(() => {
+    const document = project.value
+    const translation = selectedSpriteTranslation.value
+    const region = selectedTextRegion.value
+    if (!document || !translation || !region) return []
+    return collectProjectTextDiagnostics({
+      ...document,
+      translations: [{ ...translation, textRegions: [region] }],
+    })
+  })
 
   const selectedBackgroundTemplate = computed(() =>
     project.value?.backgroundTemplates?.find(
@@ -1159,6 +1172,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     projectFonts,
     fontDiagnostics,
     textDiagnostics,
+    selectedTextDiagnostics,
     selectedSpriteTableId,
     selectedSpriteId,
     selectedTextRegionId,
