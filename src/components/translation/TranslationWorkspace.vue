@@ -418,6 +418,18 @@ onUnmounted(() => {
     </div>
     <template v-else>
       <div
+        v-if="workspace.backgroundDiagnostics.length"
+        class="border-b bg-destructive/5 px-3 py-2 text-xs text-destructive"
+        role="alert"
+      >
+        <p class="font-medium">{{ t('translation.backgroundDiagnostics') }}</p>
+        <div class="mt-1 max-h-24 space-y-1 overflow-y-auto">
+          <p v-for="diagnostic in workspace.backgroundDiagnostics" :key="diagnostic.resourceId">
+          {{ diagnostic.path }} · {{ diagnostic.message }}
+          </p>
+        </div>
+      </div>
+      <div
         v-if="workspace.textDiagnostics.length"
         class="border-b bg-muted/40 px-3 py-2"
         role="region"

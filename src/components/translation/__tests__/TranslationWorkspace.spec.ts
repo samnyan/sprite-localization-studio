@@ -44,6 +44,11 @@ describe('TranslationWorkspace', () => {
     }
     workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
     workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.backgroundDiagnostics = [{
+      resourceId: 'missing-template',
+      path: 'sprite_base/template/missing.png',
+      message: 'Not found',
+    }]
     workspace.selectSpriteTable('ui')
     const wrapper = mount(TranslationWorkspace, {
       attachTo: document.body,
@@ -58,6 +63,7 @@ describe('TranslationWorkspace', () => {
     expect(workspace.selectedTextRegionId).toBe('second')
     expect(document.activeElement).toBe(inputs[1]!.element)
     expect(inputs[0]!.attributes('aria-keyshortcuts')).toBe('Alt+ArrowUp Alt+ArrowDown')
+    expect(wrapper.get('[role="alert"]').text()).toContain('sprite_base/template/missing.png · Not found')
   })
 
   it('navigates missing translations to their text region', async () => {

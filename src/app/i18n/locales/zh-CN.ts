@@ -31,6 +31,7 @@ export default {
   },
   translation: {
     issues: '{count} 个翻译问题',
+    backgroundDiagnostics: '底图不可用',
     missingTranslation: '缺少翻译：{label}',
     textOverflow: '文字溢出：{label}',
     autoFitAtMinimum: '自动缩放已到最小字号：{label}',

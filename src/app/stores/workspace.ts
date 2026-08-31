@@ -62,6 +62,15 @@ interface ResourceOperation {
 
 type TextureImageUrls = Record<string, Record<string, string>>
 type BackgroundImageUrls = Record<string, string>
+interface BackgroundDiagnostic {
+  resourceId: string
+  path: string
+  message: string
+}
+interface BackgroundLoadResult {
+  urls: BackgroundImageUrls
+  diagnostics: BackgroundDiagnostic[]
+}
 
 const AUTOSAVE_DELAY_MS = 5_000
 let activeRepository: ProjectRepository | undefined
@@ -83,6 +92,27 @@ function workspaceErrorFrom(error: unknown): WorkspaceError {
   }
 }
 
+export async function loadBackgroundImages(
+  storage: ProjectStorage,
+  backgrounds: ImageResource[],
+): Promise<BackgroundLoadResult> {
+  const urls: BackgroundImageUrls = {}
+  const diagnostics: BackgroundDiagnostic[] = []
+  for (const background of backgrounds) {
+    try {
+      const data = await storage.readBinary(background.path)
+      urls[background.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
+    } catch (error) {
+      diagnostics.push({
+        resourceId: background.id,
+        path: background.path,
+        message: error instanceof Error ? error.message : 'Unable to load background image.',
+      })
+    }
+  }
+  return { urls, diagnostics }
+}
+
 export const useWorkspaceStore = defineStore('workspace', () => {
   const project = ref<ProjectManifest>()
   const spriteTables = ref<SpriteTable[]>([])
@@ -90,6 +120,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const backgroundImageUrls = ref<BackgroundImageUrls>({})
   const projectFonts = ref<ProjectFont[]>([])
   const fontDiagnostics = ref<FontDiagnostic[]>([])
+  const backgroundDiagnostics = ref<BackgroundDiagnostic[]>([])
   const selectedSpriteTableId = ref<string>()
   const selectedSpriteId = ref<string>()
   const selectedTextRegionId = ref<string>()
@@ -197,24 +228,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return urls
     } catch (caughtError) {
       revokeTextureImageUrls(urls)
-      throw caughtError
-    }
-  }
-
-  async function loadBackgroundImages(
-    storage: ProjectStorage,
-    backgrounds: ImageResource[],
-  ): Promise<BackgroundImageUrls> {
-    const urls: BackgroundImageUrls = {}
-
-    try {
-      for (const background of backgrounds) {
-        const data = await storage.readBinary(background.path)
-        urls[background.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
-      }
-      return urls
-    } catch (caughtError) {
-      revokeBackgroundImageUrls(urls)
       throw caughtError
     }
   }
@@ -455,25 +468,25 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       revokeTextureImageUrls(loadedImageUrls)
       return false
     }
-    const loadedBackgroundUrls = await loadBackgroundImages(storage, [
+    const loadedBackgrounds = await loadBackgroundImages(storage, [
       ...(loadedProject.backgroundTemplates ?? []),
       ...(loadedProject.spriteBackgrounds ?? []),
     ])
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
-      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     const loadedFonts = await scanProjectFonts(storage)
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
-      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     const fontRegistration = await projectFontRegistry.register(storage, loadedFonts.fonts)
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
-      revokeBackgroundImageUrls(loadedBackgroundUrls)
+      revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     const firstSpriteTable = loadedSpriteTables[0]
@@ -490,9 +503,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     resetDocumentHistory()
     spriteTables.value = loadedSpriteTables
     textureImageUrls.value = loadedImageUrls
-    backgroundImageUrls.value = loadedBackgroundUrls
+    backgroundImageUrls.value = loadedBackgrounds.urls
     projectFonts.value = loadedFonts.fonts.filter((font) => fontRegistration.registeredIds.includes(font.id))
     fontDiagnostics.value = [...loadedFonts.diagnostics, ...fontRegistration.diagnostics]
+    backgroundDiagnostics.value = loadedBackgrounds.diagnostics
     selectedSpriteTableId.value = firstSpriteTable?.id
     selectedSpriteId.value = firstSprite?.id
     selectedTextRegionId.value = undefined
@@ -1023,6 +1037,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const oldUrl = backgroundImageUrls.value[id]
       if (oldUrl) URL.revokeObjectURL(oldUrl)
       backgroundImageUrls.value = { ...backgroundImageUrls.value, [id]: URL.createObjectURL(file) }
+      backgroundDiagnostics.value = backgroundDiagnostics.value.filter(
+        (diagnostic) => diagnostic.resourceId !== id,
+      )
       status.value = 'ready'
       return true
     } catch (caughtError) {
@@ -1060,6 +1077,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (url) URL.revokeObjectURL(url)
       backgroundImageUrls.value = Object.fromEntries(
         Object.entries(backgroundImageUrls.value).filter(([resourceId]) => resourceId !== id),
+      )
+      backgroundDiagnostics.value = backgroundDiagnostics.value.filter(
+        (diagnostic) => diagnostic.resourceId !== id,
       )
       status.value = 'ready'
       return true
@@ -1171,6 +1191,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     backgroundImageUrls,
     projectFonts,
     fontDiagnostics,
+    backgroundDiagnostics,
     textDiagnostics,
     selectedTextDiagnostics,
     selectedSpriteTableId,

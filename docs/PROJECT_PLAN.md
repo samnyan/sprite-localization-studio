@@ -265,7 +265,7 @@ interface ProjectFont {
 ### M10：QA、代码质量与用户体验
 
 - Region 诊断：缺译文、overflow、AutoFit 触底、缺字体/glyph、缺底图、悬空模板、渲染失败。
-- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow、AutoFit 最小字号与显式工程字体缺失警告；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径、可用时的 Sprite ID 和错误消息；继续补齐 glyph、缺资源和渲染失败诊断。
+- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow、AutoFit 最小字号与显式工程字体缺失警告；底图文件缺失不再阻断工程打开，并报告资源路径与加载错误；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径、可用时的 Sprite ID 和错误消息；继续补齐更细粒度的缺资源和渲染失败诊断。
 - 显示脏状态、保存中/失败和最近成功保存时间（已完成）。
 - 选中的 TextRegion 支持键盘精确移动：方向键移动 1px，Shift+方向键移动 10px，并在 Sprite 边界内约束（已完成）。
 - Sprite 检查器直接展示选中 TextRegion 的缺译文、overflow、AutoFit 和工程字体诊断，并按当前 Region 限定计算以避免编辑时扫描全项目（已完成）。

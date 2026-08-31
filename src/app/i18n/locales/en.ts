@@ -31,6 +31,7 @@ export default {
   },
   translation: {
     issues: 'No translation issues | 1 translation issue | {count} translation issues',
+    backgroundDiagnostics: 'Background images unavailable',
     missingTranslation: 'Missing: {label}',
     textOverflow: 'Text overflows: {label}',
     autoFitAtMinimum: 'AutoFit minimum: {label}',
