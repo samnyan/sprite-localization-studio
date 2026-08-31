@@ -183,6 +183,7 @@ export default {
     title: 'Text regions',
     drawHint: 'Drag on the preview to add a region.',
     sourceSpace: 'Regions use original sprite pixels.',
+    keyboardMove: 'Move text region {key}. Arrow keys move 1 pixel; Shift+Arrow keys move 10 pixels.',
     delete: 'Delete region',
     key: 'Translation key',
     x: 'X',

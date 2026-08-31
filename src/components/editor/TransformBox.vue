@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 import type { Rect, Size } from '@/domain/shared/geometry'
 
@@ -22,11 +22,13 @@ const props = withDefaults(
     selected?: boolean
     editable?: boolean
     minSize?: number
+    keyboardLabel?: string
   }>(),
   { rotation: 0, selected: false, editable: true, minSize: 2 },
 )
 const emit = defineEmits<{ select: []; commit: [rect: Rect] }>()
 const draft = ref<Rect>({ ...props.rect })
+const moveTarget = ref<SVGRectElement>()
 const operation = ref<{ handle: Handle; point: { x: number; y: number }; rect: Rect }>()
 const handles: Array<{ handle: Handle; cursor: string }> = [
   { handle: 'north-west', cursor: 'nwse-resize' },
@@ -101,6 +103,7 @@ function begin(handle: Handle, event: PointerEvent): void {
   event.stopPropagation()
   if (!props.selected) {
     emit('select')
+    void nextTick(() => moveTarget.value?.focus())
     return
   }
   operation.value = { handle, point: point(event), rect: { ...draft.value } }
@@ -123,6 +126,54 @@ function finish(): void {
   if (!operation.value) return
   operation.value = undefined
   emit('commit', { ...draft.value })
+}
+
+function isEqual(left: Rect, right: Rect): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  )
+}
+
+function nudge(event: KeyboardEvent): void {
+  if (
+    !props.editable ||
+    !props.selected ||
+    operation.value ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey
+  ) {
+    return
+  }
+
+  const distance = event.shiftKey ? 10 : 1
+  let deltaX = 0
+  let deltaY = 0
+  switch (event.key) {
+    case 'ArrowUp':
+      deltaY = -distance
+      break
+    case 'ArrowRight':
+      deltaX = distance
+      break
+    case 'ArrowDown':
+      deltaY = distance
+      break
+    case 'ArrowLeft':
+      deltaX = -distance
+      break
+    default:
+      return
+  }
+
+  event.preventDefault()
+  const next = transform(draft.value, 'move', deltaX, deltaY)
+  if (isEqual(draft.value, next)) return
+  draft.value = next
+  emit('commit', { ...next })
 }
 
 function position(handle: Handle): { x: number; y: number } {
@@ -164,6 +215,7 @@ function position(handle: Handle): { x: number; y: number } {
     @pointercancel="finish"
   >
     <rect
+      ref="moveTarget"
       :x="draft.x"
       :y="draft.y"
       :width="draft.width"
@@ -174,7 +226,12 @@ function position(handle: Handle): { x: number; y: number } {
         'cursor-pointer stroke-sky-500': editable && !selected,
         'stroke-sky-500': !editable,
       }"
+      :tabindex="editable && selected ? 0 : undefined"
+      role="group"
+      :aria-label="keyboardLabel"
+      aria-keyshortcuts="ArrowUp ArrowRight ArrowDown ArrowLeft Shift+ArrowUp Shift+ArrowRight Shift+ArrowDown Shift+ArrowLeft"
       @pointerdown="begin('move', $event)"
+      @keydown="nudge"
     />
     <template v-if="editable && selected">
       <rect

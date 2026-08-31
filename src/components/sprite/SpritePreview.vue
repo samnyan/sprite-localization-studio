@@ -200,6 +200,7 @@ watch(
             :rotation="region.rotation"
             :selected="region.id === selectedTextRegionId"
             :editable="editable"
+            :keyboard-label="t('textRegion.keyboardMove', { key: region.translationKey })"
             @select="emit('selectRegion', region.id)"
             @commit="emit('updateRegion', region.id, $event)"
           />
