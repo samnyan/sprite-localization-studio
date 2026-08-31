@@ -251,7 +251,7 @@ function showMoreDiagnostics(): void {
 }
 
 function diagnosticMessage(diagnostic: TextDiagnostic, label: string): string {
-  return t(`translation.${diagnostic.code}`, { label })
+  return t(`translation.${diagnostic.code}`, { label, fontId: diagnostic.fontId })
 }
 
 function startResize(index: number, event: PointerEvent): void {
@@ -429,14 +429,18 @@ onUnmounted(() => {
         <div class="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto" role="list">
           <div
             v-for="item in diagnosticItems"
-            :key="JSON.stringify([item.diagnostic.spriteTableId, item.diagnostic.spriteId, item.diagnostic.regionId, item.diagnostic.code])"
+            :key="JSON.stringify([item.diagnostic.spriteTableId, item.diagnostic.spriteId, item.diagnostic.regionId, item.diagnostic.code, item.diagnostic.fontId])"
             role="listitem"
           >
             <Button
               variant="outline"
               size="sm"
               class="max-w-72"
-              :aria-label="t('translation.goToIssue', { label: item.label })"
+              :aria-label="
+                t('translation.goToIssue', {
+                  label: diagnosticMessage(item.diagnostic, item.label),
+                })
+              "
               @click="selectDiagnostic(item.diagnostic)"
             >
               <span class="truncate">{{ diagnosticMessage(item.diagnostic, item.label) }}</span>

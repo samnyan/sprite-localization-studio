@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isTextRenderConfig,
   ProjectFormatError,
   ProjectRepository,
   parseProjectManifest,
@@ -42,6 +43,20 @@ function createStorage(initialText: string): {
 }
 
 describe('parseProjectManifest', () => {
+  it('accepts an optional non-empty project font reference', () => {
+    const render = {
+      fontFamily: 'Demo',
+      fontSize: 24,
+      fontWeight: 400,
+      color: '#ffffff',
+      align: 'center' as const,
+    }
+
+    expect(isTextRenderConfig({ ...render, fontId: 'font-1' })).toBe(true)
+    expect(isTextRenderConfig({ ...render, fontId: '' })).toBe(false)
+    expect(isTextRenderConfig({ ...render, fontId: 1 })).toBe(false)
+  })
+
   it('migrates the minimal v1 project manifest in memory', () => {
     expect(parseProjectManifest('{"schemaVersion":1,"name":"Sample"}')).toEqual({
       schemaVersion: 3,

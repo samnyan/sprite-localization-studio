@@ -140,6 +140,7 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
   }
   return (
     isNonEmptyString(config.fontFamily) &&
+    (config.fontId === undefined || isNonEmptyString(config.fontId)) &&
     Number.isFinite(config.fontSize) &&
     (config.fontSize as number) > 0 &&
     Number.isFinite(config.fontWeight) &&

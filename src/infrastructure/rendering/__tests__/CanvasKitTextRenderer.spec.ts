@@ -20,6 +20,15 @@ describe('isCanvasKitTextRenderSupported', () => {
     expect(isCanvasKitTextRenderSupported({ ...DEFAULT_TEXT_RENDER, fontFamily: 'Arial' })).toBe(false)
   })
 
+  it('does not hide a missing explicit project font behind a matching family', () => {
+    const byId = vi.spyOn(projectFontRegistry, 'findDataById').mockReturnValue(undefined)
+    const byDescriptor = vi.spyOn(projectFontRegistry, 'findData').mockReturnValue(new ArrayBuffer(8))
+
+    expect(isCanvasKitTextRenderSupported({ ...DEFAULT_TEXT_RENDER, fontId: 'missing-font' })).toBe(false)
+    expect(byId).toHaveBeenCalledWith('missing-font')
+    expect(byDescriptor).not.toHaveBeenCalled()
+  })
+
   it('falls back for styles that require Canvas 2D parity', () => {
     expect(isCanvasKitTextRenderSupported({
       ...DEFAULT_TEXT_RENDER,

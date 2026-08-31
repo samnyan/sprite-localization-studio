@@ -224,6 +224,7 @@ interface ProjectFont {
 - 样式编辑器用可搜索下拉框展示 family、字重、样式和来源文件。
 - 保留手动输入 CSS/系统字体；明确标识不可移植风险。
 - 字体缺失、解析失败、缺 glyph 产生可定位诊断，不静默回退。
+- 显式选择的工程字体以扫描 ID 绑定到样式；手动 CSS/系统字体不绑定。工程字体缺失时按 Region 显示非阻断诊断，CanvasKit 原子回退 Canvas 2D。
 - 工程关闭或字体变化时释放 Typeface/FontMgr 缓存。
 - 两种以上项目字体在预览和导出中一致；删除在用字体会显示诊断。
 
@@ -263,7 +264,7 @@ interface ProjectFont {
 ### M10：QA、代码质量与用户体验
 
 - Region 诊断：缺译文、overflow、AutoFit 触底、缺字体/glyph、缺底图、悬空模板、渲染失败。
-- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow 与 AutoFit 最小字号警告；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径、可用时的 Sprite ID 和错误消息；继续补齐缺字、缺资源和渲染失败诊断。
+- 构建前运行项目 QA；缺译文错误已阻止导出且可跳到对应 Sprite/Region。工作区使用实际 Canvas 测量显示 overflow、AutoFit 最小字号与显式工程字体缺失警告；单个 Texture 构建失败后继续处理其余任务，并报告 SpriteTable、Texture、源路径、可用时的 Sprite ID 和错误消息；继续补齐 glyph、缺资源和渲染失败诊断。
 - 显示脏状态、保存中/失败和最近成功保存时间（已完成）。
 - 支持按 manifest、完成状态、错误和关键词筛选；Grid/List 虚拟化或按需生成缩略图。
 - 补齐上一项/下一项、保存、撤销/重做、删除、Region 微调和快速聚焦译文快捷键。

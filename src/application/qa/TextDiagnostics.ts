@@ -1,10 +1,11 @@
 import type { ProjectManifest } from '@/domain/project/types'
 
 export interface TextDiagnostic {
-  code: 'missingTranslation' | 'textOverflow' | 'autoFitAtMinimum'
+  code: 'missingTranslation' | 'textOverflow' | 'autoFitAtMinimum' | 'missingProjectFont'
   spriteTableId: string
   spriteId: string
   regionId: string
+  fontId?: string
 }
 
 export function collectTextDiagnostics(project: ProjectManifest): TextDiagnostic[] {

@@ -51,6 +51,7 @@ describe('BrowserFontRegistry', () => {
     expect(registry.version).toBe(1)
     expect(add).toHaveBeenCalledTimes(2)
     expect(registry.findData('Demo', 700, 'normal')).toBeInstanceOf(ArrayBuffer)
+    expect(registry.findDataById('bold')).toBeInstanceOf(ArrayBuffer)
   })
 
   it('does not publish a stale concurrent registration', async () => {
@@ -91,5 +92,7 @@ describe('BrowserFontRegistry', () => {
     expect(add).toHaveBeenCalledTimes(1)
     expect(registry.findData('First', 400, 'normal')).toBeUndefined()
     expect(registry.findData('Second', 400, 'normal')).toBeInstanceOf(ArrayBuffer)
+    expect(registry.findDataById('first')).toBeUndefined()
+    expect(registry.findDataById('second')).toBeInstanceOf(ArrayBuffer)
   })
 })

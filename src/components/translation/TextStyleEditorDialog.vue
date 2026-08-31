@@ -114,9 +114,16 @@ function selectProjectFont(value: unknown): void {
   const font = props.fonts?.find((item) => item.id === id)
   if (!font) return
   selectedProjectFontId.value = id
+  draft.value.fontId = id
   draft.value.fontFamily = font.family
-  if (font.weight) draft.value.fontWeight = font.weight
-  if (font.style) draft.value.fontStyle = font.style
+  draft.value.fontWeight = font.weight ?? 400
+  draft.value.fontStyle = font.style ?? 'normal'
+}
+
+function updateFontFamily(value: string | number): void {
+  draft.value.fontFamily = String(value)
+  draft.value.fontId = undefined
+  selectedProjectFontId.value = undefined
 }
 
 watch(
@@ -127,12 +134,7 @@ watch(
       JSON.stringify({ ...DEFAULT_TEXT_RENDER, ...props.render }),
     ) as TextRenderConfig
     selectedTemplateId.value = props.styleId
-    selectedProjectFontId.value = props.fonts?.find(
-      (font) =>
-        font.family === draft.value.fontFamily &&
-        (!font.weight || font.weight === draft.value.fontWeight) &&
-        (!font.style || font.style === (draft.value.fontStyle ?? 'normal')),
-    )?.id
+    selectedProjectFontId.value = draft.value.fontId
     templateName.value = selectedProjectTemplate.value?.name ?? ''
   },
   { immediate: true, deep: true },
@@ -144,6 +146,7 @@ function selectTemplate(id: string): void {
   selectedTemplateId.value = id
   templateName.value = template.name
   draft.value = JSON.parse(JSON.stringify(template.render)) as TextRenderConfig
+  selectedProjectFontId.value = draft.value.fontId
 }
 
 function save(): void {
@@ -242,9 +245,10 @@ function saveTemplate(overwrite: boolean): void {
             <div class="grid grid-cols-4 gap-3">
               <FormField :label="t('style.fontFamily')"
                 ><Input
-                  v-model="draft.fontFamily"
+                  :model-value="draft.fontFamily"
                   list="project-fonts"
                   class="h-8 w-full rounded border bg-background px-2 text-foreground"
+                  @update:model-value="updateFontFamily"
               /></FormField>
               <FormField :label="t('style.projectFont')">
                 <Select :model-value="selectedProjectFontId" @update:model-value="selectProjectFont">

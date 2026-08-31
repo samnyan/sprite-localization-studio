@@ -125,6 +125,12 @@ function resolveTypeface(canvasKit: CanvasKit, config: TextRenderConfig) {
   return canvasKitTypefaceCache.resolve(canvasKit, config)
 }
 
+function findProjectFontData(config: TextRenderConfig): ArrayBuffer | undefined {
+  return config.fontId
+    ? projectFontRegistry.findDataById(config.fontId)
+    : projectFontRegistry.findData(config.fontFamily, config.fontWeight, config.fontStyle ?? 'normal')
+}
+
 function isSupportedPaint(paint: TextPaint | undefined): boolean {
   if (!paint || paint.mode === 'transparent') return true
   if (!isHexColor(paint.color)) return false
@@ -177,17 +183,18 @@ function isCanvasKitParagraphSupported(text: string, render: TextRenderConfig): 
     !(config.stroke && config.stroke.width > 0) &&
     activeShadows(config).length === 0 &&
     !hasEnabledLayers(config) &&
-    projectFontRegistry.findData(config.fontFamily, config.fontWeight, config.fontStyle ?? 'normal') !== undefined
+    findProjectFontData(config) !== undefined
 }
 
 export function isCanvasKitTextRenderSupported(render: TextRenderConfig): boolean {
   const config = { ...DEFAULT_TEXT_RENDER, ...render }
   const family = config.fontFamily.trim().toLowerCase()
-  if (!genericFamilies.has(family) && !projectFontRegistry.findData(
-    config.fontFamily,
-    config.fontWeight,
-    config.fontStyle ?? 'normal',
-  )) {
+  const projectFontData = findProjectFontData(config)
+  if (
+    config.fontId
+      ? !projectFontData
+      : !genericFamilies.has(family) && !projectFontData
+  ) {
     return false
   }
   if (
@@ -329,7 +336,7 @@ function drawParagraphTextRegion(
   render: TextRenderConfig,
 ): void {
   const config = { ...DEFAULT_TEXT_RENDER, ...render }
-  const data = projectFontRegistry.findData(config.fontFamily, config.fontWeight, config.fontStyle ?? 'normal')
+  const data = findProjectFontData(config)
   if (!data) throw new CanvasKitTextFallbackError('CanvasKit paragraph font is unavailable.')
   const fill = config.fill ?? { mode: 'solid', color: config.color }
   if (fill.mode !== 'solid' || !isHexColor(fill.color)) {

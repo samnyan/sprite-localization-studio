@@ -74,6 +74,10 @@ export class BrowserFontRegistry {
     }
     return undefined
   }
+
+  findDataById(id: string): ArrayBuffer | undefined {
+    return this.data.get(id)
+  }
 }
 
 export const projectFontRegistry = new BrowserFontRegistry()

@@ -46,6 +46,8 @@ export interface TextStyleLayer {
 
 export interface TextRenderConfig {
   fontFamily: string
+  /** Explicit project-font reference; absent means a manual CSS/system family. */
+  fontId?: string
   fontSize: number
   fontWeight: number
   fontStyle?: 'normal' | 'italic' | 'oblique'

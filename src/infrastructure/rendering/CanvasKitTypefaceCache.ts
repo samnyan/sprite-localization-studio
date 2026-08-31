@@ -14,14 +14,19 @@ export class CanvasKitTypefaceCache {
       this.runtime = canvasKit
       this.fontVersion = projectFontRegistry.version
     }
-    const key = `${config.fontFamily}\u0000${config.fontWeight}\u0000${config.fontStyle ?? 'normal'}`
+    const key = config.fontId
+      ? `id\u0000${config.fontId}`
+      : `${config.fontFamily}\u0000${config.fontWeight}\u0000${config.fontStyle ?? 'normal'}`
     const cached = this.typefaces.get(key)
     if (cached) return cached
-    const data = projectFontRegistry.findData(
-      config.fontFamily,
-      config.fontWeight,
-      config.fontStyle ?? 'normal',
-    )
+    const data = config.fontId
+      ? projectFontRegistry.findDataById(config.fontId)
+      : projectFontRegistry.findData(
+          config.fontFamily,
+          config.fontWeight,
+          config.fontStyle ?? 'normal',
+        )
+    if (config.fontId && !data) return undefined
     const typeface = data ? canvasKit.Typeface.MakeTypefaceFromData(data) : canvasKit.Typeface.GetDefault()
     if (!typeface) return undefined
     this.typefaces.set(key, typeface)

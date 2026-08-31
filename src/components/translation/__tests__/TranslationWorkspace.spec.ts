@@ -147,7 +147,7 @@ describe('TranslationWorkspace', () => {
     await nextTick()
 
     const issue = wrapper.get(
-      '[aria-label="Go to translation issue: Second / second-sprite / start"]',
+      '[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]',
     )
     expect(wrapper.text()).toContain('1 translation issue')
     expect(i18n.global.t('translation.issues', 2)).toBe('2 translation issues')
@@ -181,7 +181,7 @@ describe('TranslationWorkspace', () => {
       ),
     }
     await nextTick()
-    expect(wrapper.find('[aria-label="Go to translation issue: Second / second-sprite / start"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]').exists()).toBe(false)
     const completedInput = wrapper.get('textarea[aria-label="Translation"]')
     expect(completedInput).toBeDefined()
     await completedInput.trigger('blur')
@@ -223,6 +223,66 @@ describe('TranslationWorkspace', () => {
     expect(showMore).toBeDefined()
     await showMore?.trigger('click')
     expect(wrapper.findAll('[role="listitem"]')).toHaveLength(13)
+  })
+
+  it('shows a navigable diagnostic for an unavailable explicit project font', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{
+        spriteTableId: 'ui',
+        spriteId: 'start',
+        textRegions: [{
+          id: 'title',
+          rect: { x: 0, y: 0, width: 1, height: 1 },
+          rotation: 0,
+          translationKey: 'title',
+          translatedText: 'Start',
+          render: {
+            fontFamily: 'Demo',
+            fontId: 'missing-font',
+            fontSize: 16,
+            fontWeight: 400,
+            color: '#fff',
+            align: 'left',
+          },
+        }],
+      }],
+    }
+    workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
+    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.selectSpriteTable('ui')
+    const scrollIntoView = vi.fn<() => void>()
+    scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'scrollIntoView',
+    )
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    })
+
+    const wrapper = mount(TranslationWorkspace, {
+      attachTo: document.body,
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+        },
+      },
+    })
+    mountedWrapper = wrapper
+
+    expect(wrapper.text()).toContain('Project font unavailable (missing-font): UI / start / title')
+    await wrapper.get('[aria-label="Go to translation issue: Project font unavailable (missing-font): UI / start / title"]').trigger('click')
+    expect(workspace.selectedTextRegionId).toBe('title')
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
   })
 })
 

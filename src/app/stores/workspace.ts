@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
 import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
+import { collectTextFontDiagnostics } from '@/application/qa/TextFontDiagnostics'
 import { collectTextLayoutDiagnostics } from '@/application/qa/TextLayoutDiagnostics'
 import {
   createBackgroundTemplatePath,
@@ -119,7 +120,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!project.value) return []
     const missing = collectTextDiagnostics(project.value)
     const layout = measureText ? collectTextLayoutDiagnostics(project.value, measureText) : []
-    return [...missing, ...layout]
+    const fonts = collectTextFontDiagnostics(
+      project.value,
+      new Set(projectFonts.value.map((font) => font.id)),
+    )
+    return [...missing, ...layout, ...fonts]
   })
   const selectedSpriteTable = computed(() =>
     spriteTables.value.find((spriteTable) => spriteTable.id === selectedSpriteTableId.value),
