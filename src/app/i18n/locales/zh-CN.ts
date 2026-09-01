@@ -180,6 +180,11 @@ export default {
     textures: '贴图',
     sprites: 'Sprites',
   },
+  spriteGrid: {
+    previewSize: '预览大小',
+    spriteCount: '{count} 个 Sprite',
+    empty: '此 Sprite Table 没有 Sprite。',
+  },
   sprite: {
     spriteTable: 'Sprite Table',
     texture: '贴图',

@@ -50,6 +50,7 @@ import { getLogicalSpriteSize } from '@/infrastructure/image/spriteGeometry'
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
 export type PreviewBackground = 'transparent' | 'black' | 'white'
+export type SpriteManagementView = 'grid' | 'editor'
 
 interface WorkspaceError {
   key: string
@@ -143,6 +144,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const status = ref<WorkspaceStatus>('idle')
   const error = ref<WorkspaceError>()
   const mode = ref<WorkspaceMode>('sprites')
+  const spriteManagementView = ref<SpriteManagementView>('grid')
   const previewBackground = ref<PreviewBackground>('transparent')
   const lastBuildReport = ref<LocalizedTextureBuildReport>()
   const buildProgress = ref<LocalizedTextureBuildProgress>()
@@ -518,7 +520,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       return false
     }
     const firstSpriteTable = loadedSpriteTables[0]
-    const firstSprite = firstSpriteTable?.sprites[0]
 
     revokeTextureImageUrls(textureImageUrls.value)
     revokeBackgroundImageUrls(backgroundImageUrls.value)
@@ -536,8 +537,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     fontDiagnostics.value = [...loadedFonts.diagnostics, ...fontRegistration.diagnostics]
     backgroundDiagnostics.value = loadedBackgrounds.diagnostics
     selectedSpriteTableId.value = firstSpriteTable?.id
-    selectedSpriteId.value = firstSprite?.id
+    selectedSpriteId.value = undefined
     selectedTextRegionId.value = undefined
+    spriteManagementView.value = 'grid'
     directoryName.value = directory.name
     return true
   }
@@ -1215,6 +1217,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedSpriteTableId.value = spriteTable?.id
     selectedSpriteId.value = undefined
     selectedTextRegionId.value = undefined
+    spriteManagementView.value = 'grid'
   }
 
   function selectSprite(spriteTableId: string, spriteId: string): void {
@@ -1224,6 +1227,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedSpriteTableId.value = spriteTable.id
     selectedSpriteId.value = sprite.id
     selectedTextRegionId.value = undefined
+  }
+
+  function openSprite(spriteTableId: string, spriteId: string): void {
+    selectSprite(spriteTableId, spriteId)
+    if (selectedSpriteId.value === spriteId) spriteManagementView.value = 'editor'
   }
 
   function selectTextRegion(regionId?: string): void {
@@ -1291,6 +1299,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     canUndo,
     canRedo,
     mode,
+    spriteManagementView,
     previewBackground,
     lastBuildReport,
     buildProgress,
@@ -1326,6 +1335,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     clearError,
     selectSpriteTable,
     selectSprite,
+    openSprite,
     selectTextRegion,
     selectTextDiagnostic,
     selectProject,

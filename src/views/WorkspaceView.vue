@@ -19,6 +19,7 @@ import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
 import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
+import SpriteTableGrid from '@/components/sprite/SpriteTableGrid.vue'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -107,6 +108,15 @@ const lastSavedText = computed(() => {
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
 const selectedTextDiagnostics = computed(() => workspace.selectedTextDiagnostics)
 
+function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
+  return (
+    workspace.project?.translations?.some(
+      (translation) =>
+        translation.spriteTableId === spriteTableId && translation.spriteId === spriteId,
+    ) ?? false
+  )
+}
+
 watch(
   () => workspace.project?.name,
   (name) => {
@@ -133,15 +143,6 @@ async function buildTextures(): Promise<void> {
   if (await workspace.buildTextures()) {
     toast.success(t('build.successToast'), { description: t('build.outputDirectory') })
   }
-}
-
-function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
-  return (
-    workspace.project?.translations?.some(
-      (translation) =>
-        translation.spriteTableId === spriteTableId && translation.spriteId === spriteId,
-    ) ?? false
-  )
 }
 
 async function toggleTranslation(event: Event): Promise<void> {
@@ -335,8 +336,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                 class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-5 text-left hover:bg-accent"
                 :class="{
                   'bg-accent':
-                    workspace.selectedSpriteTableId === spriteTable.id &&
-                    !workspace.selectedSpriteId,
+                    workspace.selectedSpriteTableId === spriteTable.id && !workspace.selectedSpriteId,
                 }"
                 @click="workspace.selectSpriteTable(spriteTable.id)"
               >
@@ -359,7 +359,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                       workspace.selectedSpriteId === sprite.id,
                     'font-semibold': isSpriteTranslationEnabled(spriteTable.id, sprite.id),
                   }"
-                  @click="workspace.selectSprite(spriteTable.id, sprite.id)"
+                  @click="workspace.openSprite(spriteTable.id, sprite.id)"
                 >
                   <Image class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
                     sprite.name
@@ -405,6 +405,16 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
             >
           </div>
         </div>
+        <SpriteTableGrid
+          v-else-if="
+            workspace.selectedSpriteTable && workspace.spriteManagementView === 'grid'
+          "
+          :sprite-table="workspace.selectedSpriteTable"
+          :texture-urls="workspace.textureImageUrls[workspace.selectedSpriteTable.id] ?? {}"
+          :selected-sprite-id="workspace.selectedSpriteId"
+          @select="workspace.selectSprite(workspace.selectedSpriteTable!.id, $event)"
+          @open="workspace.openSprite(workspace.selectedSpriteTable!.id, $event)"
+        />
         <SpritePreview
           v-else-if="workspace.selectedTexture && workspace.selectedSprite && selectedImageUrl"
           :image-url="selectedImageUrl"

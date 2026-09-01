@@ -180,6 +180,11 @@ export default {
     textures: 'Textures',
     sprites: 'Sprites',
   },
+  spriteGrid: {
+    previewSize: 'Preview size',
+    spriteCount: '{count} sprites',
+    empty: 'No sprites in this Sprite Table.',
+  },
   sprite: {
     spriteTable: 'Sprite table',
     texture: 'Texture',

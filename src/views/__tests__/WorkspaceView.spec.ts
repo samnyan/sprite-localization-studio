@@ -6,12 +6,13 @@ import { toast } from 'vue-sonner'
 
 import { i18n, setLocale } from '@/app/i18n'
 import { useWorkspaceStore } from '@/app/stores/workspace'
+import SpriteTableGrid from '@/components/sprite/SpriteTableGrid.vue'
 import WorkspaceView from '@/views/WorkspaceView.vue'
 
 vi.mock('vue-sonner', () => ({ toast: { success: vi.fn<() => void>() } }))
 
 describe('WorkspaceView', () => {
-  it('shows sprite tables grouped by texture and selected sprite metadata', () => {
+  it('shows sprite tables, child sprites, and selected sprite metadata', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     setLocale('en')
@@ -63,7 +64,7 @@ describe('WorkspaceView', () => {
       },
     ]
     workspace.textureImageUrls = { ui: { 'page-00': 'blob:page-00', 'page-01': 'blob:page-01' } }
-    workspace.selectSprite('ui', 'button-start')
+    workspace.openSprite('ui', 'button-start')
 
     const wrapper = mount(WorkspaceView, {
       global: {
@@ -79,14 +80,70 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).not.toContain('page-00')
     expect(wrapper.text()).toContain('button_start')
     const resourceItems = wrapper.findAll('aside button').map((button) => button.text())
-    const markedSprite = wrapper
-      .findAll('aside button')
-      .find((button) => button.text() === 'button_start')
-    expect(markedSprite?.classes()).toContain('font-semibold')
-    expect(resourceItems.indexOf('button_start')).toBeLessThan(resourceItems.indexOf('button_back'))
+    expect(resourceItems.some((item) => item.startsWith('UI Table'))).toBe(true)
+    expect(resourceItems).toContain('button_start')
     expect(wrapper.text()).toContain('90°')
     expect(wrapper.text()).toContain('180 × 100')
     expect(wrapper.find('[data-testid="sprite-preview"]').exists()).toBe(true)
+  })
+
+  it('keeps the grid open after selection and opens the sprite editor on a grid open action', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{ spriteTableId: 'ui', spriteId: 'button', textRegions: [] }],
+    }
+    workspace.spriteTables = [{
+      schemaVersion: 1,
+      id: 'ui',
+      name: 'UI Table',
+      textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 32, height: 32 } }],
+      sprites: [{
+        id: 'button',
+        name: 'Button',
+        textureId: 'atlas',
+        frame: { x: 0, y: 0, width: 32, height: 32 },
+        rotation: 0,
+        trimmed: false,
+      }],
+    }]
+    workspace.textureImageUrls = { ui: { atlas: 'blob:atlas' } }
+    workspace.selectSpriteTable('ui')
+    const wrapper = mount(WorkspaceView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          Slider: true,
+          SpritePreview: { template: '<div data-testid="sprite-preview"></div>' },
+        },
+      },
+    })
+    const grid = wrapper.findComponent(SpriteTableGrid)
+
+    grid.vm.$emit('select', 'button')
+    await nextTick()
+
+    expect(workspace.selectedSpriteId).toBe('button')
+    expect(workspace.spriteManagementView).toBe('grid')
+    expect(wrapper.findComponent(SpriteTableGrid).exists()).toBe(true)
+    expect(wrapper.find('aside:last-of-type').text()).toContain('Button')
+
+    grid.vm.$emit('open', 'button')
+    await nextTick()
+
+    expect(workspace.spriteManagementView).toBe('editor')
+    expect(wrapper.find('[data-testid="sprite-preview"]').exists()).toBe(true)
+    expect(
+      wrapper
+        .findAll('aside button')
+        .find((button) => button.text() === 'Button')
+        ?.classes(),
+    ).toContain('bg-accent')
   })
 
   it('shows workspace errors above every workspace mode', () => {
@@ -203,7 +260,7 @@ describe('WorkspaceView', () => {
         trimmed: false,
       }],
     }]
-    workspace.selectSprite('ui', 'button-start')
+    workspace.openSprite('ui', 'button-start')
     workspace.selectTextRegion('title')
 
     const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
