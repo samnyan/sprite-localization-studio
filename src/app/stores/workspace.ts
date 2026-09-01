@@ -79,6 +79,14 @@ let activeRepository: ProjectRepository | undefined
 let activeStorage: ProjectStorage | undefined
 let projectActivation = 0
 
+export function setWorkspaceProjectSessionForTesting(
+  repository?: ProjectRepository,
+  storage?: ProjectStorage,
+): void {
+  activeRepository = repository
+  activeStorage = storage
+}
+
 function workspaceErrorFrom(error: unknown): WorkspaceError {
   if (error instanceof SpriteTableFormatError) {
     return { key: `errors.spriteTable.${error.code}`, params: error.params }

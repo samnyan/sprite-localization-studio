@@ -4,7 +4,10 @@ import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 import { i18n, setLocale } from '@/app/i18n'
-import { useWorkspaceStore } from '@/app/stores/workspace'
+import { setWorkspaceProjectSessionForTesting, useWorkspaceStore } from '@/app/stores/workspace'
+import type { ProjectRepository } from '@/application/project/ProjectRepository'
+import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
+import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Select } from '@/components/ui/select'
 import type { SpriteTable } from '@/domain/sprite-table/types'
@@ -15,6 +18,7 @@ let scrollIntoViewDescriptor: PropertyDescriptor | undefined
 afterEach(() => {
   mountedWrapper?.unmount()
   mountedWrapper = undefined
+  setWorkspaceProjectSessionForTesting()
   document.body.replaceChildren()
   if (scrollIntoViewDescriptor) {
     Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', scrollIntoViewDescriptor)
@@ -33,28 +37,51 @@ describe('TranslationWorkspace', () => {
     workspace.project = {
       schemaVersion: 3,
       name: 'Example',
-      translations: [{
-        spriteTableId: 'ui',
-        spriteId: 'start',
-        backgroundType: 'template',
-        backgroundId: 'missing-template',
-        textRegions: [
-          { id: 'first', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'first', translatedText: 'One' },
-          { id: 'second', rect: { x: 0, y: 0, width: 1, height: 1 }, rotation: 0, translationKey: 'second', translatedText: 'Two' },
-        ],
-      }],
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'start',
+          backgroundType: 'template',
+          backgroundId: 'missing-template',
+          textRegions: [
+            {
+              id: 'first',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'first',
+              translatedText: 'One',
+            },
+            {
+              id: 'second',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'second',
+              translatedText: 'Two',
+            },
+          ],
+        },
+      ],
     }
     workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
     workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
-    workspace.backgroundDiagnostics = [{
-      resourceId: 'missing-template',
-      path: 'sprite_base/template/missing.png',
-      message: 'Not found',
-    }]
+    workspace.backgroundDiagnostics = [
+      {
+        resourceId: 'missing-template',
+        path: 'sprite_base/template/missing.png',
+        message: 'Not found',
+      },
+    ]
     workspace.selectSpriteTable('ui')
     const wrapper = mount(TranslationWorkspace, {
       attachTo: document.body,
-      global: { plugins: [pinia, i18n], stubs: { TranslationSpritePreview: true, TextStyleEditorDialog: true, BackgroundEditorDialog: true } },
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+        },
+      },
     })
     mountedWrapper = wrapper
     const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
@@ -70,7 +97,9 @@ describe('TranslationWorkspace', () => {
     expect(workspace.selectedTextRegionId).toBe('second')
     expect(document.activeElement).toBe(inputs[1]!.element)
     expect(inputs[0]!.attributes('aria-keyshortcuts')).toBe('Alt+ArrowUp Alt+ArrowDown')
-    expect(wrapper.get('[role="alert"]').text()).toContain('sprite_base/template/missing.png · Not found')
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      'sprite_base/template/missing.png · Not found',
+    )
   })
 
   it('navigates missing translations to their text region', async () => {
@@ -146,9 +175,9 @@ describe('TranslationWorkspace', () => {
     await filter.setValue('not-present')
     expect(wrapper.text()).toContain('No translations match the filters.')
     await filter.setValue('ready')
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe(
-      'Ready',
-    )
+    expect(
+      (wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value,
+    ).toBe('Ready')
     await filter.setValue('')
     const selects = wrapper.findAllComponents(Select)
     const statusFilter = selects[1]!
@@ -199,7 +228,11 @@ describe('TranslationWorkspace', () => {
       ),
     }
     await nextTick()
-    expect(wrapper.find('[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]').exists()).toBe(false)
+    expect(
+      wrapper
+        .find('[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]')
+        .exists(),
+    ).toBe(false)
     const completedInput = wrapper.get('textarea[aria-label="Translation"]')
     expect(completedInput).toBeDefined()
     await completedInput.trigger('blur')
@@ -251,25 +284,29 @@ describe('TranslationWorkspace', () => {
     workspace.project = {
       schemaVersion: 3,
       name: 'Example',
-      translations: [{
-        spriteTableId: 'ui',
-        spriteId: 'start',
-        textRegions: [{
-          id: 'title',
-          rect: { x: 0, y: 0, width: 1, height: 1 },
-          rotation: 0,
-          translationKey: 'title',
-          translatedText: 'Start',
-          render: {
-            fontFamily: 'Demo',
-            fontId: 'missing-font',
-            fontSize: 16,
-            fontWeight: 400,
-            color: '#fff',
-            align: 'left',
-          },
-        }],
-      }],
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'start',
+          textRegions: [
+            {
+              id: 'title',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'title',
+              translatedText: 'Start',
+              render: {
+                fontFamily: 'Demo',
+                fontId: 'missing-font',
+                fontSize: 16,
+                fontWeight: 400,
+                color: '#fff',
+                align: 'left',
+              },
+            },
+          ],
+        },
+      ],
     }
     workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
     workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
@@ -298,7 +335,11 @@ describe('TranslationWorkspace', () => {
     mountedWrapper = wrapper
 
     expect(wrapper.text()).toContain('Project font unavailable (missing-font): UI / start / title')
-    await wrapper.get('[aria-label="Go to translation issue: Project font unavailable (missing-font): UI / start / title"]').trigger('click')
+    await wrapper
+      .get(
+        '[aria-label="Go to translation issue: Project font unavailable (missing-font): UI / start / title"]',
+      )
+      .trigger('click')
     expect(workspace.selectedTextRegionId).toBe('title')
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
   })
@@ -308,6 +349,12 @@ describe('TranslationWorkspace', () => {
     setActivePinia(pinia)
     setLocale('en')
     const workspace = useWorkspaceStore()
+    const repository = {
+      load: vi.fn<() => Promise<never>>(),
+      save: vi.fn<() => Promise<boolean>>().mockResolvedValue(true),
+      create: vi.fn<() => Promise<never>>(),
+    } as unknown as ProjectRepository
+    setWorkspaceProjectSessionForTesting(repository)
     workspace.project = {
       schemaVersion: 3,
       name: 'Example',
@@ -425,7 +472,9 @@ describe('TranslationWorkspace', () => {
     await tableSelect.vm.$emit('update:modelValue', 'hud')
     expect(wrapper.text()).toContain('1 of 3 shown')
     expect(wrapper.findAll('article')).toHaveLength(1)
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('HUD finished text')
+    expect(
+      (wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value,
+    ).toBe('HUD finished text')
 
     // Filter by search keyword within HUD Table
     const searchInput = wrapper.get('input[aria-label="Filter translations"]')
@@ -434,7 +483,9 @@ describe('TranslationWorkspace', () => {
     expect(wrapper.findAll('article')).toHaveLength(0)
 
     // Clear filters from empty state restores all 3 rows across tables
-    const emptyStateClearButton = wrapper.findAll('button').find((btn) => btn.text() === 'Clear filters')
+    const emptyStateClearButton = wrapper
+      .findAll('button')
+      .find((btn) => btn.text() === 'Clear filters')
     expect(emptyStateClearButton).toBeDefined()
     await emptyStateClearButton?.trigger('click')
     expect(wrapper.text()).toContain('3 of 3 shown')
@@ -445,13 +496,60 @@ describe('TranslationWorkspace', () => {
     await statusSelect.vm.$emit('update:modelValue', 'incomplete')
     expect(wrapper.text()).toContain('1 of 3 shown')
     expect(wrapper.findAll('article')).toHaveLength(1)
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
+    expect(
+      (wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value,
+    ).toBe('')
 
     // Clear filters button in header restores all rows
     const clearButton = wrapper.get('button[aria-label="Clear filters"]')
     await clearButton.trigger('click')
     expect(wrapper.text()).toContain('3 of 3 shown')
     expect(wrapper.findAll('article')).toHaveLength(3)
+
+    // Edit text in HUD row when UI is the selectedSpriteTable
+    expect(workspace.selectedSpriteTableId).toBe('ui')
+    const hudInput = wrapper
+      .findAll('textarea[aria-label="Translation"]')
+      .find((input) => (input.element as HTMLTextAreaElement).value === 'HUD finished text')
+    const hudArticle = hudInput?.element.closest('article')
+    if (!hudInput || !hudArticle) throw new Error('Expected the HUD translation row.')
+    await hudInput.setValue('Edited HUD text')
+
+    const editButtons = wrapper
+      .findAll('article')
+      .find((article) => article.element === hudArticle)
+      ?.findAll('button')
+      .filter((button) => button.text() === 'Edit')
+    if (!editButtons || editButtons.length !== 2) throw new Error('Expected HUD edit actions.')
+    await editButtons[1]!.trigger('click')
+    wrapper.findComponent(TextStyleEditorDialog).vm.$emit('save', {
+      fontFamily: 'CustomFont',
+      fontSize: 32,
+      fontWeight: 700,
+      color: '#ff0000',
+      align: 'left',
+    })
+    await nextTick()
+
+    await editButtons[0]!.trigger('click')
+    wrapper.findComponent(BackgroundEditorDialog).vm.$emit('save', 'blank')
+    await nextTick()
+
+    // Assert only HUD translation changed, UI shared-id sprite was not modified
+    const uiSharedTranslation = workspace.project?.translations?.find(
+      (t) => t.spriteTableId === 'ui' && t.spriteId === 'shared-id',
+    )
+    const hudSharedTranslation = workspace.project?.translations?.find(
+      (t) => t.spriteTableId === 'hud' && t.spriteId === 'shared-id',
+    )
+    expect(uiSharedTranslation?.textRegions[0]?.translatedText).toBe('Finished text')
+    expect(hudSharedTranslation?.textRegions[0]?.translatedText).toBe('Edited HUD text')
+
+    expect(uiSharedTranslation?.textRegions[0]?.render?.fontFamily).toBeUndefined()
+    expect(hudSharedTranslation?.textRegions[0]?.render?.fontFamily).toBe('CustomFont')
+
+    expect(uiSharedTranslation?.backgroundType).toBeUndefined()
+    expect(hudSharedTranslation?.backgroundType).toBe('blank')
   })
 })
 

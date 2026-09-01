@@ -25,6 +25,7 @@ const workspace = useWorkspaceStore()
 const { t } = useI18n()
 const selectedSpriteTable = computed(() => workspace.selectedSpriteTable)
 const editingStyle = ref<{
+  spriteTableId: string
   spriteId: string
   regionId: string
   text: string
@@ -32,6 +33,7 @@ const editingStyle = ref<{
   styleId?: string
 }>()
 const editingBackground = ref<{
+  spriteTableId: string
   spriteId: string
   type?: 'original' | 'blank' | 'template' | 'sprite'
   backgroundId?: string
@@ -64,28 +66,32 @@ const translationRows = computed(() => {
         (item) => item.spriteTableId === spriteTable.id && item.spriteId === sprite.id,
       )
       const texture = spriteTable.textures.find((item) => item.id === sprite.textureId)
-      const imageUrl = texture ? workspace.textureImageUrls[spriteTable.id]?.[texture.id] : undefined
+      const imageUrl = texture
+        ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
+        : undefined
       return translation && texture && imageUrl
-        ? [{
-            sprite,
-            spriteTable,
-            translation,
-            texture,
-            imageUrl,
-            searchText: [
-              spriteTable.name,
-              spriteTable.id,
-              sprite.id,
-              sprite.name,
-              ...translation.textRegions.flatMap((region) => [
-                region.translationKey,
-                region.sourceText ?? '',
-                region.translatedText ?? '',
-              ]),
-            ]
-              .join('\u0000')
-              .toLocaleLowerCase(),
-          }]
+        ? [
+            {
+              sprite,
+              spriteTable,
+              translation,
+              texture,
+              imageUrl,
+              searchText: [
+                spriteTable.name,
+                spriteTable.id,
+                sprite.id,
+                sprite.name,
+                ...translation.textRegions.flatMap((region) => [
+                  region.translationKey,
+                  region.sourceText ?? '',
+                  region.translatedText ?? '',
+                ]),
+              ]
+                .join('\u0000')
+                .toLocaleLowerCase(),
+            },
+          ]
         : []
     }),
   )
@@ -140,7 +146,9 @@ const filteredTranslationRows = computed(() => {
     }
     const regions = row.translation.textRegions
     const complete = regions.length > 0 && regions.every((region) => region.translatedText?.trim())
-    const hasIssue = diagnosticSprites.value.has(spriteKey(row.translation.spriteTableId, row.sprite.id))
+    const hasIssue = diagnosticSprites.value.has(
+      spriteKey(row.translation.spriteTableId, row.sprite.id),
+    )
     if (
       (translationFilter.value === 'complete' && !complete) ||
       (translationFilter.value === 'incomplete' && complete) ||
@@ -209,15 +217,15 @@ function backgroundUrl(backgroundId?: string): string | undefined {
   return backgroundId ? workspace.backgroundImageUrls[backgroundId] : undefined
 }
 
-function setTranslationRow(
-  key: string,
-  element: Element | ComponentPublicInstance | null,
-): void {
+function setTranslationRow(key: string, element: Element | ComponentPublicInstance | null): void {
   if (element instanceof HTMLElement) translationRowsBySprite.set(key, element)
   else translationRowsBySprite.delete(key)
 }
 
-async function selectBackgroundDiagnostic(item: { spriteTableId: string; spriteId: string }): Promise<void> {
+async function selectBackgroundDiagnostic(item: {
+  spriteTableId: string
+  spriteId: string
+}): Promise<void> {
   const sprite = workspace.spriteTables
     .find((table) => table.id === item.spriteTableId)
     ?.sprites.find((candidate) => candidate.id === item.spriteId)
@@ -294,8 +302,11 @@ async function moveTranslatedTextFocus(
       spriteTableId: row.translation.spriteTableId,
     })),
   )
-  const index = regions.findIndex((region) =>
-    region.spriteTableId === spriteTableId && region.spriteId === spriteId && region.regionId === regionId,
+  const index = regions.findIndex(
+    (region) =>
+      region.spriteTableId === spriteTableId &&
+      region.spriteId === spriteId &&
+      region.regionId === regionId,
   )
   const next = index < 0 ? undefined : regions[index + direction]
   if (!next) return
@@ -368,41 +379,36 @@ function finishResize(): void {
 }
 
 function updateText(
+  spriteTableId: string,
   spriteId: string,
   regionId: string,
   field: 'sourceText' | 'translatedText',
   event: Event,
 ): void {
-  if (!selectedSpriteTable.value) return
-  workspace.updateTranslationText(
-    selectedSpriteTable.value.id,
-    spriteId,
-    regionId,
-    field,
-    (event.target as HTMLTextAreaElement).value,
-  )
+  const target = event.target as HTMLTextAreaElement | null
+  const value = target?.value ?? ''
+  workspace.updateTranslationText(spriteTableId, spriteId, regionId, field, value)
 }
 
 function openStyleEditor(
+  spriteTableId: string,
   spriteId: string,
   regionId: string,
   text: string,
   render?: TextRenderConfig,
   styleId?: string,
 ): void {
-  editingStyle.value = { spriteId, regionId, text, render, styleId }
+  editingStyle.value = { spriteTableId, spriteId, regionId, text, render, styleId }
 }
 
 function saveStyle(render: TextRenderConfig, styleId?: string): void {
-  if (!selectedSpriteTable.value || !editingStyle.value) return
+  if (!editingStyle.value) return
   const editing = editingStyle.value
   if (
-    !workspace.updateTranslationRegion(
-      selectedSpriteTable.value.id,
-      editing.spriteId,
-      editing.regionId,
-      { render, styleId },
-    )
+    !workspace.updateTranslationRegion(editing.spriteTableId, editing.spriteId, editing.regionId, {
+      render,
+      styleId,
+    })
   ) {
     return
   }
@@ -432,10 +438,10 @@ function saveBackground(
   type: 'original' | 'blank' | 'template' | 'sprite',
   backgroundId?: string,
 ): void {
-  if (!selectedSpriteTable.value || !editingBackground.value) return
+  if (!editingBackground.value) return
   if (
     workspace.setSpriteTranslationBackground(
-      selectedSpriteTable.value.id,
+      editingBackground.value.spriteTableId,
       editingBackground.value.spriteId,
       backgroundId,
       type,
@@ -446,8 +452,8 @@ function saveBackground(
 }
 
 async function uploadBackground(scope: 'template' | 'sprite', file: File): Promise<void> {
-  if (!selectedSpriteTable.value || !editingBackground.value) return
-  const spriteTableId = selectedSpriteTable.value.id
+  if (!editingBackground.value) return
+  const spriteTableId = editingBackground.value.spriteTableId
   const spriteId = editingBackground.value.spriteId
   const backgroundId =
     scope === 'template'
@@ -456,7 +462,7 @@ async function uploadBackground(scope: 'template' | 'sprite', file: File): Promi
   if (
     backgroundId &&
     editingBackground.value?.spriteId === spriteId &&
-    selectedSpriteTable.value?.id === spriteTableId
+    editingBackground.value?.spriteTableId === spriteTableId
   ) {
     editingBackground.value = { ...editingBackground.value, type: scope, backgroundId }
   }
@@ -511,10 +517,15 @@ onUnmounted(() => {
       >
         <p class="font-medium">{{ t('translation.backgroundDiagnostics') }}</p>
         <div class="mt-1 max-h-24 space-y-1 overflow-y-auto">
-          <template v-for="diagnostic in workspace.backgroundDiagnostics" :key="diagnostic.resourceId">
+          <template
+            v-for="diagnostic in workspace.backgroundDiagnostics"
+            :key="diagnostic.resourceId"
+          >
             <p>{{ diagnostic.path }} · {{ diagnostic.message }}</p>
             <Button
-              v-for="item in backgroundDiagnosticItems.filter((item) => item.diagnostic.resourceId === diagnostic.resourceId)"
+              v-for="item in backgroundDiagnosticItems.filter(
+                (item) => item.diagnostic.resourceId === diagnostic.resourceId,
+              )"
               :key="JSON.stringify([item.spriteTableId, item.spriteId])"
               variant="outline"
               size="sm"
@@ -539,7 +550,15 @@ onUnmounted(() => {
         <div class="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto" role="list">
           <div
             v-for="item in diagnosticItems"
-            :key="JSON.stringify([item.diagnostic.spriteTableId, item.diagnostic.spriteId, item.diagnostic.regionId, item.diagnostic.code, item.diagnostic.fontId])"
+            :key="
+              JSON.stringify([
+                item.diagnostic.spriteTableId,
+                item.diagnostic.spriteId,
+                item.diagnostic.regionId,
+                item.diagnostic.code,
+                item.diagnostic.fontId,
+              ])
+            "
             role="listitem"
           >
             <Button
@@ -622,7 +641,12 @@ onUnmounted(() => {
           role="status"
           aria-live="polite"
         >
-          {{ t('translation.filterResultsCount', { filtered: filteredRowsCount, total: totalRowsCount }) }}
+          {{
+            t('translation.filterResultsCount', {
+              filtered: filteredRowsCount,
+              total: totalRowsCount,
+            })
+          }}
         </div>
       </div>
       <div class="min-h-0 flex-1 overflow-auto">
@@ -653,7 +677,10 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <div v-if="translationRows.length === 0" class="p-6 text-center text-sm text-muted-foreground">
+        <div
+          v-if="translationRows.length === 0"
+          class="p-6 text-center text-sm text-muted-foreground"
+        >
           {{ t('translation.noSprites') }}
         </div>
         <div
@@ -677,10 +704,17 @@ onUnmounted(() => {
           <article
             v-for="row in filteredTranslationRows"
             :key="spriteKey(row.translation.spriteTableId, row.sprite.id)"
-            :ref="(element) => setTranslationRow(spriteKey(row.translation.spriteTableId, row.sprite.id), element)"
+            :ref="
+              (element) =>
+                setTranslationRow(spriteKey(row.translation.spriteTableId, row.sprite.id), element)
+            "
             tabindex="-1"
             class="grid min-w-[900px] border-b bg-card last:border-b-0 focus:outline-none"
-            :class="{ 'ring-2 ring-inset ring-primary': workspace.selectedSpriteTableId === row.translation.spriteTableId && workspace.selectedSpriteId === row.sprite.id }"
+            :class="{
+              'ring-2 ring-inset ring-primary':
+                workspace.selectedSpriteTableId === row.translation.spriteTableId &&
+                workspace.selectedSpriteId === row.sprite.id,
+            }"
             :style="tableStyle"
           >
             <div class="p-3">
@@ -701,7 +735,15 @@ onUnmounted(() => {
                 :disabled="workspace.isBusy"
                 @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
-                @input="updateText(row.sprite.id, region.id, 'sourceText', $event)"
+                @input="
+                  updateText(
+                    row.translation.spriteTableId,
+                    row.sprite.id,
+                    region.id,
+                    'sourceText',
+                    $event,
+                  )
+                "
               ></textarea>
               <span
                 v-if="row.translation.textRegions.length === 0"
@@ -734,8 +776,23 @@ onUnmounted(() => {
                 :disabled="workspace.isBusy"
                 @focus="beginTextEdit(row.translation.spriteTableId, row.sprite.id)"
                 @blur="finishTextEdit(row.translation.spriteTableId, row.sprite.id)"
-                @input="updateText(row.sprite.id, region.id, 'translatedText', $event)"
-                @keydown="handleTranslatedTextKeydown($event, row.translation.spriteTableId, row.sprite.id, region.id)"
+                @input="
+                  updateText(
+                    row.translation.spriteTableId,
+                    row.sprite.id,
+                    region.id,
+                    'translatedText',
+                    $event,
+                  )
+                "
+                @keydown="
+                  handleTranslatedTextKeydown(
+                    $event,
+                    row.translation.spriteTableId,
+                    row.sprite.id,
+                    region.id,
+                  )
+                "
               ></textarea>
               <span
                 v-if="row.translation.textRegions.length === 0"
@@ -767,6 +824,7 @@ onUnmounted(() => {
                   :disabled="workspace.isBusy"
                   @click="
                     editingBackground = {
+                      spriteTableId: row.translation.spriteTableId,
                       spriteId: row.sprite.id,
                       type: row.translation.backgroundType,
                       backgroundId: row.translation.backgroundId,
@@ -799,6 +857,7 @@ onUnmounted(() => {
                   class="mt-2 h-7 w-full text-xs"
                   @click="
                     openStyleEditor(
+                      row.translation.spriteTableId,
                       row.sprite.id,
                       region.id,
                       region.translatedText ?? '',
@@ -839,8 +898,11 @@ onUnmounted(() => {
       :background-id="editingBackground?.backgroundId"
       :templates="workspace.project?.backgroundTemplates ?? []"
       :sprite-backgrounds="
-        selectedSpriteTable && editingBackground
-          ? workspace.spriteBackgroundsForSprite(selectedSpriteTable.id, editingBackground.spriteId)
+        editingBackground
+          ? workspace.spriteBackgroundsForSprite(
+              editingBackground.spriteTableId,
+              editingBackground.spriteId,
+            )
           : []
       "
       :image-urls="workspace.backgroundImageUrls"
