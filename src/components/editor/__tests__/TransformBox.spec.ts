@@ -4,7 +4,11 @@ import { nextTick, ref } from 'vue'
 
 import TransformBox from '@/components/editor/TransformBox.vue'
 
-function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }, rotation = 0) {
+function mountTransformBox(
+  rect = { x: 10, y: 10, width: 20, height: 20 },
+  rotation = 0,
+  bounds = { width: 100, height: 100 },
+) {
   const commits: Array<{ x: number; y: number; width: number; height: number }> = []
   const wrapper = mount({
     components: { TransformBox },
@@ -12,7 +16,7 @@ function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }, rotat
       <svg>
         <TransformBox
           :rect="rect"
-          :bounds="{ width: 100, height: 100 }"
+          :bounds="bounds"
           :rotation="rotation"
           selected
           keyboard-label="Move text region"
@@ -20,11 +24,11 @@ function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }, rotat
         />
       </svg>
     `,
-    data: () => ({ commits, rect, rotation }),
+    data: () => ({ bounds, commits, rect, rotation }),
   })
 
   Object.defineProperty(wrapper.get('svg').element, 'getBoundingClientRect', {
-    value: () => ({ left: 0, top: 0, width: 100, height: 100 }),
+    value: () => ({ left: 0, top: 0, width: bounds.width, height: bounds.height }),
   })
 
   return { wrapper, commits }
@@ -101,6 +105,26 @@ describe('TransformBox', () => {
     await dispatchPointer(transformBox.get('g').element, 'pointerup', 20, 60)
 
     expect(commits).toEqual([{ x: -5, y: 25, width: 50, height: 20 }])
+  })
+
+  it('swaps effective resize limits for a 90 degree rotation', async () => {
+    const { wrapper, commits } = mountTransformBox(
+      { x: 0, y: 0, width: 14, height: 14 },
+      90,
+      { width: 14, height: 182 },
+    )
+    const transformBox = wrapper.findComponent(TransformBox)
+    const eastHandle = transformBox.findAll('rect')[5]
+    if (!eastHandle) throw new Error('Missing east resize handle')
+
+    await dispatchPointer(eastHandle.element, 'pointerdown', 7, 14)
+    await dispatchPointer(transformBox.get('g').element, 'pointermove', 7, 300)
+    await dispatchPointer(transformBox.get('g').element, 'pointerup', 7, 300)
+
+    expect(commits).toHaveLength(1)
+    expect(commits[0]).toMatchObject({ width: 182, height: 14 })
+    expect(commits[0]!.x).toBeCloseTo(-84)
+    expect(commits[0]!.y).toBeCloseTo(84)
   })
 
   it('keeps a rotated region visually inside the Sprite bounds while moving', async () => {

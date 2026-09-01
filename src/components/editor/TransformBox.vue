@@ -69,9 +69,31 @@ function rotatedHalfExtent(width: number, height: number): { x: number; y: numbe
   }
 }
 
+function maximumWidth(height: number): number {
+  const radians = (props.rotation * Math.PI) / 180
+  const cosine = Math.abs(Math.cos(radians))
+  const sine = Math.abs(Math.sin(radians))
+  let maximum = Number.POSITIVE_INFINITY
+
+  if (cosine > 0.000001) maximum = Math.min(maximum, (props.bounds.width - sine * height) / cosine)
+  if (sine > 0.000001) maximum = Math.min(maximum, (props.bounds.height - cosine * height) / sine)
+  return Math.max(props.minSize, maximum)
+}
+
+function maximumHeight(width: number): number {
+  const radians = (props.rotation * Math.PI) / 180
+  const cosine = Math.abs(Math.cos(radians))
+  const sine = Math.abs(Math.sin(radians))
+  let maximum = Number.POSITIVE_INFINITY
+
+  if (sine > 0.000001) maximum = Math.min(maximum, (props.bounds.width - cosine * width) / sine)
+  if (cosine > 0.000001) maximum = Math.min(maximum, (props.bounds.height - sine * width) / cosine)
+  return Math.max(props.minSize, maximum)
+}
+
 function constrain(rect: Rect): Rect {
-  const width = Math.min(Math.max(props.minSize, rect.width), props.bounds.width)
-  const height = Math.min(Math.max(props.minSize, rect.height), props.bounds.height)
+  const width = Math.max(props.minSize, rect.width)
+  const height = Math.max(props.minSize, rect.height)
   const extent = rotatedHalfExtent(width, height)
   const centerX = rect.x + width / 2
   const centerY = rect.y + height / 2
@@ -126,6 +148,12 @@ function transform(rect: Rect, handle: Handle, deltaX: number, deltaY: number): 
   if (handle.includes('south')) height += delta.y
   width = Math.max(props.minSize, width)
   height = Math.max(props.minSize, height)
+  if (handle.includes('east') || handle.includes('west')) {
+    width = Math.min(width, maximumWidth(height))
+  }
+  if (handle.includes('north') || handle.includes('south')) {
+    height = Math.min(height, maximumHeight(width))
+  }
 
   const centerDelta = rotateVector(
     (handle.includes('east')
