@@ -47,6 +47,11 @@ export interface LocalizedTextureBuildReport {
   durationMs: number
 }
 
+export interface LocalizedTextureBuildProgress {
+  completed: number
+  total: number
+}
+
 export type LocalizedTextureBuildResult =
   | { status: 'blocked'; diagnostics: TextDiagnostic[] }
   | { status: 'completed' | 'failed'; report: LocalizedTextureBuildReport }
@@ -94,10 +99,12 @@ export function createLocalizedTextureBuildPlan(
 export async function buildLocalizedTextures(
   plan: LocalizedTextureBuildPlan,
   builder: LocalizedTextureBuilder,
+  onProgress?: (progress: LocalizedTextureBuildProgress) => void,
 ): Promise<LocalizedTextureBuildReport> {
   const startedAt = performance.now()
   const textures: BuiltTexture[] = []
   const failures: LocalizedTextureBuildFailure[] = []
+  onProgress?.({ completed: 0, total: plan.tasks.length })
 
   for (const task of plan.tasks) {
     try {
@@ -111,6 +118,8 @@ export async function buildLocalizedTextures(
         ...(spriteId ? { spriteId } : {}),
         message: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      onProgress?.({ completed: textures.length + failures.length, total: plan.tasks.length })
     }
   }
 
@@ -130,6 +139,7 @@ export async function runLocalizedTextureBuild(
   project: ProjectManifest,
   spriteTables: SpriteTable[],
   createBuilder: () => LocalizedTextureBuilder,
+  onProgress?: (progress: LocalizedTextureBuildProgress) => void,
 ): Promise<LocalizedTextureBuildResult> {
   const diagnostics = collectTextDiagnostics(project)
   if (diagnostics.length) return { status: 'blocked', diagnostics }
@@ -137,6 +147,7 @@ export async function runLocalizedTextureBuild(
   const report = await buildLocalizedTextures(
     createLocalizedTextureBuildPlan(project, spriteTables),
     createBuilder(),
+    onProgress,
   )
   return { status: report.failures.length ? 'failed' : 'completed', report }
 }

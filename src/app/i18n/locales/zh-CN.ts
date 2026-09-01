@@ -173,6 +173,8 @@ export default {
     failure: '{spriteTableId} / {textureId} ({texturePath})：{message}',
     spriteFailure: '{spriteTableId} / {textureId} ({texturePath}) / {spriteId}：{message}',
     failures: '构造失败详情',
+    successToast: '贴图构造完成',
+    outputDirectory: '已输出至 output_textures 目录。',
   },
   spriteTable: {
     textures: '贴图',
@@ -223,6 +225,7 @@ export default {
     opening: '正在打开…',
     saving: '正在保存…',
     building: '正在构造贴图…',
+    buildingProgress: '正在构造贴图 {completed}/{total}…',
     error: '需要处理',
     savedAt: '已保存 {time}',
     unsaved: '有未保存的更改',

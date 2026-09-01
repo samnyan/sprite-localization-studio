@@ -13,6 +13,7 @@ import {
   Undo2,
 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
+import { toast } from 'vue-sonner'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
@@ -20,6 +21,8 @@ import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
+import { Spinner } from '@/components/ui/spinner'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,10 +50,22 @@ const selectedImageUrl = computed(() => {
 const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
-  if (workspace.status === 'building') return t('status.building')
+  if (workspace.status === 'building') {
+    const progress = workspace.buildProgress
+    return progress?.total
+      ? t('status.buildingProgress', { completed: progress.completed, total: progress.total })
+      : t('status.building')
+  }
   if (workspace.status === 'error') return t('status.error')
   if (workspace.isDirty) return t('status.unsaved')
   return t('status.ready')
+})
+const hasBuildProgress = computed(
+  () => workspace.status === 'building' && (workspace.buildProgress?.total ?? 0) > 0,
+)
+const buildProgressValue = computed(() => {
+  const progress = workspace.buildProgress
+  return progress?.total ? (progress.completed / progress.total) * 100 : 0
 })
 const lastBuildText = computed(() => {
   const report = workspace.lastBuildReport
@@ -115,7 +130,9 @@ async function saveProject(): Promise<void> {
 }
 
 async function buildTextures(): Promise<void> {
-  await workspace.buildTextures()
+  if (await workspace.buildTextures()) {
+    toast.success(t('build.successToast'), { description: t('build.outputDirectory') })
+  }
 }
 
 function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
@@ -260,13 +277,15 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
         </DropdownMenuContent>
       </DropdownMenu>
       <Button
-        variant="outline"
         size="sm"
         class="ml-auto"
+        data-testid="build-textures"
         :disabled="workspace.isBusy || !workspace.project"
+        :aria-busy="workspace.status === 'building'"
         @click="buildTextures"
       >
-        <FileOutput data-icon="inline-start" aria-hidden="true" />
+        <Spinner v-if="workspace.status === 'building'" data-icon="inline-start" />
+        <FileOutput v-else data-icon="inline-start" aria-hidden="true" />
         {{ t('build.action') }}
       </Button>
     </div>
@@ -643,6 +662,12 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
     >
       <div role="status" aria-live="polite" aria-atomic="true" class="flex items-center">
         <span>{{ statusText }}</span>
+        <Progress
+          v-if="hasBuildProgress"
+          :model-value="buildProgressValue"
+          class="ml-2 w-20"
+          :aria-label="statusText"
+        />
         <time
           v-if="lastSavedText && workspace.lastSavedAt"
           class="ml-3"

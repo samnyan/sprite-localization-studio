@@ -177,6 +177,35 @@ describe('localized texture build plan', () => {
     expect(builtPaths).toEqual(['output_textures/zh-CN/ui-2.png'])
   })
 
+  it('reports completed texture progress after successes and failures', async () => {
+    const spriteTableWithTwoTextures: SpriteTable = {
+      ...spriteTable,
+      textures: [
+        ...spriteTable.textures,
+        { id: 'atlas-2', imagePath: 'ui-2.png', size: { width: 64, height: 64 } },
+      ],
+    }
+    const progress: Array<{ completed: number; total: number }> = []
+
+    await runLocalizedTextureBuild(
+      project([]),
+      [spriteTableWithTwoTextures],
+      () => ({
+        buildTexture: async (task) => {
+          if (task.texture.id === 'atlas') throw new Error('Expected failure')
+          return { outputPath: task.outputPath, modifiedSpriteCount: 0 }
+        },
+      }),
+      (update) => progress.push(update),
+    )
+
+    expect(progress).toEqual([
+      { completed: 0, total: 2 },
+      { completed: 1, total: 2 },
+      { completed: 2, total: 2 },
+    ])
+  })
+
   it('reports a source texture failure without a sprite identifier', async () => {
     const result = await runLocalizedTextureBuild(project([]), [spriteTable], () => ({
       buildTexture: async () => {

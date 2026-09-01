@@ -5,6 +5,8 @@ import { useWorkspaceShortcuts } from '@/app/composables/useWorkspaceShortcuts'
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import AppMenuBar from '@/components/workspace/AppMenuBar.vue'
 import AlertDialogHost from '@/components/ui/AlertDialogHost.vue'
+import { Toaster } from '@/components/ui/sonner'
+import 'vue-sonner/style.css'
 
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
@@ -36,5 +38,6 @@ function newProject(): void {
       <RouterView />
     </main>
     <AlertDialogHost />
+    <Toaster />
   </div>
 </template>

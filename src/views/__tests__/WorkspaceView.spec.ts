@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
+import { toast } from 'vue-sonner'
 
 import { i18n, setLocale } from '@/app/i18n'
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import WorkspaceView from '@/views/WorkspaceView.vue'
+
+vi.mock('vue-sonner', () => ({ toast: { success: vi.fn<() => void>() } }))
 
 describe('WorkspaceView', () => {
   it('shows sprite tables grouped by texture and selected sprite metadata', () => {
@@ -105,6 +108,56 @@ describe('WorkspaceView', () => {
       'Resolve translation issues before building textures.',
     )
     expect(wrapper.find('footer').text()).toContain('Action required')
+  })
+
+  it('uses the standard primary action styling for texture builds', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+    const buildButton = wrapper.get('[data-testid="build-textures"]')
+
+    expect(buildButton.classes()).toContain('bg-primary')
+    expect(buildButton.find('svg').attributes('data-icon')).toBe('inline-start')
+  })
+
+  it('shows build progress in the status bar and a spinner in the build action', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.status = 'building'
+    workspace.buildProgress = { completed: 1, total: 22 }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.find('footer').text()).toContain('Building textures 1/22…')
+    expect(wrapper.get('[data-testid="build-textures"]').attributes('aria-busy')).toBe('true')
+    expect(wrapper.get('[data-slot="progress"]').attributes('aria-label')).toBe(
+      'Building textures 1/22…',
+    )
+  })
+
+  it('notifies the output directory after a successful texture build', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    vi.spyOn(workspace, 'buildTextures').mockResolvedValue(true)
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    await wrapper.get('[data-testid="build-textures"]').trigger('click')
+    await nextTick()
+
+    expect(toast.success).toHaveBeenCalledWith('Texture build complete', {
+      description: 'Output written to output_textures.',
+    })
   })
 
   it('shows diagnostics for the selected text region in the sprite inspector', () => {

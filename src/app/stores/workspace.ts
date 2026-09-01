@@ -14,6 +14,7 @@ import {
 import {
   runLocalizedTextureBuild,
   type LocalizedTextureBuildReport,
+  type LocalizedTextureBuildProgress,
 } from '@/application/build/LocalizedTextureBuild'
 import {
   isTextRenderConfig,
@@ -102,6 +103,10 @@ function workspaceErrorFrom(error: unknown): WorkspaceError {
   }
 }
 
+function createBuildSnapshot<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T
+}
+
 export async function loadBackgroundImages(
   storage: ProjectStorage,
   backgrounds: ImageResource[],
@@ -140,6 +145,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const mode = ref<WorkspaceMode>('sprites')
   const previewBackground = ref<PreviewBackground>('transparent')
   const lastBuildReport = ref<LocalizedTextureBuildReport>()
+  const buildProgress = ref<LocalizedTextureBuildProgress>()
   const lastSavedAt = ref<Date>()
   const documentRevision = ref(0)
   const persistedRevision = ref(0)
@@ -409,11 +415,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!project.value || !activeStorage) return failProjectNotOpen()
     const session = documentSession
     lastBuildReport.value = undefined
+    buildProgress.value = undefined
     if (!(await saveProject())) return false
     if (session !== documentSession || !project.value || !activeStorage) return false
 
-    const projectSnapshot = structuredClone(project.value)
-    const spriteTablesSnapshot = structuredClone(spriteTables.value)
+    const projectSnapshot = createBuildSnapshot(project.value)
+    const spriteTablesSnapshot = createBuildSnapshot(spriteTables.value)
     const storage = activeStorage
     status.value = 'building'
     error.value = undefined
@@ -423,6 +430,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         projectSnapshot,
         spriteTablesSnapshot,
         () => markRaw(new CanvasTextureBuilder(storage, projectSnapshot)),
+        (progress) => {
+          if (session === documentSession) buildProgress.value = progress
+        },
       )
       if (result.status === 'blocked') {
         if (session === documentSession) {
@@ -1283,6 +1293,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     mode,
     previewBackground,
     lastBuildReport,
+    buildProgress,
     lastSavedAt,
     openLocalProject,
     createLocalProject,

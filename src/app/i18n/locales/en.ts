@@ -173,6 +173,8 @@ export default {
     failure: '{spriteTableId} / {textureId} ({texturePath}): {message}',
     spriteFailure: '{spriteTableId} / {textureId} ({texturePath}) / {spriteId}: {message}',
     failures: 'Build failures',
+    successToast: 'Texture build complete',
+    outputDirectory: 'Output written to output_textures.',
   },
   spriteTable: {
     textures: 'Textures',
@@ -223,6 +225,7 @@ export default {
     opening: 'Opening…',
     saving: 'Saving…',
     building: 'Building textures…',
+    buildingProgress: 'Building textures {completed}/{total}…',
     error: 'Action required',
     savedAt: 'Saved {time}',
     unsaved: 'Unsaved changes',
