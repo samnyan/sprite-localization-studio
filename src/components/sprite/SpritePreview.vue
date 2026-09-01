@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import TransformBox from '@/components/editor/TransformBox.vue'
+import { getSvgPointerPosition } from '@/components/editor/svgCoordinates'
 import type { Size } from '@/domain/shared/geometry'
 import type { Sprite } from '@/domain/sprite/types'
 import type { TextRegion } from '@/domain/text-region/types'
@@ -57,22 +58,10 @@ function normalizeRect(start: { x: number; y: number }, end: { x: number; y: num
 
 function pointerPosition(event: PointerEvent): { x: number; y: number } {
   const svg = event.currentTarget as SVGSVGElement
-  const bounds = svg.getBoundingClientRect()
+  const local = getSvgPointerPosition(svg, event.clientX, event.clientY, logicalSize.value)
   return {
-    x: Math.max(
-      0,
-      Math.min(
-        logicalSize.value.width,
-        ((event.clientX - bounds.left) / bounds.width) * logicalSize.value.width,
-      ),
-    ),
-    y: Math.max(
-      0,
-      Math.min(
-        logicalSize.value.height,
-        ((event.clientY - bounds.top) / bounds.height) * logicalSize.value.height,
-      ),
-    ),
+    x: Math.max(0, Math.min(logicalSize.value.width, local.x)),
+    y: Math.max(0, Math.min(logicalSize.value.height, local.y)),
   }
 }
 

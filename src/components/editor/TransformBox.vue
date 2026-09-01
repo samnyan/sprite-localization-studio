@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 
+import { getSvgPointerPosition } from '@/components/editor/svgCoordinates'
 import type { Rect, Size } from '@/domain/shared/geometry'
 
 type Handle =
@@ -54,12 +55,7 @@ watch(
 
 function point(event: PointerEvent): { x: number; y: number } {
   const svg = (event.currentTarget as SVGElement).ownerSVGElement
-  const box = svg?.getBoundingClientRect()
-  if (!box) return { x: 0, y: 0 }
-  return {
-    x: ((event.clientX - box.left) / box.width) * props.bounds.width,
-    y: ((event.clientY - box.top) / box.height) * props.bounds.height,
-  }
+  return getSvgPointerPosition(svg, event.clientX, event.clientY, props.bounds)
 }
 
 function constrain(rect: Rect): Rect {
