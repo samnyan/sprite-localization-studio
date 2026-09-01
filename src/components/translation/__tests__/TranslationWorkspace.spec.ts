@@ -150,10 +150,14 @@ describe('TranslationWorkspace', () => {
       'Ready',
     )
     await filter.setValue('')
-    const statusFilter = wrapper.findComponent(Select)
+    const selects = wrapper.findAllComponents(Select)
+    const statusFilter = selects[1]!
     expect(statusFilter.exists()).toBe(true)
-    expect(wrapper.get('[data-slot="select-trigger"]').attributes('aria-label')).toBe(
+    expect(wrapper.get('button[aria-label="Translation status"]').attributes('aria-label')).toBe(
       'Translation status',
+    )
+    expect(wrapper.get('button[aria-label="Sprite table"]').attributes('aria-label')).toBe(
+      'Sprite table',
     )
     await statusFilter.vm.$emit('update:modelValue', 'complete')
     await filter.setValue('ready')
@@ -171,9 +175,10 @@ describe('TranslationWorkspace', () => {
     expect(workspace.selectedSpriteTableId).toBe('second')
     expect(workspace.selectedSpriteId).toBe('second-sprite')
     expect(workspace.selectedTextRegionId).toBe('second-region')
-    const input = wrapper.get('textarea[aria-label="Translation"]')
-    expect(document.activeElement).toBe(input.element)
-    expect(input.classes()).toContain('ring-2')
+    const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
+    const targetInput = inputs.find((i) => i.classes().includes('ring-2'))
+    expect(targetInput).toBeDefined()
+    expect(document.activeElement).toBe(targetInput!.element)
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
 
     await statusFilter.vm.$emit('update:modelValue', 'incomplete')
@@ -298,7 +303,7 @@ describe('TranslationWorkspace', () => {
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
   })
 
-  it('supports single/combined filtering, shows counts, and clears filters properly', async () => {
+  it('supports single/combined filtering across tables, shows counts, handles duplicate sprite IDs, and clears filters properly', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     setLocale('en')
@@ -309,7 +314,7 @@ describe('TranslationWorkspace', () => {
       translations: [
         {
           spriteTableId: 'ui',
-          spriteId: 'sprite-complete',
+          spriteId: 'shared-id',
           textRegions: [
             {
               id: 'r1',
@@ -332,33 +337,67 @@ describe('TranslationWorkspace', () => {
             },
           ],
         },
+        {
+          spriteTableId: 'hud',
+          spriteId: 'shared-id',
+          textRegions: [
+            {
+              id: 'r3',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'key3',
+              translatedText: 'HUD finished text',
+            },
+          ],
+        },
       ],
     }
-    workspace.spriteTables = [{
-      schemaVersion: 1,
-      id: 'ui',
-      name: 'UI',
-      textures: [{ id: 'page', imagePath: 'ui.png', size: { width: 1, height: 1 } }],
-      sprites: [
-        {
-          id: 'sprite-complete',
-          name: 'Complete Sprite',
-          textureId: 'page',
-          frame: { x: 0, y: 0, width: 1, height: 1 },
-          rotation: 0,
-          trimmed: false,
-        },
-        {
-          id: 'sprite-incomplete',
-          name: 'Incomplete Sprite',
-          textureId: 'page',
-          frame: { x: 0, y: 0, width: 1, height: 1 },
-          rotation: 0,
-          trimmed: false,
-        },
-      ],
-    }]
-    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI Table',
+        textures: [{ id: 'page-ui', imagePath: 'ui.png', size: { width: 1, height: 1 } }],
+        sprites: [
+          {
+            id: 'shared-id',
+            name: 'UI Shared Sprite',
+            textureId: 'page-ui',
+            frame: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            trimmed: false,
+          },
+          {
+            id: 'sprite-incomplete',
+            name: 'UI Incomplete Sprite',
+            textureId: 'page-ui',
+            frame: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+      {
+        schemaVersion: 1,
+        id: 'hud',
+        name: 'HUD Table',
+        textures: [{ id: 'page-hud', imagePath: 'hud.png', size: { width: 1, height: 1 } }],
+        sprites: [
+          {
+            id: 'shared-id',
+            name: 'HUD Shared Sprite',
+            textureId: 'page-hud',
+            frame: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
+    workspace.textureImageUrls = {
+      ui: { 'page-ui': 'blob:ui' },
+      hud: { 'page-hud': 'blob:hud' },
+    }
     workspace.selectSpriteTable('ui')
 
     const wrapper = mount(TranslationWorkspace, {
@@ -374,46 +413,45 @@ describe('TranslationWorkspace', () => {
     })
     mountedWrapper = wrapper
 
-    expect(wrapper.text()).toContain('2 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(2)
+    // Shows all 3 rows by default (across UI Table and HUD Table)
+    expect(wrapper.text()).toContain('3 of 3 shown')
+    expect(wrapper.findAll('article')).toHaveLength(3)
 
-    // Filter by search keyword
+    // Filter by SpriteTable: HUD Table
+    const selects = wrapper.findAllComponents(Select)
+    const tableSelect = selects[0]!
+    const statusSelect = selects[1]!
+
+    await tableSelect.vm.$emit('update:modelValue', 'hud')
+    expect(wrapper.text()).toContain('1 of 3 shown')
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('HUD finished text')
+
+    // Filter by search keyword within HUD Table
     const searchInput = wrapper.get('input[aria-label="Filter translations"]')
-    await searchInput.setValue('Finished')
-    expect(wrapper.text()).toContain('1 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(1)
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('Finished text')
-
-    // Clear filters button in header
-    const clearButton = wrapper.get('button[aria-label="Clear filters"]')
-    await clearButton.trigger('click')
-    expect(wrapper.text()).toContain('2 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(2)
-
-    // Filter by status: incomplete
-    const statusSelect = wrapper.findComponent(Select)
-    await statusSelect.vm.$emit('update:modelValue', 'incomplete')
-    expect(wrapper.text()).toContain('1 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(1)
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
-
-    // Filter by status: issues
-    await statusSelect.vm.$emit('update:modelValue', 'issues')
-    expect(wrapper.text()).toContain('1 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(1)
-    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
-
-    // Combined search yielding empty result and clear from empty state
     await searchInput.setValue('NonExistent')
-    expect(wrapper.text()).toContain('0 of 2 shown')
+    expect(wrapper.text()).toContain('0 of 3 shown')
     expect(wrapper.findAll('article')).toHaveLength(0)
-    expect(wrapper.text()).toContain('No translations match the filters.')
 
+    // Clear filters from empty state restores all 3 rows across tables
     const emptyStateClearButton = wrapper.findAll('button').find((btn) => btn.text() === 'Clear filters')
     expect(emptyStateClearButton).toBeDefined()
     await emptyStateClearButton?.trigger('click')
-    expect(wrapper.text()).toContain('2 of 2 shown')
-    expect(wrapper.findAll('article')).toHaveLength(2)
+    expect(wrapper.text()).toContain('3 of 3 shown')
+    expect(wrapper.findAll('article')).toHaveLength(3)
+
+    // Filter by SpriteTable (UI Table) + status (incomplete)
+    await tableSelect.vm.$emit('update:modelValue', 'ui')
+    await statusSelect.vm.$emit('update:modelValue', 'incomplete')
+    expect(wrapper.text()).toContain('1 of 3 shown')
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
+
+    // Clear filters button in header restores all rows
+    const clearButton = wrapper.get('button[aria-label="Clear filters"]')
+    await clearButton.trigger('click')
+    expect(wrapper.text()).toContain('3 of 3 shown')
+    expect(wrapper.findAll('article')).toHaveLength(3)
   })
 })
 

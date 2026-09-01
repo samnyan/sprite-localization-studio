@@ -42,6 +42,7 @@ const translatedTextInputs = new Map<string, HTMLTextAreaElement>()
 const translationRowsBySprite = new Map<string, HTMLElement>()
 const searchQuery = ref('')
 const translationFilter = ref<'all' | 'complete' | 'incomplete' | 'issues'>('all')
+const spriteTableFilter = ref<string>('all')
 const editingSpriteKey = ref<string>()
 let resizingColumn: number | undefined
 let resizeStartX = 0
@@ -51,40 +52,49 @@ let editingClearTimer: ReturnType<typeof setTimeout> | undefined
 const tableStyle = computed(() => ({
   gridTemplateColumns: columnRatios.value.map((ratio) => `minmax(0, ${ratio}fr)`).join(' '),
 }))
+const availableSpriteTables = computed(() => workspace.spriteTables)
 const translationRows = computed(() => {
-  const spriteTable = selectedSpriteTable.value
+  const spriteTables = workspace.spriteTables
   const translations = workspace.project?.translations ?? []
-  if (!spriteTable) return []
+  if (!spriteTables.length) return []
 
-  return spriteTable.sprites.flatMap((sprite) => {
-    const translation = translations.find(
-      (item) => item.spriteTableId === spriteTable.id && item.spriteId === sprite.id,
-    )
-    const texture = spriteTable.textures.find((item) => item.id === sprite.textureId)
-    const imageUrl = texture ? workspace.textureImageUrls[spriteTable.id]?.[texture.id] : undefined
-    return translation && texture && imageUrl
-      ? [{
-          sprite,
-          translation,
-          texture,
-          imageUrl,
-          searchText: [
-            sprite.id,
-            sprite.name,
-            ...translation.textRegions.flatMap((region) => [
-              region.translationKey,
-              region.sourceText ?? '',
-              region.translatedText ?? '',
-            ]),
-          ]
-            .join('\u0000')
-            .toLocaleLowerCase(),
-        }]
-      : []
-  })
+  return spriteTables.flatMap((spriteTable) =>
+    spriteTable.sprites.flatMap((sprite) => {
+      const translation = translations.find(
+        (item) => item.spriteTableId === spriteTable.id && item.spriteId === sprite.id,
+      )
+      const texture = spriteTable.textures.find((item) => item.id === sprite.textureId)
+      const imageUrl = texture ? workspace.textureImageUrls[spriteTable.id]?.[texture.id] : undefined
+      return translation && texture && imageUrl
+        ? [{
+            sprite,
+            spriteTable,
+            translation,
+            texture,
+            imageUrl,
+            searchText: [
+              spriteTable.name,
+              spriteTable.id,
+              sprite.id,
+              sprite.name,
+              ...translation.textRegions.flatMap((region) => [
+                region.translationKey,
+                region.sourceText ?? '',
+                region.translatedText ?? '',
+              ]),
+            ]
+              .join('\u0000')
+              .toLocaleLowerCase(),
+          }]
+        : []
+    }),
+  )
 })
 const hasActiveFilters = computed(
-  () => searchQuery.value.trim().length > 0 || translationFilter.value !== 'all',
+  () =>
+    searchQuery.value.trim().length > 0 ||
+    translationFilter.value !== 'all' ||
+    spriteTableFilter.value !== 'all',
 )
 const totalRowsCount = computed(() => translationRows.value.length)
 const filteredRowsCount = computed(() => filteredTranslationRows.value.length)
@@ -116,12 +126,17 @@ const diagnosticSprites = computed(() => {
 function clearFilters(): void {
   searchQuery.value = ''
   translationFilter.value = 'all'
+  spriteTableFilter.value = 'all'
 }
 const filteredTranslationRows = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
+  const tableFilter = spriteTableFilter.value
   return translationRows.value.filter((row) => {
     if (editingSpriteKey.value === spriteKey(row.translation.spriteTableId, row.sprite.id)) {
       return true
+    }
+    if (tableFilter !== 'all' && row.translation.spriteTableId !== tableFilter) {
+      return false
     }
     const regions = row.translation.textRegions
     const complete = regions.length > 0 && regions.every((region) => region.translatedText?.trim())
@@ -209,6 +224,7 @@ async function selectBackgroundDiagnostic(item: { spriteTableId: string; spriteI
   if (!sprite) return
   searchQuery.value = ''
   translationFilter.value = 'all'
+  spriteTableFilter.value = 'all'
   workspace.selectSprite(item.spriteTableId, item.spriteId)
   await nextTick()
   const row = translationRowsBySprite.get(spriteKey(item.spriteTableId, item.spriteId))
@@ -256,6 +272,7 @@ async function selectDiagnostic(diagnostic: TextDiagnostic): Promise<void> {
 
   searchQuery.value = ''
   translationFilter.value = 'all'
+  spriteTableFilter.value = 'all'
   await nextTick()
   const input = translatedTextInputs.get(
     textRegionKey(diagnostic.spriteTableId, diagnostic.spriteId, diagnostic.regionId),
@@ -552,6 +569,23 @@ onUnmounted(() => {
       </div>
       <div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
         <div class="flex flex-wrap items-center gap-2">
+          <Select v-model="spriteTableFilter">
+            <SelectTrigger class="w-44" :aria-label="t('translation.filterSpriteTable')">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{{ t('translation.filterAllSpriteTables') }}</SelectItem>
+                <SelectItem
+                  v-for="table in availableSpriteTables"
+                  :key="table.id"
+                  :value="table.id"
+                >
+                  {{ table.name }}
+                </SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
           <Input
             v-model="searchQuery"
             class="max-w-64"
@@ -642,11 +676,11 @@ onUnmounted(() => {
         <template v-else>
           <article
             v-for="row in filteredTranslationRows"
-            :key="row.sprite.id"
+            :key="spriteKey(row.translation.spriteTableId, row.sprite.id)"
             :ref="(element) => setTranslationRow(spriteKey(row.translation.spriteTableId, row.sprite.id), element)"
             tabindex="-1"
             class="grid min-w-[900px] border-b bg-card last:border-b-0 focus:outline-none"
-            :class="{ 'ring-2 ring-inset ring-primary': workspace.selectedSpriteId === row.sprite.id }"
+            :class="{ 'ring-2 ring-inset ring-primary': workspace.selectedSpriteTableId === row.translation.spriteTableId && workspace.selectedSpriteId === row.sprite.id }"
             :style="tableStyle"
           >
             <div class="p-3">
