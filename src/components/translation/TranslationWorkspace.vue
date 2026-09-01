@@ -618,8 +618,8 @@ onUnmounted(() => {
           {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
         </Button>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-        <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 bg-background border-b px-3 py-2">
+        <div class="flex items-center gap-2">
           <Select v-model="spriteTableFilter">
             <SelectTrigger class="w-44" :aria-label="t('translation.filterSpriteTable')">
               <SelectValue />
