@@ -4,6 +4,7 @@ import { useElementSize, useScroll } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
 
 import { Slider } from '@/components/ui/slider'
+import type { PreviewBackground } from '@/app/stores/workspace'
 import type { Sprite } from '@/domain/sprite/types'
 import type { SpriteTable } from '@/domain/sprite-table/types'
 import {
@@ -11,11 +12,15 @@ import {
   getStoredToLogicalTransform,
 } from '@/infrastructure/image/spriteGeometry'
 
-const props = defineProps<{
-  spriteTable: SpriteTable
-  textureUrls: Record<string, string>
-  selectedSpriteId?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    spriteTable: SpriteTable
+    textureUrls: Record<string, string>
+    selectedSpriteId?: string
+    previewBackground?: PreviewBackground
+  }>(),
+  { previewBackground: 'transparent' },
+)
 const emit = defineEmits<{ select: [spriteId: string]; open: [spriteId: string] }>()
 const { t } = useI18n()
 
@@ -56,6 +61,11 @@ const gridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${columns.value}, ${thumbnailSize.value}px)`,
   transform: `translateY(${padding + startRow.value * rowHeight.value}px)`,
 }))
+const backgroundClass = computed(() => {
+  if (props.previewBackground === 'black') return 'bg-black'
+  if (props.previewBackground === 'white') return 'bg-white'
+  return 'bg-checkerboard'
+})
 
 function imageFor(url: string): Promise<HTMLImageElement> {
   const existing = imagePromises.get(url)
@@ -188,7 +198,11 @@ watch(
             @click="emit('select', sprite.id)"
             @dblclick="emit('open', sprite.id)"
           >
-            <span class="bg-checkerboard flex aspect-square items-center justify-center overflow-hidden rounded border">
+            <span
+              class="flex aspect-square items-center justify-center overflow-hidden rounded border"
+              :class="backgroundClass"
+              data-testid="sprite-grid-preview-background"
+            >
               <canvas
                 :ref="(element) => setThumbnailCanvas(sprite.id, element)"
                 class="block size-full [image-rendering:auto]"

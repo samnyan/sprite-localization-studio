@@ -20,6 +20,7 @@ const props = defineProps<{
   textRegions?: TextRegion[]
   selectedTextRegionId?: string
   editable?: boolean
+  previewBackground?: 'transparent' | 'black' | 'white'
 }>()
 
 const emit = defineEmits<{
@@ -37,6 +38,11 @@ let renderId = 0
 
 const logicalSize = computed(() => getLogicalSpriteSize(props.sprite))
 const regions = computed(() => props.textRegions ?? [])
+const backgroundClass = computed(() => {
+  if (props.previewBackground === 'black') return 'bg-black'
+  if (props.previewBackground === 'white') return 'bg-white'
+  return 'bg-checkerboard'
+})
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -163,8 +169,8 @@ watch(
 <template>
   <div class="flex size-full min-h-0 items-center justify-center overflow-auto p-8">
     <div v-if="errorKey" class="text-sm text-destructive" role="alert">{{ t(errorKey) }}</div>
-    <div v-else class="relative max-h-full max-w-full border bg-checkerboard p-4 shadow-sm">
-      <div class="relative">
+    <div v-else class="flex max-h-full max-w-full flex-col items-start gap-1">
+      <div class="relative border p-4 shadow-sm" :class="backgroundClass">
         <canvas
           ref="canvas"
           class="block max-h-[calc(100vh-12rem)] max-w-[calc(100vw-38rem)] [image-rendering:auto]"
@@ -203,9 +209,7 @@ watch(
           />
         </svg>
       </div>
-      <span
-        class="absolute right-1.5 bottom-1 rounded bg-background/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
-      >
+      <span class="px-1 text-[10px] text-muted-foreground" data-testid="sprite-preview-size">
         {{ logicalSize.width }} × {{ logicalSize.height }}
       </span>
     </div>

@@ -26,6 +26,7 @@ describe('SpriteTableGrid', () => {
           sprites,
         },
         textureUrls: {},
+        previewBackground: 'black',
       },
       global: { plugins: [i18n], stubs: { Slider: true } },
     })
@@ -34,6 +35,9 @@ describe('SpriteTableGrid', () => {
     expect(cells.length).toBeGreaterThan(0)
     expect(cells.length).toBeLessThan(sprites.length)
     expect(cells[0]!.find('canvas').classes()).toContain('[image-rendering:auto]')
+    expect(cells[0]!.get('[data-testid="sprite-grid-preview-background"]').classes()).toContain(
+      'bg-black',
+    )
 
     await cells[0]!.trigger('click')
     await cells[0]!.trigger('dblclick')

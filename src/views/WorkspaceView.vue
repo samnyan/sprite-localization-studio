@@ -412,6 +412,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
           :sprite-table="workspace.selectedSpriteTable"
           :texture-urls="workspace.textureImageUrls[workspace.selectedSpriteTable.id] ?? {}"
           :selected-sprite-id="workspace.selectedSpriteId"
+          :preview-background="workspace.previewBackground"
           @select="workspace.selectSprite(workspace.selectedSpriteTable!.id, $event)"
           @open="workspace.openSprite(workspace.selectedSpriteTable!.id, $event)"
         />
@@ -423,6 +424,7 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
           :text-regions="workspace.selectedSpriteTranslation?.textRegions"
           :selected-text-region-id="workspace.selectedTextRegionId"
           :editable="spriteTranslationEnabled"
+          :preview-background="workspace.previewBackground"
           @create-region="workspace.addTextRegion"
           @select-region="workspace.selectTextRegion"
           @update-region="updateRegionRect"
