@@ -59,7 +59,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
 <template>
   <header class="flex h-9 shrink-0 items-center border-b bg-card px-1 text-xs select-none">
     <Menubar class="h-8 border-0 bg-transparent p-0 shadow-none">
-      <span class="px-2 font-semibold">SLS</span>
+      <span class="px-2 font-semibold">{{ t('app.name') }}</span>
       <MenubarMenu>
         <MenubarTrigger>{{ t('menu.file') }}</MenubarTrigger>
         <MenubarContent>

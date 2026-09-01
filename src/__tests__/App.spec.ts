@@ -24,6 +24,7 @@ describe('App', () => {
 
     await wrapper.get('#app-language').setValue('zh-CN')
     expect(wrapper.text()).toContain('文件')
+    expect(wrapper.text()).toContain('贴图翻译助手')
 
     setLocale('en')
   })

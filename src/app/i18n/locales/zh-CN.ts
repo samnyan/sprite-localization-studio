@@ -1,6 +1,6 @@
 export default {
   app: {
-    name: 'Sprite Localization Studio',
+    name: '贴图翻译助手',
   },
   menu: {
     file: '文件',
