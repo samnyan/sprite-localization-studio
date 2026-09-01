@@ -33,6 +33,7 @@ describe('SpriteTableGrid', () => {
     const cells = wrapper.findAll('[data-testid="sprite-grid-item"]')
     expect(cells.length).toBeGreaterThan(0)
     expect(cells.length).toBeLessThan(sprites.length)
+    expect(cells[0]!.find('canvas').classes()).toContain('[image-rendering:auto]')
 
     await cells[0]!.trigger('click')
     await cells[0]!.trigger('dblclick')

@@ -190,7 +190,7 @@ onBeforeUnmount(() => {
   >
     <canvas
       ref="canvas"
-      class="block h-full w-full [image-rendering:pixelated]"
+      class="block h-full w-full [image-rendering:auto]"
       :aria-label="sprite.name"
     ></canvas>
   </div>

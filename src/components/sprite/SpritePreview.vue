@@ -167,7 +167,7 @@ watch(
       <div class="relative">
         <canvas
           ref="canvas"
-          class="block max-h-[calc(100vh-12rem)] max-w-[calc(100vw-38rem)] [image-rendering:pixelated]"
+          class="block max-h-[calc(100vh-12rem)] max-w-[calc(100vw-38rem)] [image-rendering:auto]"
           :aria-label="sprite.name"
         ></canvas>
         <svg

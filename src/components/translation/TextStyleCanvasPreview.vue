@@ -90,7 +90,7 @@ onBeforeUnmount(() => {
 <template>
   <canvas
     ref="canvas"
-    class="block h-full max-w-full aspect-[40/9] [image-rendering:pixelated]"
+    class="block h-full max-w-full aspect-[40/9] [image-rendering:auto]"
     :class="backgroundClass"
   ></canvas>
 </template>

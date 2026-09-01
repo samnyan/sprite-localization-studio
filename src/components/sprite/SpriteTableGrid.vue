@@ -93,7 +93,8 @@ async function drawThumbnail(sprite: Sprite): Promise<void> {
 
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, size, size)
-    context.imageSmoothingEnabled = false
+    context.imageSmoothingEnabled = true
+    context.imageSmoothingQuality = 'high'
     const logicalSize = getLogicalSpriteSize(sprite)
     if (logicalSize.width <= 0 || logicalSize.height <= 0) return
 
@@ -190,7 +191,7 @@ watch(
             <span class="bg-checkerboard flex aspect-square items-center justify-center overflow-hidden rounded border">
               <canvas
                 :ref="(element) => setThumbnailCanvas(sprite.id, element)"
-                class="block size-full [image-rendering:pixelated]"
+                class="block size-full [image-rendering:auto]"
               ></canvas>
             </span>
             <span class="truncate text-xs" :title="sprite.name">{{ sprite.name }}</span>
