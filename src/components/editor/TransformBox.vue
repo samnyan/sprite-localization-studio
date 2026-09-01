@@ -44,6 +44,7 @@ const handles: Array<{ handle: Handle; cursor: string }> = [
 const handleRadius = computed(() =>
   Math.max(2, Math.min(props.bounds.width, props.bounds.height) / 75),
 )
+const hitPadding = computed(() => Math.max(props.minSize, handleRadius.value * 1.5))
 
 watch(
   () => props.rect,
@@ -58,40 +59,92 @@ function point(event: PointerEvent): { x: number; y: number } {
   return getSvgPointerPosition(svg, event.clientX, event.clientY, props.bounds)
 }
 
+function rotatedHalfExtent(width: number, height: number): { x: number; y: number } {
+  const radians = (props.rotation * Math.PI) / 180
+  const cosine = Math.abs(Math.cos(radians))
+  const sine = Math.abs(Math.sin(radians))
+  return {
+    x: (cosine * width + sine * height) / 2,
+    y: (sine * width + cosine * height) / 2,
+  }
+}
+
 function constrain(rect: Rect): Rect {
   const width = Math.min(Math.max(props.minSize, rect.width), props.bounds.width)
   const height = Math.min(Math.max(props.minSize, rect.height), props.bounds.height)
+  const extent = rotatedHalfExtent(width, height)
+  const centerX = rect.x + width / 2
+  const centerY = rect.y + height / 2
+
+  // Keep the visible, rotated rectangle inside the Sprite whenever it can fit.
+  // If it cannot, center it on that axis so its exposed handles stay symmetric.
+  const constrainedCenterX =
+    extent.x <= props.bounds.width
+      ? Math.min(Math.max(extent.x, centerX), props.bounds.width - extent.x)
+      : props.bounds.width / 2
+  const constrainedCenterY =
+    extent.y <= props.bounds.height
+      ? Math.min(Math.max(extent.y, centerY), props.bounds.height - extent.y)
+      : props.bounds.height / 2
   return {
-    x: Math.min(Math.max(0, rect.x), props.bounds.width - width),
-    y: Math.min(Math.max(0, rect.y), props.bounds.height - height),
+    x: constrainedCenterX - width / 2,
+    y: constrainedCenterY - height / 2,
     width,
     height,
   }
 }
 
+function localDelta(deltaX: number, deltaY: number): { x: number; y: number } {
+  const radians = (props.rotation * Math.PI) / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  return {
+    x: cosine * deltaX + sine * deltaY,
+    y: -sine * deltaX + cosine * deltaY,
+  }
+}
+
+function rotateVector(x: number, y: number): { x: number; y: number } {
+  const radians = (props.rotation * Math.PI) / 180
+  const cosine = Math.cos(radians)
+  const sine = Math.sin(radians)
+  return { x: cosine * x - sine * y, y: sine * x + cosine * y }
+}
+
 function transform(rect: Rect, handle: Handle, deltaX: number, deltaY: number): Rect {
   if (handle === 'move') return constrain({ ...rect, x: rect.x + deltaX, y: rect.y + deltaY })
 
-  let { x, y, width, height } = rect
+  const delta = localDelta(deltaX, deltaY)
+  let { width, height } = rect
   if (handle.includes('west')) {
-    x += deltaX
-    width -= deltaX
+    width -= delta.x
   }
-  if (handle.includes('east')) width += deltaX
+  if (handle.includes('east')) width += delta.x
   if (handle.includes('north')) {
-    y += deltaY
-    height -= deltaY
+    height -= delta.y
   }
-  if (handle.includes('south')) height += deltaY
-  if (width < props.minSize) {
-    if (handle.includes('west')) x -= props.minSize - width
-    width = props.minSize
-  }
-  if (height < props.minSize) {
-    if (handle.includes('north')) y -= props.minSize - height
-    height = props.minSize
-  }
-  return constrain({ x, y, width, height })
+  if (handle.includes('south')) height += delta.y
+  width = Math.max(props.minSize, width)
+  height = Math.max(props.minSize, height)
+
+  const centerDelta = rotateVector(
+    (handle.includes('east')
+      ? width - rect.width
+      : handle.includes('west')
+        ? rect.width - width
+        : 0) / 2,
+    (handle.includes('south')
+      ? height - rect.height
+      : handle.includes('north')
+        ? rect.height - height
+        : 0) / 2,
+  )
+  return constrain({
+    x: rect.x + centerDelta.x - (width - rect.width) / 2,
+    y: rect.y + centerDelta.y - (height - rect.height) / 2,
+    width,
+    height,
+  })
 }
 
 function begin(handle: Handle, event: PointerEvent): void {
@@ -211,11 +264,23 @@ function position(handle: Handle): { x: number; y: number } {
     @pointercancel="finish"
   >
     <rect
+      v-if="editable"
+      :x="draft.x - hitPadding"
+      :y="draft.y - hitPadding"
+      :width="draft.width + hitPadding * 2"
+      :height="draft.height + hitPadding * 2"
+      class="fill-transparent"
+      pointer-events="all"
+      data-testid="transform-hit-target"
+      @pointerdown="begin('move', $event)"
+    />
+    <rect
       ref="moveTarget"
       :x="draft.x"
       :y="draft.y"
       :width="draft.width"
       :height="draft.height"
+      data-testid="transform-move-target"
       class="fill-sky-400/20 stroke-2"
       :class="{
         'cursor-move stroke-sky-300': editable && selected,

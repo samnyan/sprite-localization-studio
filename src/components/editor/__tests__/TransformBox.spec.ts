@@ -4,7 +4,7 @@ import { nextTick, ref } from 'vue'
 
 import TransformBox from '@/components/editor/TransformBox.vue'
 
-function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }) {
+function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }, rotation = 0) {
   const commits: Array<{ x: number; y: number; width: number; height: number }> = []
   const wrapper = mount({
     components: { TransformBox },
@@ -13,13 +13,14 @@ function mountTransformBox(rect = { x: 10, y: 10, width: 20, height: 20 }) {
         <TransformBox
           :rect="rect"
           :bounds="{ width: 100, height: 100 }"
+          :rotation="rotation"
           selected
           keyboard-label="Move text region"
           @commit="commits.push($event)"
         />
       </svg>
     `,
-    data: () => ({ commits, rect }),
+    data: () => ({ commits, rect, rotation }),
   })
 
   Object.defineProperty(wrapper.get('svg').element, 'getBoundingClientRect', {
@@ -50,14 +51,26 @@ describe('TransformBox', () => {
   it('renders drag and eight resize handles when selected', () => {
     const { wrapper } = mountTransformBox()
 
-    expect(wrapper.findAll('rect')).toHaveLength(9)
+    expect(wrapper.findAll('rect')).toHaveLength(10)
+  })
+
+  it('expands the transparent drag target for a narrow text region', () => {
+    const { wrapper } = mountTransformBox({ x: 10, y: 10, width: 2, height: 40 })
+    const target = wrapper.findComponent(TransformBox).get('[data-testid="transform-hit-target"]')
+
+    expect(target.attributes()).toMatchObject({ x: '7', y: '7', width: '8', height: '46' })
   })
 
   it('moves within its bounds and commits when released', async () => {
     const { wrapper, commits } = mountTransformBox()
     const transformBox = wrapper.findComponent(TransformBox)
 
-    await dispatchPointer(transformBox.get('rect').element, 'pointerdown', 20, 20)
+    await dispatchPointer(
+      transformBox.get('[data-testid="transform-move-target"]').element,
+      'pointerdown',
+      20,
+      20,
+    )
     await dispatchPointer(transformBox.get('g').element, 'pointermove', 110, 90)
     await dispatchPointer(transformBox.get('g').element, 'pointerup', 110, 90)
 
@@ -67,7 +80,7 @@ describe('TransformBox', () => {
   it('resizes from an edge and commits the new dimensions', async () => {
     const { wrapper, commits } = mountTransformBox()
     const transformBox = wrapper.findComponent(TransformBox)
-    const eastHandle = transformBox.findAll('rect')[4]
+    const eastHandle = transformBox.findAll('rect')[5]
     if (!eastHandle) throw new Error('Missing east resize handle')
 
     await dispatchPointer(eastHandle.element, 'pointerdown', 30, 20)
@@ -77,9 +90,33 @@ describe('TransformBox', () => {
     expect(commits).toEqual([{ x: 10, y: 10, width: 50, height: 20 }])
   })
 
+  it('resizes along the rotated handle axis while preserving the opposite edge', async () => {
+    const { wrapper, commits } = mountTransformBox(undefined, 90)
+    const transformBox = wrapper.findComponent(TransformBox)
+    const eastHandle = transformBox.findAll('rect')[5]
+    if (!eastHandle) throw new Error('Missing east resize handle')
+
+    await dispatchPointer(eastHandle.element, 'pointerdown', 20, 30)
+    await dispatchPointer(transformBox.get('g').element, 'pointermove', 20, 60)
+    await dispatchPointer(transformBox.get('g').element, 'pointerup', 20, 60)
+
+    expect(commits).toEqual([{ x: -5, y: 25, width: 50, height: 20 }])
+  })
+
+  it('keeps a rotated region visually inside the Sprite bounds while moving', async () => {
+    const { wrapper, commits } = mountTransformBox({ x: 0, y: 10, width: 20, height: 40 }, 90)
+    const transformBox = wrapper.findComponent(TransformBox)
+
+    await dispatchPointer(transformBox.findAll('rect')[1]!.element, 'pointerdown', 10, 30)
+    await dispatchPointer(transformBox.get('g').element, 'pointermove', -50, 30)
+    await dispatchPointer(transformBox.get('g').element, 'pointerup', -50, 30)
+
+    expect(commits).toEqual([{ x: 10, y: 10, width: 20, height: 40 }])
+  })
+
   it('moves the selected region by arrow keys and exposes its keyboard instructions', async () => {
     const { wrapper, commits } = mountTransformBox()
-    const rect = wrapper.findComponent(TransformBox).get('rect')
+    const rect = wrapper.findComponent(TransformBox).get('[data-testid="transform-move-target"]')
 
     expect(rect.attributes('tabindex')).toBe('0')
     expect(rect.attributes('aria-label')).toBe('Move text region')
@@ -94,7 +131,7 @@ describe('TransformBox', () => {
 
   it('does not commit keyboard movement beyond the bounds', async () => {
     const { wrapper, commits } = mountTransformBox({ x: 80, y: 80, width: 20, height: 20 })
-    const rect = wrapper.findComponent(TransformBox).get('rect')
+    const rect = wrapper.findComponent(TransformBox).get('[data-testid="transform-move-target"]')
 
     await rect.trigger('keydown', { key: 'ArrowRight' })
     await rect.trigger('keydown', { key: 'ArrowDown', shiftKey: true })
@@ -105,7 +142,7 @@ describe('TransformBox', () => {
   it('ignores keyboard input during an active pointer operation', async () => {
     const { wrapper, commits } = mountTransformBox()
     const transformBox = wrapper.findComponent(TransformBox)
-    const rect = transformBox.get('rect')
+    const rect = transformBox.get('[data-testid="transform-move-target"]')
 
     await dispatchPointer(rect.element, 'pointerdown', 20, 20)
     await rect.trigger('keydown', { key: 'ArrowRight' })
@@ -131,7 +168,7 @@ describe('TransformBox', () => {
       `,
     })
     const transformBox = wrapper.findComponent(TransformBox)
-    const rect = transformBox.get('rect')
+    const rect = transformBox.get('[data-testid="transform-move-target"]')
     const focus = vi.fn<() => void>()
     Object.defineProperty(rect.element, 'focus', { value: focus })
 

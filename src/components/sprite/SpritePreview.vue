@@ -172,7 +172,7 @@ watch(
         ></canvas>
         <svg
           v-if="editable || regions.length"
-          class="absolute inset-0 h-full w-full touch-none"
+          class="absolute inset-0 h-full w-full touch-none overflow-visible"
           :class="{ 'cursor-crosshair': editable }"
           :viewBox="`0 0 ${logicalSize.width} ${logicalSize.height}`"
           preserveAspectRatio="none"
