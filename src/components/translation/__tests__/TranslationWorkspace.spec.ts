@@ -29,6 +29,56 @@ afterEach(() => {
 })
 
 describe('TranslationWorkspace', () => {
+  it('opens original and output previews in the shared image overlay', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{
+        spriteTableId: 'ui',
+        spriteId: 'button',
+        textRegions: [],
+      }],
+    }
+    workspace.spriteTables = [spriteTable('ui', 'UI', 'button')]
+    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.selectSpriteTable('ui')
+
+    const wrapper = mount(TranslationWorkspace, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+          ImagePreviewDialog: {
+            props: ['open', 'title', 'background'],
+            emits: ['close'],
+            template:
+              '<div v-if="open" data-testid="image-preview-overlay" :data-title="title" :data-background="background"><slot /></div>',
+          },
+        },
+      },
+    })
+    mountedWrapper = wrapper
+
+    await wrapper.get('[data-testid="original-preview"]').trigger('click')
+    expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-title')).toBe(
+      'Original sprite',
+    )
+    expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-background')).toBe(
+      'transparent',
+    )
+
+    await wrapper.get('[data-testid="output-preview"]').trigger('click')
+    expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-title')).toBe(
+      'Output',
+    )
+  })
+
   it('navigates translated text inputs with Alt+Arrow keys', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

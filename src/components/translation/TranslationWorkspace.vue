@@ -8,6 +8,7 @@ import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import TranslationSpritePreview from '@/components/translation/TranslationSpritePreview.vue'
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
+import ImagePreviewDialog from '@/components/ui/image-preview/ImagePreviewDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -37,6 +38,11 @@ const editingBackground = ref<{
   spriteId: string
   type?: 'original' | 'blank' | 'template' | 'sprite'
   backgroundId?: string
+}>()
+const previewing = ref<{
+  spriteTableId: string
+  spriteId: string
+  output: boolean
 }>()
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
 const diagnosticDisplayCount = ref(12)
@@ -94,6 +100,14 @@ const translationRows = computed(() => {
           ]
         : []
     }),
+  )
+})
+const previewRow = computed(() => {
+  const preview = previewing.value
+  if (!preview) return undefined
+  return translationRows.value.find(
+    (row) =>
+      row.translation.spriteTableId === preview.spriteTableId && row.sprite.id === preview.spriteId,
   )
 })
 const hasActiveFilters = computed(
@@ -223,6 +237,10 @@ const backgroundDiagnosticItems = computed(() =>
 
 function backgroundUrl(backgroundId?: string): string | undefined {
   return backgroundId ? workspace.backgroundImageUrls[backgroundId] : undefined
+}
+
+function openPreview(spriteTableId: string, spriteId: string, output: boolean): void {
+  previewing.value = { spriteTableId, spriteId, output }
 }
 
 function setTranslationRow(key: string, element: Element | ComponentPublicInstance | null): void {
@@ -732,6 +750,13 @@ onUnmounted(() => {
             :style="tableStyle"
           >
             <div class="p-3">
+              <button
+                type="button"
+                class="block w-full cursor-zoom-in rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                :aria-label="t('translation.openPreview', { label: t('translation.originalSprite') })"
+                data-testid="original-preview"
+                @click="openPreview(row.translation.spriteTableId, row.sprite.id, false)"
+              >
               <TranslationSpritePreview
                 :image-url="row.imageUrl"
                 :texture-size="row.texture.size"
@@ -739,6 +764,7 @@ onUnmounted(() => {
                 :translation="row.translation"
                 :preview-background="workspace.previewBackground"
               />
+              </button>
             </div>
             <div class="space-y-2 p-3">
               <textarea
@@ -816,6 +842,13 @@ onUnmounted(() => {
               >
             </div>
             <div class="flex flex-col items-start gap-2 p-3">
+              <button
+                type="button"
+                class="block w-full cursor-zoom-in rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                :aria-label="t('translation.openPreview', { label: t('translation.output') })"
+                data-testid="output-preview"
+                @click="openPreview(row.translation.spriteTableId, row.sprite.id, true)"
+              >
               <TranslationSpritePreview
                 :image-url="row.imageUrl"
                 :texture-size="row.texture.size"
@@ -826,6 +859,7 @@ onUnmounted(() => {
                 :output-blank="row.translation.backgroundType === 'blank'"
                 :preview-background="workspace.previewBackground"
               />
+              </button>
               <div class="flex w-full gap-2">
                 <span class="flex h-7 flex-1 items-center rounded border px-2 text-xs">{{
                   t(
@@ -930,5 +964,24 @@ onUnmounted(() => {
       @replace-template="replaceTemplate"
       @delete-template="deleteTemplate"
     />
+    <ImagePreviewDialog
+      :open="previewing !== undefined"
+      :title="t(previewing?.output ? 'translation.output' : 'translation.originalSprite')"
+      :background="workspace.previewBackground"
+      @close="previewing = undefined"
+    >
+      <TranslationSpritePreview
+        v-if="previewRow && previewing"
+        :image-url="previewRow.imageUrl"
+        :texture-size="previewRow.texture.size"
+        :sprite="previewRow.sprite"
+        :translation="previewRow.translation"
+        :background-url="previewing.output ? backgroundUrl(previewRow.translation.backgroundId) : undefined"
+        :output="previewing.output"
+        :output-blank="previewing.output && previewRow.translation.backgroundType === 'blank'"
+        :preview-background="workspace.previewBackground"
+        enlarged
+      />
+    </ImagePreviewDialog>
   </section>
 </template>

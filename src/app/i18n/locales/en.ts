@@ -54,6 +54,7 @@ export default {
     selectManifest: 'Select a sprite table.',
     noSprites: 'No sprites need translation in this sprite table.',
     originalSprite: 'Original sprite',
+    openPreview: 'Open enlarged preview: {label}',
     sourceText: 'Source text',
     translatedText: 'Translation',
     output: 'Output',

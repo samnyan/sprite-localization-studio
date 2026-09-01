@@ -25,8 +25,9 @@ const props = withDefaults(
     previewWidth?: number
     previewHeight?: number
     previewBackground?: PreviewBackground
+    enlarged?: boolean
   }>(),
-  { previewWidth: 224, previewHeight: 144, previewBackground: 'transparent' },
+  { previewWidth: 224, previewHeight: 144, previewBackground: 'transparent', enlarged: false },
 )
 
 const canvas = ref<HTMLCanvasElement>()
@@ -185,12 +186,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="inline-flex max-w-full items-center justify-center overflow-hidden rounded border"
-    :class="backgroundClass"
+    class="flex items-center justify-center overflow-hidden rounded border"
+    :class="[backgroundClass, enlarged ? 'size-full' : 'inline-flex max-w-full']"
   >
     <canvas
       ref="canvas"
-      class="block h-full w-full [image-rendering:auto]"
+      class="block h-full w-full object-contain [image-rendering:auto]"
       :aria-label="sprite.name"
     ></canvas>
   </div>

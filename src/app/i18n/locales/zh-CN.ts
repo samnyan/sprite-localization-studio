@@ -54,6 +54,7 @@ export default {
     selectManifest: '请选择 Sprite Table。',
     noSprites: '当前 Sprite Table 没有需要翻译的贴图。',
     originalSprite: '原 Sprite',
+    openPreview: '放大预览：{label}',
     sourceText: '原文',
     translatedText: '翻译文',
     output: '输出效果',
