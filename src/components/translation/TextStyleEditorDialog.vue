@@ -79,6 +79,7 @@ const savingAsTemplate = ref(false)
 const saveAsName = ref('')
 const duplicateNameTarget = ref<TextStyleTemplate>()
 const duplicateNameAction = ref<'saveAs' | 'rename'>()
+const fontWeights = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
 const availableTemplates = computed(() => [...textStyleTemplates, ...(props.templates ?? [])])
 const previewText = computed(() => props.text || (locale.value.startsWith('zh') ? '文本' : 'Text'))
 const templatePreviewText = computed(() => (locale.value.startsWith('zh') ? '文本' : 'Text'))
@@ -144,6 +145,14 @@ function selectProjectFont(value: unknown): void {
 
 function updateFontFamily(value: string | number): void {
   draft.value.fontFamily = String(value)
+  draft.value.fontId = undefined
+  selectedProjectFontId.value = undefined
+}
+
+function updateFontWeight(value: unknown): void {
+  const weight = Number(value)
+  if (!fontWeights.includes(weight as (typeof fontWeights)[number])) return
+  draft.value.fontWeight = weight
   draft.value.fontId = undefined
   selectedProjectFontId.value = undefined
 }
@@ -386,6 +395,21 @@ function save(): void {
                     <SelectItem v-for="font in fonts" :key="font.id" :value="font.id">
                       {{ font.family }}{{ font.weight ? ` ${font.weight}` : '' }}
                       {{ font.style === 'normal' ? '' : ` · ${font.style}` }}
+                    </SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField :label="t('style.fontWeight')">
+              <Select
+                :model-value="String(draft.fontWeight)"
+                @update:model-value="updateFontWeight"
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem v-for="weight in fontWeights" :key="weight" :value="String(weight)">
+                      {{ weight }}
                     </SelectItem>
                   </SelectGroup>
                 </SelectContent>

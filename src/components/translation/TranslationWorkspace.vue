@@ -8,7 +8,9 @@ import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import TranslationSpritePreview from '@/components/translation/TranslationSpritePreview.vue'
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
-import ImagePreviewDialog from '@/components/ui/image-preview/ImagePreviewDialog.vue'
+import ImagePreviewDialog, {
+  type ImagePreviewItem,
+} from '@/components/ui/image-preview/ImagePreviewDialog.vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -42,7 +44,7 @@ const editingBackground = ref<{
 const previewing = ref<{
   spriteTableId: string
   spriteId: string
-  output: boolean
+  initialIndex: number
 }>()
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
 const diagnosticDisplayCount = ref(12)
@@ -110,6 +112,14 @@ const previewRow = computed(() => {
       row.translation.spriteTableId === preview.spriteTableId && row.sprite.id === preview.spriteId,
   )
 })
+const previewImages = computed<ImagePreviewItem[]>(() =>
+  previewRow.value
+    ? [
+        { title: t('translation.originalSprite') },
+        { title: t('translation.output') },
+      ]
+    : [],
+)
 const hasActiveFilters = computed(
   () =>
     searchQuery.value.trim().length > 0 ||
@@ -240,7 +250,7 @@ function backgroundUrl(backgroundId?: string): string | undefined {
 }
 
 function openPreview(spriteTableId: string, spriteId: string, output: boolean): void {
-  previewing.value = { spriteTableId, spriteId, output }
+  previewing.value = { spriteTableId, spriteId, initialIndex: output ? 1 : 0 }
 }
 
 function setTranslationRow(key: string, element: Element | ComponentPublicInstance | null): void {
@@ -993,24 +1003,27 @@ onUnmounted(() => {
     />
     <ImagePreviewDialog
       :open="previewing !== undefined"
-      :title="t(previewing?.output ? 'translation.output' : 'translation.originalSprite')"
+      :title="t(previewing?.initialIndex ? 'translation.output' : 'translation.originalSprite')"
+      :images="previewImages"
+      :initial-index="previewing?.initialIndex ?? 0"
+      mode="compare"
       :background="workspace.previewBackground"
       @close="previewing = undefined"
     >
-      <TranslationSpritePreview
-        v-if="previewRow && previewing"
-        :image-url="previewRow.imageUrl"
-        :texture-size="previewRow.texture.size"
-        :sprite="previewRow.sprite"
-        :translation="previewRow.translation"
-        :background-url="
-          previewing.output ? backgroundUrl(previewRow.translation.backgroundId) : undefined
-        "
-        :output="previewing.output"
-        :output-blank="previewing.output && previewRow.translation.backgroundType === 'blank'"
-        :preview-background="workspace.previewBackground"
-        enlarged
-      />
+      <template #image="{ index }">
+        <TranslationSpritePreview
+          v-if="previewRow && previewing"
+          :image-url="previewRow.imageUrl"
+          :texture-size="previewRow.texture.size"
+          :sprite="previewRow.sprite"
+          :translation="previewRow.translation"
+          :background-url="index === 1 ? backgroundUrl(previewRow.translation.backgroundId) : undefined"
+          :output="index === 1"
+          :output-blank="index === 1 && previewRow.translation.backgroundType === 'blank'"
+          :preview-background="workspace.previewBackground"
+          enlarged
+        />
+      </template>
     </ImagePreviewDialog>
   </section>
 </template>

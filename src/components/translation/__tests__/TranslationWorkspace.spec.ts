@@ -55,10 +55,10 @@ describe('TranslationWorkspace', () => {
           TextStyleEditorDialog: true,
           BackgroundEditorDialog: true,
           ImagePreviewDialog: {
-            props: ['open', 'title', 'background'],
+            props: ['open', 'title', 'background', 'images', 'initialIndex', 'mode'],
             emits: ['close'],
             template:
-              '<div v-if="open" data-testid="image-preview-overlay" :data-title="title" :data-background="background"><slot /></div>',
+              '<div v-if="open" data-testid="image-preview-overlay" :data-title="title" :data-background="background" :data-index="initialIndex" :data-mode="mode" :data-image-count="images.length"><slot /></div>',
           },
         },
       },
@@ -72,11 +72,17 @@ describe('TranslationWorkspace', () => {
     expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-background')).toBe(
       'transparent',
     )
+    expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes()).toMatchObject({
+      'data-index': '0',
+      'data-mode': 'compare',
+      'data-image-count': '2',
+    })
 
     await wrapper.get('[data-testid="output-preview"]').trigger('click')
     expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-title')).toBe(
       'Output',
     )
+    expect(wrapper.get('[data-testid="image-preview-overlay"]').attributes('data-index')).toBe('1')
   })
 
   it('navigates translated text inputs with Alt+Arrow keys', async () => {

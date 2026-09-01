@@ -102,6 +102,18 @@ describe('TextStyleEditorDialog project fonts', () => {
     expect(render).toMatchObject({ fontFamily: 'Manual Font' })
     expect(render).not.toHaveProperty('fontId')
   })
+
+  it('allows a font family to resolve a different project weight', async () => {
+    const wrapper = mountEditor()
+    const selects = wrapper.findAllComponents(Select)
+    await selects[0]!.vm.$emit('update:modelValue', 'project-font')
+    await selects[1]!.vm.$emit('update:modelValue', '400')
+    await nextTick()
+    const render = await save(wrapper)
+
+    expect(render).toMatchObject({ fontFamily: 'Demo', fontWeight: 400 })
+    expect(render).not.toHaveProperty('fontId')
+  })
 })
 
 describe('TextStyleEditorDialog template binding', () => {

@@ -83,6 +83,12 @@ export default {
     center: '居中',
     right: '右对齐',
   },
+  imagePreview: {
+    title: '图片预览',
+    close: '关闭预览',
+    previous: '上一张图片',
+    next: '下一张图片',
+  },
   backgroundTemplateGrid: {
     count: '没有图片模板 | 1 个图片模板 | {count} 个图片模板',
     previewSize: '预览大小',
@@ -109,6 +115,7 @@ export default {
     templateMode: '字体模板',
     individualMode: '单独样式',
     fontFamily: '字体名称',
+    fontWeight: '字重',
     fontHint: '选择工程字体会保留引用；也可以手动输入系统字体名称。',
     fontDiagnostics: '项目字体诊断',
     projectFont: '项目字体',

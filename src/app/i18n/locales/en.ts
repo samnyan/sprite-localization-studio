@@ -83,6 +83,12 @@ export default {
     center: 'Center',
     right: 'Right',
   },
+  imagePreview: {
+    title: 'Image preview',
+    close: 'Close preview',
+    previous: 'Previous image',
+    next: 'Next image',
+  },
   backgroundTemplateGrid: {
     count: 'No image templates | 1 image template | {count} image templates',
     previewSize: 'Preview size',
@@ -109,6 +115,7 @@ export default {
     templateMode: 'Font templates',
     individualMode: 'Individual style',
     fontFamily: 'Font',
+    fontWeight: 'Font weight',
     fontHint: 'Project font selections stay linked; system font names can be typed manually.',
     fontDiagnostics: 'Project font diagnostics',
     projectFont: 'Project font',
