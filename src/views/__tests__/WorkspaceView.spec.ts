@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
 import { i18n, setLocale } from '@/app/i18n'
 import { useWorkspaceStore } from '@/app/stores/workspace'
@@ -160,7 +161,7 @@ describe('WorkspaceView', () => {
     expect(wrapper.get('[aria-label="1 translation issue"]').text()).toBe('Missing: title')
   })
 
-  it('shows partial build failures with their source texture identifiers', () => {
+  it('announces partial build results with their source texture identifiers', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     setLocale('en')
@@ -169,6 +170,15 @@ describe('WorkspaceView', () => {
     workspace.project = { schemaVersion: 3, name: 'Example' }
     workspace.status = 'error'
     workspace.error = { key: 'errors.build.partialFailure', params: { count: 1 } }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+    const buildStatus = wrapper.get('[aria-label="Build result"]')
+
+    expect(buildStatus.text()).toBe('')
+    expect(buildStatus.attributes('role')).toBe('status')
+    expect(buildStatus.attributes('aria-live')).toBe('polite')
+    expect(buildStatus.attributes('aria-atomic')).toBe('true')
+    expect(buildStatus.classes()).not.toContain('ml-3')
+
     workspace.lastBuildReport = {
       locale: 'zh-CN',
       textures: [],
@@ -184,8 +194,7 @@ describe('WorkspaceView', () => {
       modifiedSpriteCount: 0,
       durationMs: 0,
     }
-
-    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+    await nextTick()
 
     expect(wrapper.get('[role="alert"]').text()).toBe(
       'Texture build failed (1 total). See details below.',
@@ -195,6 +204,14 @@ describe('WorkspaceView', () => {
     )
     expect(wrapper.find('footer').text()).toContain('1 failed')
     expect(wrapper.find('footer').text()).toContain('0 ms')
+    expect(buildStatus.text()).toContain('1 failed')
+    expect(buildStatus.text()).toContain('0 ms')
+    expect(buildStatus.classes()).toContain('ml-3')
+
+    workspace.status = 'ready'
+    await nextTick()
+
+    expect(wrapper.get('[aria-label="Build result"]').element).toBe(buildStatus.element)
   })
 
   it('shows the most recent successful save time in the status bar', () => {

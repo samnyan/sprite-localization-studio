@@ -163,6 +163,7 @@ export default {
     completed: '已构造 {textures} 张贴图 · {sprites} 个 Sprite',
     partial: '已构造 {textures} 张贴图 · {sprites} 个 Sprite · {failures} 项失败',
     duration: '耗时 {duration} 毫秒',
+    result: '构建结果',
     failure: '{spriteTableId} / {textureId} ({texturePath})：{message}',
     spriteFailure: '{spriteTableId} / {textureId} ({texturePath}) / {spriteId}：{message}',
     failures: '构造失败详情',

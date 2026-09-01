@@ -651,7 +651,15 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
           {{ lastSavedText }}
         </time>
       </div>
-      <span v-if="lastBuildText" class="ml-3">{{ lastBuildText }}</span>
+      <span
+        :class="{ 'ml-3': lastBuildText }"
+        role="status"
+        :aria-label="t('build.result')"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {{ lastBuildText }}
+      </span>
       <span v-if="workspace.selectedSprite" class="ml-3">{{ workspace.selectedSprite.name }}</span>
       <span v-if="workspace.directoryName" class="ml-auto truncate">{{
         workspace.directoryName
