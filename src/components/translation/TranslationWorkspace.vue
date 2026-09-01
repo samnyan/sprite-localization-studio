@@ -83,9 +83,40 @@ const translationRows = computed(() => {
       : []
   })
 })
-const diagnosticSprites = computed(
-  () => new Set(workspace.textDiagnostics.map((item) => spriteKey(item.spriteTableId, item.spriteId))),
+const hasActiveFilters = computed(
+  () => searchQuery.value.trim().length > 0 || translationFilter.value !== 'all',
 )
+const totalRowsCount = computed(() => translationRows.value.length)
+const filteredRowsCount = computed(() => filteredTranslationRows.value.length)
+const hasBackgroundIssueSprites = computed(() => {
+  const set = new Set<string>()
+  const translations = workspace.project?.translations ?? []
+  for (const diag of workspace.backgroundDiagnostics) {
+    for (const t of translations) {
+      if (
+        t.backgroundId === diag.resourceId &&
+        (resolveBackgroundType(t) === 'template' || resolveBackgroundType(t) === 'sprite')
+      ) {
+        set.add(spriteKey(t.spriteTableId, t.spriteId))
+      }
+    }
+  }
+  return set
+})
+const diagnosticSprites = computed(() => {
+  const set = new Set<string>(
+    workspace.textDiagnostics.map((item) => spriteKey(item.spriteTableId, item.spriteId)),
+  )
+  for (const key of hasBackgroundIssueSprites.value) {
+    set.add(key)
+  }
+  return set
+})
+
+function clearFilters(): void {
+  searchQuery.value = ''
+  translationFilter.value = 'all'
+}
 const filteredTranslationRows = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase()
   return translationRows.value.filter((row) => {
@@ -519,26 +550,46 @@ onUnmounted(() => {
           {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
         </Button>
       </div>
-      <div class="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <Input
-          v-model="searchQuery"
-          class="max-w-64"
-          :aria-label="t('translation.filterPlaceholder')"
-          :placeholder="t('translation.filterPlaceholder')"
-        />
-        <Select v-model="translationFilter">
-          <SelectTrigger class="w-36" :aria-label="t('translation.filterStatus')">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="all">{{ t('translation.filterAll') }}</SelectItem>
-              <SelectItem value="incomplete">{{ t('translation.filterIncomplete') }}</SelectItem>
-              <SelectItem value="complete">{{ t('translation.filterComplete') }}</SelectItem>
-              <SelectItem value="issues">{{ t('translation.filterIssues') }}</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <Input
+            v-model="searchQuery"
+            class="max-w-64"
+            :aria-label="t('translation.filterPlaceholder')"
+            :placeholder="t('translation.filterPlaceholder')"
+          />
+          <Select v-model="translationFilter">
+            <SelectTrigger class="w-36" :aria-label="t('translation.filterStatus')">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="all">{{ t('translation.filterAll') }}</SelectItem>
+                <SelectItem value="incomplete">{{ t('translation.filterIncomplete') }}</SelectItem>
+                <SelectItem value="complete">{{ t('translation.filterComplete') }}</SelectItem>
+                <SelectItem value="issues">{{ t('translation.filterIssues') }}</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button
+            v-if="hasActiveFilters"
+            variant="ghost"
+            size="sm"
+            class="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+            :aria-label="t('translation.clearFilters')"
+            @click="clearFilters"
+          >
+            {{ t('translation.clearFilters') }}
+          </Button>
+        </div>
+        <div
+          v-if="totalRowsCount > 0"
+          class="text-xs text-muted-foreground"
+          role="status"
+          aria-live="polite"
+        >
+          {{ t('translation.filterResultsCount', { filtered: filteredRowsCount, total: totalRowsCount }) }}
+        </div>
       </div>
       <div class="min-h-0 flex-1 overflow-auto">
         <div class="sticky top-0 z-20 min-w-max border-b bg-background">
@@ -573,11 +624,20 @@ onUnmounted(() => {
         </div>
         <div
           v-else-if="filteredTranslationRows.length === 0"
-          class="p-6 text-center text-sm text-muted-foreground"
+          class="flex flex-col items-center justify-center p-8 text-center text-sm text-muted-foreground"
           role="status"
           aria-live="polite"
         >
-          {{ t('translation.noMatches') }}
+          <p>{{ t('translation.noMatches') }}</p>
+          <Button
+            v-if="hasActiveFilters"
+            variant="outline"
+            size="sm"
+            class="mt-3"
+            @click="clearFilters"
+          >
+            {{ t('translation.clearFilters') }}
+          </Button>
         </div>
         <template v-else>
           <article

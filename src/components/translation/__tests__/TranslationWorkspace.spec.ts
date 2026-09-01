@@ -297,6 +297,124 @@ describe('TranslationWorkspace', () => {
     expect(workspace.selectedTextRegionId).toBe('title')
     expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
   })
+
+  it('supports single/combined filtering, shows counts, and clears filters properly', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'sprite-complete',
+          textRegions: [
+            {
+              id: 'r1',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'key1',
+              translatedText: 'Finished text',
+            },
+          ],
+        },
+        {
+          spriteTableId: 'ui',
+          spriteId: 'sprite-incomplete',
+          textRegions: [
+            {
+              id: 'r2',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              translationKey: 'key2',
+            },
+          ],
+        },
+      ],
+    }
+    workspace.spriteTables = [{
+      schemaVersion: 1,
+      id: 'ui',
+      name: 'UI',
+      textures: [{ id: 'page', imagePath: 'ui.png', size: { width: 1, height: 1 } }],
+      sprites: [
+        {
+          id: 'sprite-complete',
+          name: 'Complete Sprite',
+          textureId: 'page',
+          frame: { x: 0, y: 0, width: 1, height: 1 },
+          rotation: 0,
+          trimmed: false,
+        },
+        {
+          id: 'sprite-incomplete',
+          name: 'Incomplete Sprite',
+          textureId: 'page',
+          frame: { x: 0, y: 0, width: 1, height: 1 },
+          rotation: 0,
+          trimmed: false,
+        },
+      ],
+    }]
+    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.selectSpriteTable('ui')
+
+    const wrapper = mount(TranslationWorkspace, {
+      attachTo: document.body,
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+        },
+      },
+    })
+    mountedWrapper = wrapper
+
+    expect(wrapper.text()).toContain('2 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(2)
+
+    // Filter by search keyword
+    const searchInput = wrapper.get('input[aria-label="Filter translations"]')
+    await searchInput.setValue('Finished')
+    expect(wrapper.text()).toContain('1 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('Finished text')
+
+    // Clear filters button in header
+    const clearButton = wrapper.get('button[aria-label="Clear filters"]')
+    await clearButton.trigger('click')
+    expect(wrapper.text()).toContain('2 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(2)
+
+    // Filter by status: incomplete
+    const statusSelect = wrapper.findComponent(Select)
+    await statusSelect.vm.$emit('update:modelValue', 'incomplete')
+    expect(wrapper.text()).toContain('1 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
+
+    // Filter by status: issues
+    await statusSelect.vm.$emit('update:modelValue', 'issues')
+    expect(wrapper.text()).toContain('1 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.get('textarea[aria-label="Translation"]').element as HTMLTextAreaElement).value).toBe('')
+
+    // Combined search yielding empty result and clear from empty state
+    await searchInput.setValue('NonExistent')
+    expect(wrapper.text()).toContain('0 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(0)
+    expect(wrapper.text()).toContain('No translations match the filters.')
+
+    const emptyStateClearButton = wrapper.findAll('button').find((btn) => btn.text() === 'Clear filters')
+    expect(emptyStateClearButton).toBeDefined()
+    await emptyStateClearButton?.trigger('click')
+    expect(wrapper.text()).toContain('2 of 2 shown')
+    expect(wrapper.findAll('article')).toHaveLength(2)
+  })
 })
 
 function spriteTable(id: string, name: string, spriteId: string): SpriteTable {
