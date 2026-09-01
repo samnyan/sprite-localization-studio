@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import BackgroundTemplateGrid from '@/components/translation/BackgroundTemplateGrid.vue'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import type { BackgroundTemplate, SpriteBackground } from '@/domain/resource/types'
 
 const props = defineProps<{
@@ -20,30 +20,22 @@ const props = defineProps<{
   templates: BackgroundTemplate[]
   spriteBackgrounds: SpriteBackground[]
   imageUrls: Record<string, string>
+  templateReferenceCounts: Record<string, number>
 }>()
 const emit = defineEmits<{
   close: []
   save: [type: 'original' | 'blank' | 'template' | 'sprite', backgroundId?: string]
-  upload: [scope: 'template' | 'sprite', file: File]
+  uploadTemplate: [files: File[]]
+  uploadSprite: [file: File]
   renameTemplate: [id: string, name: string]
   replaceTemplate: [id: string, file: File]
-  deleteTemplate: [id: string]
+  deleteTemplate: [id: string, fallback?: 'original' | 'blank']
 }>()
 const { t } = useI18n()
 const draftType = ref<'original' | 'blank' | 'template' | 'sprite'>('original')
 const draftBackgroundId = ref<string>()
-const fileInput = ref<HTMLInputElement>()
-const replaceInput = ref<HTMLInputElement>()
-const replacingTemplateId = ref<string>()
-const managingTemplates = ref(false)
+const spriteFileInput = ref<HTMLInputElement>()
 const choices = ['original', 'blank', 'template', 'sprite'] as const
-const selectedBackgrounds = computed(() =>
-  draftType.value === 'template'
-    ? props.templates
-    : draftType.value === 'sprite'
-      ? props.spriteBackgrounds
-      : [],
-)
 const canSave = computed(() =>
   draftType.value === 'template' || draftType.value === 'sprite'
     ? draftBackgroundId.value !== undefined
@@ -61,34 +53,21 @@ watch(
 )
 
 watch(draftType, () => {
-  if (draftType.value !== 'template' && draftType.value !== 'sprite') {
+  if (draftType.value === 'original' || draftType.value === 'blank') {
     draftBackgroundId.value = undefined
     return
   }
 
-  if (!selectedBackgrounds.value.some((background) => background.id === draftBackgroundId.value)) {
+  const backgrounds = draftType.value === 'template' ? props.templates : props.spriteBackgrounds
+  if (!backgrounds.some((background) => background.id === draftBackgroundId.value)) {
     draftBackgroundId.value = undefined
   }
 })
 
-function upload(event: Event): void {
+function uploadSprite(event: Event): void {
   const file = (event.target as HTMLInputElement).files?.[0]
-  if (file && (draftType.value === 'template' || draftType.value === 'sprite')) {
-    emit('upload', draftType.value, file)
-  }
+  if (file?.type.startsWith('image/')) emit('uploadSprite', file)
   ;(event.target as HTMLInputElement).value = ''
-}
-
-function replaceTemplate(event: Event): void {
-  const file = (event.target as HTMLInputElement).files?.[0]
-  if (file && replacingTemplateId.value) emit('replaceTemplate', replacingTemplateId.value, file)
-  replacingTemplateId.value = undefined
-  ;(event.target as HTMLInputElement).value = ''
-}
-
-function openTemplateReplacement(id: string): void {
-  replacingTemplateId.value = id
-  replaceInput.value?.click()
 }
 
 function typeLabel(type: (typeof choices)[number]): string {
@@ -98,93 +77,65 @@ function typeLabel(type: (typeof choices)[number]): string {
 
 <template>
   <Dialog :open="open" @update:open="(value) => !value && emit('close')">
-    <DialogContent class="max-w-xl" :show-close-button="false">
-      <DialogHeader
-        ><DialogTitle>{{ t('translation.backgroundTitle') }}</DialogTitle></DialogHeader
-      >
-      <div class="flex flex-col gap-4">
-        <div class="grid gap-2" role="radiogroup">
-          <label v-for="option in choices" :key="option" class="flex items-center gap-2 text-sm"
-            ><input v-model="draftType" type="radio" :value="option" />{{
-              typeLabel(option)
-            }}</label
-          >
+    <DialogContent
+      class="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-[960px]"
+      :show-close-button="false"
+    >
+      <DialogHeader class="border-b px-5 py-4">
+        <DialogTitle>{{ t('translation.backgroundTitle') }}</DialogTitle>
+      </DialogHeader>
+      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-5">
+        <div class="flex flex-wrap gap-2" role="radiogroup">
+          <label v-for="option in choices" :key="option" class="flex items-center gap-2 text-sm">
+            <input v-model="draftType" type="radio" :value="option" />
+            {{ typeLabel(option) }}
+          </label>
         </div>
-        <template v-if="draftType === 'template' || draftType === 'sprite'">
-          <input ref="fileInput" class="sr-only" type="file" accept="image/*" @change="upload" />
+        <BackgroundTemplateGrid
+          v-if="draftType === 'template'"
+          :templates="templates"
+          :image-urls="imageUrls"
+          :selected-template-id="draftBackgroundId"
+          :reference-counts="templateReferenceCounts"
+          @select="draftBackgroundId = $event"
+          @upload="emit('uploadTemplate', $event)"
+          @rename="(id, name) => emit('renameTemplate', id, name)"
+          @replace="(id, file) => emit('replaceTemplate', id, file)"
+          @delete="(id, fallback) => emit('deleteTemplate', id, fallback)"
+        />
+        <template v-else-if="draftType === 'sprite'">
           <input
-            ref="replaceInput"
+            ref="spriteFileInput"
             class="sr-only"
             type="file"
             accept="image/*"
-            @change="replaceTemplate"
+            @change="uploadSprite"
           />
-          <div class="flex gap-2">
-            <Button variant="outline" @click="fileInput?.click()">{{
-              t('translation.upload')
-            }}</Button>
-            <Button
-              v-if="draftType === 'template'"
-              variant="outline"
-              @click="managingTemplates = !managingTemplates"
-            >
-              {{ t('translation.manageTemplates') }}
-            </Button>
-          </div>
+          <Button class="self-start" variant="outline" @click="spriteFileInput?.click()">
+            {{ t('translation.upload') }}
+          </Button>
           <div class="grid grid-cols-3 gap-3">
-            <article
-              v-for="background in selectedBackgrounds"
+            <button
+              v-for="background in spriteBackgrounds"
               :key="background.id"
-              class="overflow-hidden rounded border p-1"
+              type="button"
+              class="overflow-hidden rounded border p-1 text-left"
+              :class="{ 'ring-1 ring-primary': draftBackgroundId === background.id }"
+              @click="draftBackgroundId = background.id"
             >
-              <button
-                type="button"
-                class="block w-full"
-                :class="{ 'ring-1 ring-primary': draftBackgroundId === background.id }"
-                @click="draftBackgroundId = background.id"
-              >
-                <img
-                  :src="imageUrls[background.id]"
-                  :alt="background.name"
-                  class="aspect-video w-full object-contain"
-                />
-                <span class="block truncate px-1 py-1 text-xs">{{ background.name }}</span>
-              </button>
-              <div
-                v-if="managingTemplates && draftType === 'template'"
-                class="flex gap-1 px-1 pb-1"
-              >
-                <Input
-                  :model-value="background.name"
-                  class="h-7 text-xs"
-                  @blur="
-                    emit('renameTemplate', background.id, ($event.target as HTMLInputElement).value)
-                  "
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-7 px-2 text-xs"
-                  @click="openTemplateReplacement(background.id)"
-                >
-                  {{ t('translation.replace') }}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="h-7 px-2 text-xs"
-                  @click="emit('deleteTemplate', background.id)"
-                >
-                  {{ t('translation.delete') }}
-                </Button>
-              </div>
-            </article>
+              <img
+                :src="imageUrls[background.id]"
+                :alt="background.name"
+                class="aspect-video w-full object-contain"
+              />
+              <span class="block truncate px-1 py-1 text-xs">{{ background.name }}</span>
+            </button>
           </div>
         </template>
       </div>
-      <DialogFooter
-        ><Button variant="outline" @click="emit('close')">{{ t('translation.cancel') }}</Button
-        ><Button
+      <DialogFooter class="border-t px-5 py-4">
+        <Button variant="outline" @click="emit('close')">{{ t('translation.cancel') }}</Button>
+        <Button
           :disabled="!canSave"
           @click="
             emit(
@@ -193,9 +144,8 @@ function typeLabel(type: (typeof choices)[number]): string {
               draftType === 'template' || draftType === 'sprite' ? draftBackgroundId : undefined,
             )
           "
-          >{{ t('common.ok') }}</Button
-        ></DialogFooter
-      >
+        >{{ t('common.ok') }}</Button>
+      </DialogFooter>
     </DialogContent>
   </Dialog>
 </template>

@@ -1101,7 +1101,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         await removeResourceFile(operation.storage, path)
         return false
       }
-      const updated: BackgroundTemplate = { ...current, name: file.name, path }
+      const updated: BackgroundTemplate = { ...current, path }
       const backgroundTemplates = operation.project.backgroundTemplates?.map((background) =>
         background.id === id ? updated : background,
       )
@@ -1132,9 +1132,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  async function deleteBackgroundTemplate(id: string): Promise<boolean> {
+  async function deleteBackgroundTemplate(
+    id: string,
+    fallback?: 'original' | 'blank',
+  ): Promise<boolean> {
     const existing = project.value?.backgroundTemplates?.find((background) => background.id === id)
-    if (!existing || backgroundTemplateReferenceCount(id) > 0) return false
+    const references = (project.value?.translations ?? []).filter(
+      (translation) =>
+        resolveBackgroundType(translation) === 'template' && translation.backgroundId === id,
+    )
+    if (!existing || (references.length > 0 && !fallback)) return false
     const operation = beginResourceOperation()
     const current = operation?.project.backgroundTemplates?.find((background) => background.id === id)
     if (!operation || !current) return false
@@ -1145,8 +1152,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       (background) => background.id !== id,
     )
     if (!backgroundTemplates) return false
+    const translations = fallback
+      ? (operation.project.translations ?? []).map((translation) =>
+          resolveBackgroundType(translation) === 'template' && translation.backgroundId === id
+            ? { ...translation, backgroundType: fallback, backgroundId: undefined }
+            : translation,
+        )
+      : operation.project.translations
     try {
-      if (!(await persistAssetProject(operation, { ...operation.project, backgroundTemplates }))) {
+      if (
+        !(await persistAssetProject(operation, {
+          ...operation.project,
+          backgroundTemplates,
+          ...(translations ? { translations } : {}),
+        }))
+      ) {
         return false
       }
       status.value = 'saving'

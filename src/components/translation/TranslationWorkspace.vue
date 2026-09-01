@@ -119,6 +119,14 @@ const hasBackgroundIssueSprites = computed(() => {
   }
   return set
 })
+const templateReferenceCounts = computed(() =>
+  Object.fromEntries(
+    (workspace.project?.backgroundTemplates ?? []).map((template) => [
+      template.id,
+      workspace.backgroundTemplateReferenceCount(template.id),
+    ]),
+  ),
+)
 const diagnosticSprites = computed(() => {
   const set = new Set<string>(
     workspace.textDiagnostics.map((item) => spriteKey(item.spriteTableId, item.spriteId)),
@@ -451,20 +459,35 @@ function saveBackground(
   }
 }
 
-async function uploadBackground(scope: 'template' | 'sprite', file: File): Promise<void> {
+async function uploadBackgroundTemplates(files: File[]): Promise<void> {
   if (!editingBackground.value) return
   const spriteTableId = editingBackground.value.spriteTableId
   const spriteId = editingBackground.value.spriteId
-  const backgroundId =
-    scope === 'template'
-      ? await workspace.addBackgroundTemplate(file)
-      : await workspace.addSpriteBackground(spriteTableId, spriteId, file)
+  let backgroundId: string | undefined
+  for (const file of files) {
+    const uploadedId = await workspace.addBackgroundTemplate(file)
+    if (!backgroundId && uploadedId) backgroundId = uploadedId
+  }
   if (
     backgroundId &&
     editingBackground.value?.spriteId === spriteId &&
     editingBackground.value?.spriteTableId === spriteTableId
   ) {
-    editingBackground.value = { ...editingBackground.value, type: scope, backgroundId }
+    editingBackground.value = { ...editingBackground.value, type: 'template', backgroundId }
+  }
+}
+
+async function uploadSpriteBackground(file: File): Promise<void> {
+  if (!editingBackground.value) return
+  const spriteTableId = editingBackground.value.spriteTableId
+  const spriteId = editingBackground.value.spriteId
+  const backgroundId = await workspace.addSpriteBackground(spriteTableId, spriteId, file)
+  if (
+    backgroundId &&
+    editingBackground.value?.spriteId === spriteId &&
+    editingBackground.value?.spriteTableId === spriteTableId
+  ) {
+    editingBackground.value = { ...editingBackground.value, type: 'sprite', backgroundId }
   }
 }
 
@@ -476,17 +499,8 @@ async function replaceTemplate(id: string, file: File): Promise<void> {
   await workspace.replaceBackgroundTemplate(id, file)
 }
 
-async function deleteTemplate(id: string): Promise<void> {
-  const references = workspace.backgroundTemplateReferenceCount(id)
-  if (references > 0) {
-    await showAlert({
-      title: t('translation.templateInUseTitle'),
-      message: t('translation.templateInUse', { count: references }),
-      confirmLabel: t('common.ok'),
-    })
-    return
-  }
-  await workspace.deleteBackgroundTemplate(id)
+async function deleteTemplate(id: string, fallback?: 'original' | 'blank'): Promise<void> {
+  await workspace.deleteBackgroundTemplate(id, fallback)
 }
 
 onUnmounted(() => {
@@ -898,6 +912,7 @@ onUnmounted(() => {
       :type="editingBackground?.type"
       :background-id="editingBackground?.backgroundId"
       :templates="workspace.project?.backgroundTemplates ?? []"
+      :template-reference-counts="templateReferenceCounts"
       :sprite-backgrounds="
         editingBackground
           ? workspace.spriteBackgroundsForSprite(
@@ -909,7 +924,8 @@ onUnmounted(() => {
       :image-urls="workspace.backgroundImageUrls"
       @close="editingBackground = undefined"
       @save="saveBackground"
-      @upload="uploadBackground"
+      @upload-template="uploadBackgroundTemplates"
+      @upload-sprite="uploadSpriteBackground"
       @rename-template="renameTemplate"
       @replace-template="replaceTemplate"
       @delete-template="deleteTemplate"
