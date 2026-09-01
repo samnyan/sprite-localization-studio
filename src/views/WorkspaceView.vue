@@ -56,7 +56,7 @@ const lastBuildText = computed(() => {
   const report = workspace.lastBuildReport
   if (!report) return undefined
 
-  return report.failures.length
+  const summary = report.failures.length
     ? t('build.partial', {
         textures: report.textures.length,
         sprites: report.modifiedSpriteCount,
@@ -66,6 +66,8 @@ const lastBuildText = computed(() => {
         textures: report.textures.length,
         sprites: report.modifiedSpriteCount,
       })
+
+  return `${summary} · ${t('build.duration', { duration: report.durationMs })}`
 })
 function buildFailureText(
   failure: NonNullable<typeof workspace.lastBuildReport>['failures'][number],

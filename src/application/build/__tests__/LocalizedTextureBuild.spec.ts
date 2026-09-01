@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   createLocalizedTextureBuildPlan,
@@ -116,19 +116,27 @@ describe('localized texture build plan', () => {
       }],
     }
     const builtPaths: string[] = []
+    const now = vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValueOnce(125.6)
 
-    const result = await runLocalizedTextureBuild(project([changed]), [spriteTable], () => ({
-      buildTexture: async (task) => {
-        builtPaths.push(task.outputPath)
-        return { outputPath: task.outputPath, modifiedSpriteCount: 1 }
-      },
-    }))
+    try {
+      const result = await runLocalizedTextureBuild(project([changed]), [spriteTable], () => ({
+        buildTexture: async (task) => {
+          expect(now).toHaveBeenCalledTimes(1)
+          builtPaths.push(task.outputPath)
+          return { outputPath: task.outputPath, modifiedSpriteCount: 1 }
+        },
+      }))
 
-    expect(result).toMatchObject({
-      status: 'completed',
-      report: { locale: 'zh-CN', modifiedSpriteCount: 1 },
-    })
-    expect(builtPaths).toEqual(['output_textures/zh-CN/ui.png'])
+      expect(result).toMatchObject({
+        status: 'completed',
+        report: { locale: 'zh-CN', modifiedSpriteCount: 1 },
+      })
+      if (result.status !== 'completed') throw new Error('Expected a completed build.')
+      expect(result.report.durationMs).toBe(26)
+      expect(builtPaths).toEqual(['output_textures/zh-CN/ui.png'])
+    } finally {
+      now.mockRestore()
+    }
   })
 
   it('continues after a sprite failure and reports its source identifiers', async () => {

@@ -182,6 +182,7 @@ describe('WorkspaceView', () => {
         },
       ],
       modifiedSpriteCount: 0,
+      durationMs: 0,
     }
 
     const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
@@ -193,6 +194,7 @@ describe('WorkspaceView', () => {
       'ui / atlas (ui.png) / button: Source image could not be loaded.',
     )
     expect(wrapper.find('footer').text()).toContain('1 failed')
+    expect(wrapper.find('footer').text()).toContain('0 ms')
   })
 
   it('shows the most recent successful save time in the status bar', () => {

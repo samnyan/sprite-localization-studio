@@ -1,6 +1,6 @@
 # Sprite Localization Studio 项目计划
 
-> 更新日期：2026-08-31
+> 更新日期：2026-09-01
 > 当前阶段：M5–M8 已完成；M9/M10 正在收口统一高保真渲染、质量与编辑体验。
 
 ## 1. 产品定义
@@ -239,7 +239,7 @@ interface ProjectFont {
 - CanvasKit 直接文本路径同样会在 Glyph ID 为 `0` 时原子回退 Canvas 2D，避免导出缺字占位符（已完成）。
 - SkParagraph 目前只承接纯实色填充、无有效描边/阴影/图层、`wrap=true` 且无 AutoFit 的 Region；渐变、效果、未知方向脚本和不满足等价条件的文字保持完整 Canvas 2D 回退。
 - CanvasKit 0.42 的 `ShapeText` 绑定尚未通过真实非 ASCII 字体运行时验证；复杂文本使用已验证的 Paragraph 路径，不能以 mock 结果替代视觉验收。
-- Typeface、Paragraph 与 Surface 的释放路径已有回归覆盖；仍需在真实运行时采样复用与内存曲线，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
+- Typeface、Paragraph 与 Surface 的释放路径已有回归覆盖；每次贴图构建任务会记录并展示总耗时，作为真实工程 profiling 的基线。仍需采样复用与内存曲线，并基于 profile 决定是否引入 Worker/OffscreenCanvas。
 
 #### 架构与功能
 

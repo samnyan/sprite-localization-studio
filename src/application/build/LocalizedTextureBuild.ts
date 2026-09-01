@@ -44,6 +44,7 @@ export interface LocalizedTextureBuildReport {
   textures: BuiltTexture[]
   failures: LocalizedTextureBuildFailure[]
   modifiedSpriteCount: number
+  durationMs: number
 }
 
 export type LocalizedTextureBuildResult =
@@ -94,6 +95,7 @@ export async function buildLocalizedTextures(
   plan: LocalizedTextureBuildPlan,
   builder: LocalizedTextureBuilder,
 ): Promise<LocalizedTextureBuildReport> {
+  const startedAt = performance.now()
   const textures: BuiltTexture[] = []
   const failures: LocalizedTextureBuildFailure[] = []
 
@@ -120,6 +122,7 @@ export async function buildLocalizedTextures(
       (count, texture) => count + texture.modifiedSpriteCount,
       0,
     ),
+    durationMs: Math.round(performance.now() - startedAt),
   }
 }
 
