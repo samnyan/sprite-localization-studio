@@ -21,12 +21,16 @@ function newProject(): void {
       :project-path="workspace.directoryName"
       :can-undo="workspace.canUndo"
       :can-redo="workspace.canRedo"
+      :can-copy-text-region="workspace.canCopyTextRegion"
+      :can-paste-text-region="workspace.canPasteTextRegion"
       :busy="workspace.isBusy"
       @new-project="newProject"
       @open-project="workspace.openLocalProject"
       @save-project="workspace.saveProject"
       @undo="workspace.undo"
       @redo="workspace.redo"
+      @copy-text-region="workspace.copyTextRegion"
+      @paste-text-region="workspace.pasteTextRegion"
     />
     <main class="flex min-h-0 flex-1">
       <RouterView />

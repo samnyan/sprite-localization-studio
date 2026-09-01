@@ -10,6 +10,8 @@ export default {
     save: 'Save',
     undo: 'Undo',
     redo: 'Redo',
+    copyTextRegion: 'Copy text region',
+    pasteTextRegion: 'Paste text region',
   },
   history: {
     undoTooltip: 'Undo (Ctrl+Z)',

@@ -2,6 +2,7 @@ import { computed, markRaw, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
+import { TextRegionClipboard } from '@/application/editor/TextRegionClipboard'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
 import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import { collectTextFontDiagnostics } from '@/application/qa/TextFontDiagnostics'
@@ -36,13 +37,14 @@ import {
   type TextRenderConfig,
   type TextStyleTemplate,
 } from '@/domain/text-region/types'
-import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
+import { DEFAULT_TEXT_RENDER, textStyleTemplates } from '@/domain/text-region/styleTemplates'
 import { LocalFolderStorage } from '@/infrastructure/storage/LocalFolderStorage'
 import { CanvasTextureBuilder } from '@/infrastructure/image/CanvasTextureBuilder'
 import { createCanvasTextMeasure } from '@/infrastructure/image/CanvasTextMeasure'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
+import { getLogicalSpriteSize } from '@/infrastructure/image/spriteGeometry'
 
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
@@ -136,6 +138,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const canUndo = ref(false)
   const canRedo = ref(false)
   const history = new ActionHistory<ProjectManifest>()
+  const textRegionClipboard = new TextRegionClipboard()
+  const hasCopiedTextRegion = ref(false)
   const measureText = createCanvasTextMeasure()
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined
   let savePromise: Promise<boolean> | undefined
@@ -147,6 +151,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
   )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
+  const canCopyTextRegion = computed(() => !isBusy.value && selectedTextRegion.value !== undefined)
+  const canPasteTextRegion = computed(
+    () => !isBusy.value && selectedSpriteTranslation.value !== undefined && hasCopiedTextRegion.value,
+  )
   function collectProjectTextDiagnostics(document: ProjectManifest): TextDiagnostic[] {
     const missing = collectTextDiagnostics(document)
     const layout = measureText ? collectTextLayoutDiagnostics(document, measureText) : []
@@ -248,6 +256,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     documentRevision.value = 0
     persistedRevision.value = 0
     lastSavedAt.value = undefined
+    textRegionClipboard.clear()
+    hasCopiedTextRegion.value = false
     syncHistoryState()
   }
 
@@ -637,17 +647,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const translation = selectedSpriteTranslation.value
     if (!translation) return false
     const regionId = crypto.randomUUID()
-    const usedTranslationKeys = new Set(
-      project.value?.translations?.flatMap((item) =>
-        item.textRegions.map((region) => region.translationKey),
-      ) ?? [],
-    )
-    let keyIndex = translation.textRegions.length + 1
-    let translationKey = `${translation.spriteTableId}.${translation.spriteId}.${keyIndex}`
-    while (usedTranslationKeys.has(translationKey)) {
-      keyIndex += 1
-      translationKey = `${translation.spriteTableId}.${translation.spriteId}.${keyIndex}`
-    }
+    const translationKey = nextTranslationKey(translation)
     const region: TextRegion = {
       id: regionId,
       rect,
@@ -661,6 +661,65 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         translationIdentity(item) ? { ...item, textRegions: [...item.textRegions, region] } : item,
       ),
     )
+  }
+
+  function nextTranslationKey(translation: SpriteTranslation): string {
+    const usedTranslationKeys = new Set(
+      project.value?.translations?.flatMap((item) =>
+        item.textRegions.map((region) => region.translationKey),
+      ) ?? [],
+    )
+    let keyIndex = translation.textRegions.length + 1
+    let key = `${translation.spriteTableId}.${translation.spriteId}.${keyIndex}`
+    while (usedTranslationKeys.has(key)) {
+      keyIndex += 1
+      key = `${translation.spriteTableId}.${translation.spriteId}.${keyIndex}`
+    }
+    return key
+  }
+
+  function copyTextRegion(): boolean {
+    const region = selectedTextRegion.value
+    const translation = selectedSpriteTranslation.value
+    if (isBusy.value || !region || !translation) return false
+    textRegionClipboard.copy(translation, region)
+    hasCopiedTextRegion.value = true
+    return true
+  }
+
+  function findTextStyleTemplate(id: string): TextStyleTemplate | undefined {
+    return [...textStyleTemplates, ...(project.value?.textStyleTemplates ?? [])].find(
+      (template) => template.id === id,
+    )
+  }
+
+  function pasteTextRegion(): boolean {
+    const translation = selectedSpriteTranslation.value
+    const sprite = selectedSprite.value
+    if (isBusy.value || !translation || !sprite) return false
+
+    const region = textRegionClipboard.paste({
+      spriteTableId: translation.spriteTableId,
+      spriteId: translation.spriteId,
+      bounds: getLogicalSpriteSize(sprite),
+      id: crypto.randomUUID(),
+      translationKey: nextTranslationKey(translation),
+    })
+    if (!region) return false
+    if (region.styleId) {
+      const template = findTextStyleTemplate(region.styleId)
+      if (!template) {
+        region.styleId = undefined
+      }
+    }
+    const saved = saveTranslations(
+      'textRegion.paste',
+      (project.value?.translations ?? []).map((item) =>
+        translationIdentity(item) ? { ...item, textRegions: [...item.textRegions, region] } : item,
+      ),
+    )
+    if (saved) selectedTextRegionId.value = region.id
+    return saved
   }
 
   function validateTranslationKey(
@@ -1209,6 +1268,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     hasProject,
     isBusy,
     isDirty,
+    canCopyTextRegion,
+    canPasteTextRegion,
     canUndo,
     canRedo,
     mode,
@@ -1224,6 +1285,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     redo,
     setSpriteTranslationEnabled,
     addTextRegion,
+    copyTextRegion,
+    pasteTextRegion,
     validateTranslationKey,
     updateTextRegion,
     updateTranslationText,

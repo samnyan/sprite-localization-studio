@@ -20,6 +20,8 @@ const props = defineProps<{
   projectPath?: string
   canUndo?: boolean
   canRedo?: boolean
+  canCopyTextRegion?: boolean
+  canPasteTextRegion?: boolean
   busy?: boolean
 }>()
 const emit = defineEmits<{
@@ -28,6 +30,8 @@ const emit = defineEmits<{
   saveProject: []
   undo: []
   redo: []
+  copyTextRegion: []
+  pasteTextRegion: []
 }>()
 const { locale, t } = useI18n()
 const { theme, toggleTheme } = useTheme()
@@ -79,6 +83,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
           >
           <MenubarItem :disabled="busy || !canRedo" @select="emit('redo')"
             >{{ t('menu.redo') }}<MenubarShortcut>Ctrl+Y</MenubarShortcut></MenubarItem
+          >
+          <MenubarSeparator />
+          <MenubarItem :disabled="busy || !canCopyTextRegion" @select="emit('copyTextRegion')"
+            >{{ t('menu.copyTextRegion') }}<MenubarShortcut>Ctrl+C</MenubarShortcut></MenubarItem
+          >
+          <MenubarItem :disabled="busy || !canPasteTextRegion" @select="emit('pasteTextRegion')"
+            >{{ t('menu.pasteTextRegion') }}<MenubarShortcut>Ctrl+V</MenubarShortcut></MenubarItem
           >
         </MenubarContent>
       </MenubarMenu>

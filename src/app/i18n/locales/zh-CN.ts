@@ -10,6 +10,8 @@ export default {
     save: '保存',
     undo: '撤销',
     redo: '重做',
+    copyTextRegion: '复制文本区域',
+    pasteTextRegion: '粘贴文本区域',
   },
   history: {
     undoTooltip: '撤销 (Ctrl+Z)',

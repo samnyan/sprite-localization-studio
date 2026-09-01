@@ -11,6 +11,10 @@ function isTextEditingTarget(target: EventTarget | null): target is HTMLElement 
   )
 }
 
+function hasSelectedPageText(): boolean {
+  return window.getSelection()?.isCollapsed === false
+}
+
 export function useWorkspaceShortcuts(): void {
   const workspace = useWorkspaceStore()
 
@@ -27,6 +31,20 @@ export function useWorkspaceShortcuts(): void {
     }
 
     if (isTextEditingTarget(event.target)) return
+    if (
+      !event.shiftKey &&
+      !event.repeat &&
+      key === 'c' &&
+      !hasSelectedPageText() &&
+      workspace.copyTextRegion()
+    ) {
+      event.preventDefault()
+      return
+    }
+    if (!event.shiftKey && !event.repeat && key === 'v' && workspace.pasteTextRegion()) {
+      event.preventDefault()
+      return
+    }
     if (key === 'z') {
       event.preventDefault()
       if (event.shiftKey) workspace.redo()
