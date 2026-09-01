@@ -169,7 +169,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
   const canCopyTextRegion = computed(() => !isBusy.value && selectedTextRegion.value !== undefined)
   const canPasteTextRegion = computed(
-    () => !isBusy.value && selectedSpriteTranslation.value !== undefined && hasCopiedTextRegion.value,
+    () =>
+      !isBusy.value && selectedSpriteTranslation.value !== undefined && hasCopiedTextRegion.value,
   )
   function collectProjectTextDiagnostics(document: ProjectManifest): TextDiagnostic[] {
     const missing = collectTextDiagnostics(document)
@@ -378,7 +379,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   }
 
   async function persistAssetProject(
-    operation: { project: ProjectManifest; revision: number; session: number; storage: ProjectStorage },
+    operation: {
+      project: ProjectManifest
+      revision: number
+      session: number
+      storage: ProjectStorage
+    },
     updated: ProjectManifest,
   ): Promise<boolean> {
     const repository = activeRepository
@@ -533,7 +539,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     spriteTables.value = loadedSpriteTables
     textureImageUrls.value = loadedImageUrls
     backgroundImageUrls.value = loadedBackgrounds.urls
-    projectFonts.value = loadedFonts.fonts.filter((font) => fontRegistration.registeredIds.includes(font.id))
+    projectFonts.value = loadedFonts.fonts.filter((font) =>
+      fontRegistration.registeredIds.includes(font.id),
+    )
     fontDiagnostics.value = [...loadedFonts.diagnostics, ...fontRegistration.diagnostics]
     backgroundDiagnostics.value = loadedBackgrounds.diagnostics
     selectedSpriteTableId.value = firstSpriteTable?.id
@@ -563,7 +571,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const repository = markRaw(new ProjectRepository(storage))
       const loadedProject = await repository.load()
       if (activation !== projectActivation) return false
-      if (!(await activateProject(directory, storage, repository, loadedProject, activation))) return false
+      if (!(await activateProject(directory, storage, repository, loadedProject, activation)))
+        return false
       status.value = 'ready'
       return true
     } catch (caughtError) {
@@ -597,7 +606,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const repository = markRaw(new ProjectRepository(storage))
       const loadedProject = await repository.create(name)
       if (activation !== projectActivation) return false
-      if (!(await activateProject(directory, storage, repository, loadedProject, activation))) return false
+      if (!(await activateProject(directory, storage, repository, loadedProject, activation)))
+        return false
       status.value = 'ready'
       return true
     } catch (caughtError) {
@@ -820,7 +830,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!translation || !region) return false
 
     const updatedRegion = { ...region, ...update }
-    if (updatedRegion.render !== undefined && !isTextRenderConfig(updatedRegion.render)) return false
+    if (updatedRegion.render !== undefined && !isTextRenderConfig(updatedRegion.render))
+      return false
     if (textRegionEquals(region, updatedRegion)) return true
 
     return saveTranslations(
@@ -873,6 +884,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     if (!project.value || !name.trim() || !isTextRenderConfig(render)) return undefined
 
     const templates = project.value.textStyleTemplates ?? []
+    const normalizedName = name.trim().toLocaleLowerCase()
+    if (
+      templates.some(
+        (item) => item.id !== id && item.name.trim().toLocaleLowerCase() === normalizedName,
+      )
+    ) {
+      return undefined
+    }
     const templateId = id ?? crypto.randomUUID()
     const template: TextStyleTemplate = {
       id: templateId,
@@ -885,7 +904,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           ...translation,
           textRegions: translation.textRegions.map((region) =>
             region.styleId === id
-              ? { ...region, render: JSON.parse(JSON.stringify(template.render)) as TextRenderConfig }
+              ? {
+                  ...region,
+                  render: JSON.parse(JSON.stringify(template.render)) as TextRenderConfig,
+                }
               : region,
           ),
         }))
@@ -905,11 +927,59 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return templateId
   }
 
+  function renameTextStyleTemplate(id: string, name: string, replaceId?: string): boolean {
+    if (!project.value || !name.trim()) return false
+
+    const templates = project.value.textStyleTemplates ?? []
+    const template = templates.find((item) => item.id === id)
+    if (!template) return false
+
+    const normalizedName = name.trim().toLocaleLowerCase()
+    const duplicate = templates.find(
+      (item) => item.id !== id && item.name.trim().toLocaleLowerCase() === normalizedName,
+    )
+    if (!duplicate) {
+      return dispatchProjectAction('textStyleTemplate.rename', {
+        ...project.value,
+        textStyleTemplates: templates.map((item) =>
+          item.id === id ? { ...item, name: name.trim() } : item,
+        ),
+      })
+    }
+    if (duplicate.id !== replaceId) return false
+
+    const replacement: TextStyleTemplate = {
+      ...template,
+      id: duplicate.id,
+      name: duplicate.name,
+      render: JSON.parse(JSON.stringify(template.render)) as TextRenderConfig,
+    }
+    const translations = (project.value.translations ?? []).map((translation) => ({
+      ...translation,
+      textRegions: translation.textRegions.map((region) =>
+        region.styleId === id || region.styleId === duplicate.id
+          ? {
+              ...region,
+              styleId: duplicate.id,
+              render: JSON.parse(JSON.stringify(replacement.render)) as TextRenderConfig,
+            }
+          : region,
+      ),
+    }))
+    return dispatchProjectAction('textStyleTemplate.rename', {
+      ...project.value,
+      textStyleTemplates: templates
+        .filter((item) => item.id !== id)
+        .map((item) => (item.id === duplicate.id ? replacement : item)),
+      translations,
+    })
+  }
+
   function textStyleTemplateReferenceCount(id: string): number {
     return (
-      project.value?.translations?.flatMap((translation) => translation.textRegions).filter(
-        (region) => region.styleId === id,
-      ).length ?? 0
+      project.value?.translations
+        ?.flatMap((translation) => translation.textRegions)
+        .filter((region) => region.styleId === id).length ?? 0
     )
   }
 
@@ -918,10 +988,16 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const textStyleTemplates = project.value.textStyleTemplates?.filter(
       (template) => template.id !== id,
     )
-    if (!textStyleTemplates || textStyleTemplates.length === project.value.textStyleTemplates?.length) {
+    if (
+      !textStyleTemplates ||
+      textStyleTemplates.length === project.value.textStyleTemplates?.length
+    ) {
       return false
     }
-    return dispatchProjectAction('textStyleTemplate.delete', { ...project.value, textStyleTemplates })
+    return dispatchProjectAction('textStyleTemplate.delete', {
+      ...project.value,
+      textStyleTemplates,
+    })
   }
 
   function setSpriteTranslationBackground(
@@ -962,10 +1038,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
 
     try {
-      await operation.storage.writeBinary(
-        background.path,
-        new Uint8Array(await file.arrayBuffer()),
-      )
+      await operation.storage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
       if (!isCurrentResourceOperation(operation)) {
         await removeResourceFile(operation.storage, background.path)
         return undefined
@@ -973,10 +1046,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const url = URL.createObjectURL(file)
       const backgroundTemplates = [...(operation.project.backgroundTemplates ?? []), background]
       if (
-        !dispatchProjectAction('backgroundTemplate.add', {
-          ...operation.project,
-          backgroundTemplates,
-        }, true)
+        !dispatchProjectAction(
+          'backgroundTemplate.add',
+          {
+            ...operation.project,
+            backgroundTemplates,
+          },
+          true,
+        )
       ) {
         URL.revokeObjectURL(url)
         await removeResourceFile(operation.storage, background.path)
@@ -1020,21 +1097,20 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
 
     try {
-      await operation.storage.writeBinary(
-        background.path,
-        new Uint8Array(await file.arrayBuffer()),
-      )
+      await operation.storage.writeBinary(background.path, new Uint8Array(await file.arrayBuffer()))
       if (!isCurrentResourceOperation(operation)) {
         await removeResourceFile(operation.storage, background.path)
         return undefined
       }
       const url = URL.createObjectURL(file)
       const spriteBackgrounds = [...(operation.project.spriteBackgrounds ?? []), background]
-      if (!dispatchProjectAction(
-        'spriteBackground.add',
-        { ...operation.project, spriteBackgrounds },
-        true,
-      )) {
+      if (
+        !dispatchProjectAction(
+          'spriteBackground.add',
+          { ...operation.project, spriteBackgrounds },
+          true,
+        )
+      ) {
         URL.revokeObjectURL(url)
         await removeResourceFile(operation.storage, background.path)
         return undefined
@@ -1052,10 +1128,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  function spriteBackgroundsForSprite(
-    spriteTableId: string,
-    spriteId: string,
-  ): SpriteBackground[] {
+  function spriteBackgroundsForSprite(spriteTableId: string, spriteId: string): SpriteBackground[] {
     return (project.value?.spriteBackgrounds ?? []).filter(
       (background) =>
         background.spriteTableId === spriteTableId && background.spriteId === spriteId,
@@ -1089,7 +1162,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const existing = project.value?.backgroundTemplates?.find((background) => background.id === id)
     if (!existing) return false
     const operation = beginResourceOperation()
-    const current = operation?.project.backgroundTemplates?.find((background) => background.id === id)
+    const current = operation?.project.backgroundTemplates?.find(
+      (background) => background.id === id,
+    )
     if (!operation || !current) return false
     status.value = 'saving'
     error.value = undefined
@@ -1143,7 +1218,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
     if (!existing || (references.length > 0 && !fallback)) return false
     const operation = beginResourceOperation()
-    const current = operation?.project.backgroundTemplates?.find((background) => background.id === id)
+    const current = operation?.project.backgroundTemplates?.find(
+      (background) => background.id === id,
+    )
     if (!operation || !current) return false
     status.value = 'saving'
     error.value = undefined
@@ -1341,6 +1418,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     updateTranslationRegion,
     updateTranslationRender,
     saveTextStyleTemplate,
+    renameTextStyleTemplate,
     textStyleTemplateReferenceCount,
     deleteTextStyleTemplate,
     setSpriteTranslationBackground,

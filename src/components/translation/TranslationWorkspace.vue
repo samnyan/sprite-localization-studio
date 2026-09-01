@@ -441,8 +441,29 @@ function saveStyle(render: TextRenderConfig, styleId?: string): void {
   editingStyle.value = undefined
 }
 
-function saveStyleTemplate(name: string, render: TextRenderConfig, id?: string): void {
-  workspace.saveTextStyleTemplate(name, render, id)
+function saveStyleAsTemplate(name: string, render: TextRenderConfig, overwriteId?: string): void {
+  const editing = editingStyle.value
+  if (!editing) return
+  const styleId = workspace.saveTextStyleTemplate(name, render, overwriteId)
+  if (!styleId) return
+  if (
+    workspace.updateTranslationRegion(editing.spriteTableId, editing.spriteId, editing.regionId, {
+      render,
+      styleId,
+    })
+  ) {
+    editingStyle.value = undefined
+  }
+}
+
+function saveStyleTemplate(name: string, render: TextRenderConfig, id: string): void {
+  if (workspace.saveTextStyleTemplate(name, render, id)) {
+    editingStyle.value = undefined
+  }
+}
+
+function renameStyleTemplate(id: string, name: string, replaceId?: string): void {
+  workspace.renameTextStyleTemplate(id, name, replaceId)
 }
 
 async function deleteStyleTemplate(id: string): Promise<void> {
@@ -618,7 +639,9 @@ onUnmounted(() => {
           {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
         </Button>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2 bg-background border-b px-3 py-2">
+      <div
+        class="flex flex-wrap items-center justify-between gap-2 bg-background border-b px-3 py-2"
+      >
         <div class="flex items-center gap-2">
           <Select v-model="spriteTableFilter">
             <SelectTrigger class="w-44" :aria-label="t('translation.filterSpriteTable')">
@@ -753,17 +776,19 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="block w-full cursor-zoom-in rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                :aria-label="t('translation.openPreview', { label: t('translation.originalSprite') })"
+                :aria-label="
+                  t('translation.openPreview', { label: t('translation.originalSprite') })
+                "
                 data-testid="original-preview"
                 @click="openPreview(row.translation.spriteTableId, row.sprite.id, false)"
               >
-              <TranslationSpritePreview
-                :image-url="row.imageUrl"
-                :texture-size="row.texture.size"
-                :sprite="row.sprite"
-                :translation="row.translation"
-                :preview-background="workspace.previewBackground"
-              />
+                <TranslationSpritePreview
+                  :image-url="row.imageUrl"
+                  :texture-size="row.texture.size"
+                  :sprite="row.sprite"
+                  :translation="row.translation"
+                  :preview-background="workspace.previewBackground"
+                />
               </button>
             </div>
             <div class="space-y-2 p-3">
@@ -849,16 +874,16 @@ onUnmounted(() => {
                 data-testid="output-preview"
                 @click="openPreview(row.translation.spriteTableId, row.sprite.id, true)"
               >
-              <TranslationSpritePreview
-                :image-url="row.imageUrl"
-                :texture-size="row.texture.size"
-                :sprite="row.sprite"
-                :translation="row.translation"
-                :background-url="backgroundUrl(row.translation.backgroundId)"
-                output
-                :output-blank="row.translation.backgroundType === 'blank'"
-                :preview-background="workspace.previewBackground"
-              />
+                <TranslationSpritePreview
+                  :image-url="row.imageUrl"
+                  :texture-size="row.texture.size"
+                  :sprite="row.sprite"
+                  :translation="row.translation"
+                  :background-url="backgroundUrl(row.translation.backgroundId)"
+                  output
+                  :output-blank="row.translation.backgroundType === 'blank'"
+                  :preview-background="workspace.previewBackground"
+                />
               </button>
               <div class="flex w-full gap-2">
                 <span class="flex h-7 flex-1 items-center rounded border px-2 text-xs">{{
@@ -938,7 +963,9 @@ onUnmounted(() => {
       :preview-background="workspace.previewBackground"
       @close="editingStyle = undefined"
       @save="saveStyle"
+      @save-as-template="saveStyleAsTemplate"
       @save-template="saveStyleTemplate"
+      @rename-template="renameStyleTemplate"
       @delete-template="deleteStyleTemplate"
     />
     <BackgroundEditorDialog
@@ -976,7 +1003,9 @@ onUnmounted(() => {
         :texture-size="previewRow.texture.size"
         :sprite="previewRow.sprite"
         :translation="previewRow.translation"
-        :background-url="previewing.output ? backgroundUrl(previewRow.translation.backgroundId) : undefined"
+        :background-url="
+          previewing.output ? backgroundUrl(previewRow.translation.backgroundId) : undefined
+        "
         :output="previewing.output"
         :output-blank="previewing.output && previewRow.translation.backgroundType === 'blank'"
         :preview-background="workspace.previewBackground"
