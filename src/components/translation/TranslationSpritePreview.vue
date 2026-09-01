@@ -39,6 +39,15 @@ const backgroundClass = computed(() => {
   if (props.previewBackground === 'white') return 'bg-white'
   return 'bg-checkerboard'
 })
+const displayRotation = computed(() => {
+  const rotations = props.translation?.textRegions.map(
+    (region) => ((region.rotation % 360) + 360) % 360,
+  )
+  if (!rotations?.length || !rotations.every((rotation) => rotation === rotations[0])) return 0
+  return rotations[0] === 90 || rotations[0] === 180 || rotations[0] === 270
+    ? rotations[0]
+    : 0
+})
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -62,7 +71,6 @@ function scheduleRender(): void {
 }
 
 async function render(currentRenderId: number): Promise<void> {
-
   try {
     const image = await loadImage(props.imageUrl)
     if (currentRenderId !== renderId || !canvas.value) return
@@ -79,7 +87,8 @@ async function render(currentRenderId: number): Promise<void> {
     extracted.height = storedSize.height
     const extractedContext = extracted.getContext('2d')
     const target = canvas.value
-    const context = target.getContext('2d')
+    const logicalCanvas = document.createElement('canvas')
+    const context = logicalCanvas.getContext('2d')
     if (!extractedContext || !context) return
 
     const transform = getStoredToLogicalTransform(props.sprite)
@@ -103,8 +112,8 @@ async function render(currentRenderId: number): Promise<void> {
       props.sprite.frame.height,
     )
 
-    target.width = logicalSize.width
-    target.height = logicalSize.height
+    logicalCanvas.width = logicalSize.width
+    logicalCanvas.height = logicalSize.height
     context.clearRect(0, 0, logicalSize.width, logicalSize.height)
     if (props.output && props.backgroundUrl) {
       const background = await loadImage(props.backgroundUrl)
@@ -116,7 +125,7 @@ async function render(currentRenderId: number): Promise<void> {
     if (props.output && props.translation) {
       try {
         const rendered = await drawCanvasKitTextOverlay(
-          target,
+          logicalCanvas,
           props.translation.textRegions,
           () => currentRenderId === renderId && canvas.value === target,
         )
@@ -129,6 +138,25 @@ async function render(currentRenderId: number): Promise<void> {
         drawTranslationText(context, props.translation.textRegions)
       }
     }
+
+    if (currentRenderId !== renderId || canvas.value !== target) return
+    const rotation = displayRotation.value
+    const quarterTurn = rotation === 90 || rotation === 270
+    target.width = quarterTurn ? logicalSize.height : logicalSize.width
+    target.height = quarterTurn ? logicalSize.width : logicalSize.height
+    const targetContext = target.getContext('2d')
+    if (!targetContext) return
+    if (rotation === 90) {
+      targetContext.translate(0, target.height)
+      targetContext.rotate(-Math.PI / 2)
+    } else if (rotation === 180) {
+      targetContext.translate(target.width, target.height)
+      targetContext.rotate(Math.PI)
+    } else if (rotation === 270) {
+      targetContext.translate(target.width, 0)
+      targetContext.rotate(Math.PI / 2)
+    }
+    targetContext.drawImage(logicalCanvas, 0, 0)
   } catch {
     return
   }
@@ -143,6 +171,7 @@ watch(
       props.translation,
       props.backgroundUrl,
       props.output,
+      displayRotation.value,
     ] as const,
   scheduleRender,
   { immediate: true, deep: true },

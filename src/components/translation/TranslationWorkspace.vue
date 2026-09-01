@@ -722,6 +722,7 @@ onUnmounted(() => {
                 :image-url="row.imageUrl"
                 :texture-size="row.texture.size"
                 :sprite="row.sprite"
+                :translation="row.translation"
                 :preview-background="workspace.previewBackground"
               />
             </div>
