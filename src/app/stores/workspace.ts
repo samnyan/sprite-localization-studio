@@ -894,6 +894,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
   }
 
+  function addFullSpriteTextRegion(): boolean {
+    const sprite = selectedSprite.value
+    if (!sprite) return false
+    const size = getLogicalSpriteSize(sprite)
+    return addTextRegion({ x: 0, y: 0, width: size.width, height: size.height })
+  }
+
   function nextTranslationKey(translation: SpriteTranslation): string {
     const usedTranslationKeys = new Set(
       project.value?.translations?.flatMap((item) =>
@@ -1615,6 +1622,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     redo,
     setSpriteTranslationEnabled,
     addTextRegion,
+    addFullSpriteTextRegion,
     copyTextRegion,
     pasteTextRegion,
     validateTranslationKey,

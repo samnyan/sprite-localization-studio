@@ -88,6 +88,41 @@ describe('workspace texture builds', () => {
     ])
   })
 
+  it('creates a full-size text region using the sprite logical dimensions', async () => {
+    setActivePinia(createPinia())
+    const workspace = useWorkspaceStore()
+    setWorkspaceProjectSessionForTesting({
+      save: vi.fn<(project: unknown) => Promise<void>>(async () => undefined),
+    } as unknown as ProjectRepository)
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [{ spriteTableId: 'ui', spriteId: 'vertical-label', textRegions: [] }],
+    }
+    workspace.spriteTables = [{
+      schemaVersion: 1,
+      id: 'ui',
+      name: 'UI',
+      textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 182, height: 14 } }],
+      sprites: [{
+        id: 'vertical-label',
+        name: 'Vertical label',
+        textureId: 'atlas',
+        frame: { x: 0, y: 0, width: 14, height: 182 },
+        rotation: 90,
+        trimmed: false,
+      }],
+    }]
+    workspace.openSprite('ui', 'vertical-label')
+
+    expect(workspace.addFullSpriteTextRegion()).toBe(true)
+    expect(workspace.selectedSpriteTranslation?.textRegions[0]).toMatchObject({
+      rect: { x: 0, y: 0, width: 182, height: 14 },
+      rotation: 0,
+    })
+    await workspace.saveProject()
+  })
+
   it('deletes an in-use background template after moving all references to the selected fallback', async () => {
     setActivePinia(createPinia())
     const workspace = useWorkspaceStore()

@@ -239,7 +239,8 @@ export default {
   },
   textRegion: {
     title: '文字区域',
-    drawHint: '在预览图中拖拽以新建区域。',
+    drawHint: '点击加号或者在预览图中拖拽以新建翻译文字区域。',
+    addFull: '添加完整大小的文字区域',
     sourceSpace: '区域使用原始 Sprite 像素坐标。',
     keyboardMove: '移动文字区域 {key}。方向键移动 1 像素；Shift 加方向键移动 10 像素。',
     delete: '删除区域',

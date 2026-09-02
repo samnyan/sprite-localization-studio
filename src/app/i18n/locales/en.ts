@@ -238,7 +238,8 @@ export default {
   },
   textRegion: {
     title: 'Text regions',
-    drawHint: 'Drag on the preview to add a region.',
+    drawHint: 'Click + or drag in the preview to create a translation text region.',
+    addFull: 'Add full-size text region',
     sourceSpace: 'Regions use original sprite pixels.',
     keyboardMove:
       'Move text region {key}. Arrow keys move 1 pixel; Shift+Arrow keys move 10 pixels.',

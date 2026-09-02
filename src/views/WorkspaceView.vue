@@ -7,6 +7,7 @@ import {
   FileOutput,
   Image,
   Images,
+  Plus,
   Redo2,
   Save,
   Trash2,
@@ -176,6 +177,10 @@ function numericRegionField(
   } else {
     void workspace.updateTextRegion(region.id, { rect: { ...region.rect, [field]: value } })
   }
+}
+
+function addFullSpriteTextRegion(): void {
+  workspace.addFullSpriteTextRegion()
 }
 function updateRegionRect(regionId: string, rect: Rect): void {
   void workspace.updateTextRegion(regionId, { rect })
@@ -515,11 +520,24 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
 
           <template v-if="spriteTranslationEnabled">
             <div class="border-t pt-3">
-              <div class="mb-2 flex items-center justify-between">
-                <span class="font-semibold">{{ t('textRegion.title') }}</span>
-                <span class="text-muted-foreground">
-                  {{ workspace.selectedSpriteTranslation?.textRegions.length }}
-                </span>
+              <div class="mb-2 flex items-center">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-semibold">{{ t('textRegion.title') }}</span>
+                  <span class="text-muted-foreground">
+                    {{ workspace.selectedSpriteTranslation?.textRegions.length }}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  class="ml-auto size-7"
+                  :aria-label="t('textRegion.addFull')"
+                  :title="t('textRegion.addFull')"
+                  :disabled="workspace.isBusy"
+                  @click="addFullSpriteTextRegion"
+                >
+                  <Plus data-icon="inline-start" aria-hidden="true" />
+                </Button>
               </div>
               <p
                 v-if="workspace.selectedSpriteTranslation?.textRegions.length === 0"
@@ -615,7 +633,6 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
                 </ul>
               </div>
             </div>
-            <p class="text-[11px] text-muted-foreground">{{ t('textRegion.sourceSpace') }}</p>
           </template>
         </div>
         <div v-else-if="workspace.selectedSpriteTable" class="space-y-4 p-3 text-xs">
