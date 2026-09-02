@@ -27,6 +27,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   newProject: []
   openProject: []
+  importSprites: []
   saveProject: []
   undo: []
   redo: []
@@ -69,6 +70,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
           <MenubarItem :disabled="busy" @select="emit('openProject')"
             >{{ t('menu.openProject') }}<MenubarShortcut>Ctrl+O</MenubarShortcut></MenubarItem
           >
+          <MenubarItem :disabled="busy || !projectPath" @select="emit('importSprites')">
+            {{ t('menu.importSprites') }}
+          </MenubarItem>
           <MenubarSeparator />
           <MenubarItem :disabled="busy || !projectPath" @select="emit('saveProject')"
             >{{ t('menu.save') }}<MenubarShortcut>Ctrl+S</MenubarShortcut></MenubarItem

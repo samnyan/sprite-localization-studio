@@ -7,6 +7,7 @@ export default {
     edit: 'Edit',
     newProject: 'New Project',
     openProject: 'Open Project…',
+    importSprites: 'Import loose sprites…',
     save: 'Save',
     undo: 'Undo',
     redo: 'Redo',
@@ -82,6 +83,14 @@ export default {
     left: 'Left',
     center: 'Center',
     right: 'Right',
+  },
+  spriteImport: {
+    title: 'Import loose sprites',
+    description: 'Found {count} PNG images in “{directory}”.',
+    destination: 'They will be copied to textures/{directory} and added as one Sprite Table.',
+    confirm: 'Import {count} images',
+    success: 'Imported {count} sprites.',
+    successDescription: 'Created textures/{directory}; output will preserve this directory.',
   },
   imagePreview: {
     title: 'Image preview',
@@ -264,6 +273,8 @@ export default {
     ready: 'Ready',
     opening: 'Opening…',
     saving: 'Saving…',
+    importing: 'Importing sprites…',
+    importingProgress: 'Importing sprites {completed}/{total}…',
     building: 'Building textures…',
     buildingProgress: 'Building textures {completed}/{total}…',
     error: 'Action required',
@@ -276,6 +287,11 @@ export default {
     build: {
       blockedByTextDiagnostics: 'Resolve translation issues before building textures.',
       partialFailure: 'Texture build failed ({count} total). See details below.',
+    },
+    spriteImport: {
+      emptyDirectory: 'No PNG images were found in the selected folder.',
+      spriteTableExists: 'A Sprite Table for “{name}” already exists.',
+      targetExists: 'The import target already exists: {path}.',
     },
     unknown: 'Operation failed: {message}',
     project: {

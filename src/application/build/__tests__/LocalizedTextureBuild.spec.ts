@@ -81,6 +81,33 @@ describe('localized texture build plan', () => {
     ).toBe('default')
   })
 
+  it('preserves imported loose sprite directories in the build output', () => {
+    const importedTable: SpriteTable = {
+      ...spriteTable,
+      id: 'spr_ent_name',
+      textures: [
+        {
+          id: 'BTN_DELETE_A',
+          imagePath: 'spr_ent_name/BTN_DELETE_A.png',
+          size: { width: 96, height: 32 },
+        },
+      ],
+      sprites: [
+        {
+          ...spriteTable.sprites[0]!,
+          id: 'BTN_DELETE_A',
+          textureId: 'BTN_DELETE_A',
+          frame: { x: 0, y: 0, width: 96, height: 32 },
+        },
+      ],
+    }
+    const plan = createLocalizedTextureBuildPlan(project([]), [importedTable])
+
+    expect(plan.tasks[0]?.outputPath).toBe(
+      'output_textures/zh-CN/spr_ent_name/BTN_DELETE_A.png',
+    )
+  })
+
   it('does not create a builder when translation diagnostics block the build', async () => {
     let builderCreated = false
     const result = await runLocalizedTextureBuild(

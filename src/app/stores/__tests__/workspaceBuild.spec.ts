@@ -9,6 +9,7 @@ import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 afterEach(() => {
   setWorkspaceProjectSessionForTesting()
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('workspace texture builds', () => {
@@ -175,5 +176,77 @@ describe('workspace texture builds', () => {
     expect(workspace.project?.backgroundTemplates?.[0]?.path).not.toBe(
       'sprite_base/template/template.png',
     )
+  })
+
+  it('imports loose PNG sprites into one table while preserving the source directory path', async () => {
+    setActivePinia(createPinia())
+    const workspace = useWorkspaceStore()
+    const files = new Map<string, string | Uint8Array>()
+    const storage = {
+      exists: vi.fn<(path: string) => Promise<boolean>>(async (path) => files.has(path)),
+      writeBinary: vi.fn<(path: string, data: Uint8Array) => Promise<void>>(async (path, data) => {
+        files.set(path, data)
+      }),
+      writeText: vi.fn<(path: string, text: string) => Promise<void>>(async (path, text) => {
+        files.set(path, text)
+      }),
+      delete: vi.fn<(path: string) => Promise<void>>(async (path) => {
+        files.delete(path)
+      }),
+    } as unknown as ProjectStorage
+    const repository = {
+      save: vi.fn<(project: unknown) => Promise<void>>(async () => undefined),
+    } as unknown as ProjectRepository
+    setWorkspaceProjectSessionForTesting(repository, storage)
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.spriteTables = []
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:imported')
+    vi.stubGlobal('createImageBitmap', vi.fn<(file: Blob) => Promise<ImageBitmap>>(async () => ({
+      width: 96,
+      height: 32,
+      close: vi.fn<() => void>(),
+    }) as unknown as ImageBitmap))
+    const sourceFile = {
+      name: 'BTN_DELETE_A.png',
+      type: 'image/png',
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    } as File
+    const sourceDirectory = {
+      name: 'spr_ent_name',
+      async *values() {
+        yield {
+          kind: 'file',
+          name: 'BTN_DELETE_A.png',
+          getFile: async () => sourceFile,
+        } as unknown as FileSystemFileHandle
+      },
+    } as unknown as FileSystemDirectoryHandle
+    vi.stubGlobal(
+      'showDirectoryPicker',
+      vi.fn<() => Promise<FileSystemDirectoryHandle>>(async () => sourceDirectory),
+    )
+
+    await expect(workspace.prepareLooseSpriteImport()).resolves.toEqual({
+      directoryName: 'spr_ent_name',
+      imageCount: 1,
+    })
+    await expect(workspace.importPreparedLooseSprites()).resolves.toBe(true)
+
+    expect(storage.writeBinary).toHaveBeenCalledWith(
+      'textures/spr_ent_name/BTN_DELETE_A.png',
+      expect.any(Uint8Array),
+    )
+    expect(storage.writeText).toHaveBeenCalledWith(
+      'manifests/spr_ent_name.sprite-table.json',
+      expect.stringContaining('"imagePath": "spr_ent_name/BTN_DELETE_A.png"'),
+    )
+    expect(workspace.project?.spriteTableManifestPaths).toEqual([
+      'manifests/spr_ent_name.sprite-table.json',
+    ])
+    expect(workspace.spriteTables[0]).toMatchObject({
+      id: 'spr_ent_name',
+      textures: [{ imagePath: 'spr_ent_name/BTN_DELETE_A.png' }],
+      sprites: [{ id: 'BTN_DELETE_A', frame: { x: 0, y: 0, width: 96, height: 32 } }],
+    })
   })
 })

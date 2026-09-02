@@ -4,6 +4,10 @@ import { defineStore } from 'pinia'
 import { ActionHistory, createSnapshotAction } from '@/application/history/ActionHistory'
 import { TextRegionClipboard } from '@/application/editor/TextRegionClipboard'
 import { scanProjectFonts } from '@/application/font/ProjectFontCatalog'
+import {
+  createLooseSpriteImportPlan,
+  isLooseSpriteImage,
+} from '@/application/sprite-import/LooseSpriteImport'
 import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import { collectTextFontDiagnostics } from '@/application/qa/TextFontDiagnostics'
 import { collectTextLayoutDiagnostics } from '@/application/qa/TextLayoutDiagnostics'
@@ -47,7 +51,14 @@ import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitType
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 import { getLogicalSpriteSize } from '@/infrastructure/image/spriteGeometry'
 
-type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'building' | 'error'
+type WorkspaceStatus =
+  | 'idle'
+  | 'opening'
+  | 'ready'
+  | 'saving'
+  | 'importing'
+  | 'building'
+  | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
 export type PreviewBackground = 'transparent' | 'black' | 'white'
 export type SpriteManagementView = 'grid' | 'editor'
@@ -74,6 +85,23 @@ interface BackgroundDiagnostic {
 interface BackgroundLoadResult {
   urls: BackgroundImageUrls
   diagnostics: BackgroundDiagnostic[]
+}
+
+export interface LooseSpriteImportPreview {
+  directoryName: string
+  imageCount: number
+}
+
+interface PendingLooseSpriteImport {
+  directory: FileSystemDirectoryHandle
+  images: FileSystemFileHandle[]
+}
+
+interface LooseSpriteFile {
+  file: File
+  data: Uint8Array
+  name: string
+  size: { width: number; height: number }
 }
 
 const AUTOSAVE_DELAY_MS = 5_000
@@ -106,6 +134,21 @@ function workspaceErrorFrom(error: unknown): WorkspaceError {
 
 function createBuildSnapshot<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+async function readLooseSpriteFile(handle: FileSystemFileHandle): Promise<LooseSpriteFile> {
+  const file = await handle.getFile()
+  const bitmap = await createImageBitmap(file)
+  try {
+    return {
+      file,
+      data: new Uint8Array(await file.arrayBuffer()),
+      name: file.name,
+      size: { width: bitmap.width, height: bitmap.height },
+    }
+  } finally {
+    bitmap.close()
+  }
 }
 
 export async function loadBackgroundImages(
@@ -148,6 +191,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const previewBackground = ref<PreviewBackground>('transparent')
   const lastBuildReport = ref<LocalizedTextureBuildReport>()
   const buildProgress = ref<LocalizedTextureBuildProgress>()
+  const importProgress = ref<LocalizedTextureBuildProgress>()
   const lastSavedAt = ref<Date>()
   const documentRevision = ref(0)
   const persistedRevision = ref(0)
@@ -161,10 +205,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let savePromise: Promise<boolean> | undefined
   let documentSession = 0
   let activeResourceOperation: ResourceOperation | undefined
+  let pendingLooseSpriteImport: PendingLooseSpriteImport | undefined
 
   const hasProject = computed(() => project.value !== undefined)
   const isBusy = computed(
-    () => status.value === 'opening' || status.value === 'saving' || status.value === 'building',
+    () =>
+      status.value === 'opening' ||
+      status.value === 'saving' ||
+      status.value === 'importing' ||
+      status.value === 'building',
   )
   const isDirty = computed(() => documentRevision.value !== persistedRevision.value)
   const canCopyTextRegion = computed(() => !isBusy.value && selectedTextRegion.value !== undefined)
@@ -416,6 +465,158 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       await storage.delete(path)
     } catch {
       return
+    }
+  }
+
+  function failLooseSpriteImport(
+    key: 'emptyDirectory' | 'spriteTableExists' | 'targetExists',
+    params?: Record<string, string | number>,
+  ): false {
+    status.value = 'error'
+    error.value = { key: `errors.spriteImport.${key}`, params }
+    return false
+  }
+
+  async function prepareLooseSpriteImport(): Promise<LooseSpriteImportPreview | undefined> {
+    if (!project.value || !activeStorage) {
+      failProjectNotOpen()
+      return undefined
+    }
+    if (!supportsLocalFolderProjects()) {
+      status.value = 'error'
+      error.value = { key: 'errors.unsupportedBrowser' }
+      return undefined
+    }
+    if (isBusy.value || activeResourceOperation) return undefined
+
+    try {
+      const directory = await window.showDirectoryPicker({ mode: 'read' })
+      const images: FileSystemFileHandle[] = []
+      for await (const entry of directory.values()) {
+        if (entry.kind === 'file' && isLooseSpriteImage(entry.name)) {
+          images.push(entry as FileSystemFileHandle)
+        }
+      }
+      images.sort((left, right) => left.name.localeCompare(right.name))
+      if (!images.length) {
+        failLooseSpriteImport('emptyDirectory')
+        return undefined
+      }
+
+      const preview = createLooseSpriteImportPlan(directory.name, [
+        { name: images[0]!.name, size: { width: 1, height: 1 } },
+      ])
+      if (
+        spriteTables.value.some((table) => table.id === preview.spriteTable.id) ||
+        project.value.spriteTableManifestPaths?.includes(preview.manifestPath) ||
+        (await activeStorage.exists(preview.manifestPath))
+      ) {
+        failLooseSpriteImport('spriteTableExists', { name: directory.name })
+        return undefined
+      }
+
+      pendingLooseSpriteImport = { directory, images }
+      error.value = undefined
+      return { directoryName: directory.name, imageCount: images.length }
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') return undefined
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return undefined
+    }
+  }
+
+  function cancelLooseSpriteImport(): void {
+    pendingLooseSpriteImport = undefined
+  }
+
+  async function importPreparedLooseSprites(): Promise<boolean> {
+    const pending = pendingLooseSpriteImport
+    if (!pending) return false
+    const operation = beginResourceOperation()
+    if (!operation) return false
+
+    const writtenPaths: string[] = []
+    try {
+      status.value = 'importing'
+      error.value = undefined
+      const previewPlan = createLooseSpriteImportPlan(
+        pending.directory.name,
+        pending.images.map((image) => ({ name: image.name, size: { width: 1, height: 1 } })),
+      )
+      if (
+        spriteTables.value.some((table) => table.id === previewPlan.spriteTable.id) ||
+        operation.project.spriteTableManifestPaths?.includes(previewPlan.manifestPath) ||
+        (await operation.storage.exists(previewPlan.manifestPath))
+      ) {
+        return failLooseSpriteImport('spriteTableExists', { name: pending.directory.name })
+      }
+      for (const texture of previewPlan.spriteTable.textures) {
+        if (await operation.storage.exists(`textures/${texture.imagePath}`)) {
+          return failLooseSpriteImport('targetExists', { path: `textures/${texture.imagePath}` })
+        }
+      }
+
+      importProgress.value = { completed: 0, total: pending.images.length }
+      const files: LooseSpriteFile[] = []
+      for (const [index, handle] of pending.images.entries()) {
+        const file = await readLooseSpriteFile(handle)
+        const texture = previewPlan.spriteTable.textures[index]!
+        const texturePath = `textures/${texture.imagePath}`
+        await operation.storage.writeBinary(texturePath, file.data)
+        writtenPaths.push(texturePath)
+        files.push(file)
+        importProgress.value = { completed: index + 1, total: pending.images.length }
+      }
+      const plan = createLooseSpriteImportPlan(
+        pending.directory.name,
+        files.map(({ name, size }) => ({ name, size })),
+      )
+      await operation.storage.writeText(
+        plan.manifestPath,
+        `${JSON.stringify(plan.spriteTable, null, 2)}\n`,
+      )
+      writtenPaths.push(plan.manifestPath)
+
+      const updatedProject: ProjectManifest = {
+        ...operation.project,
+        spriteTableManifestPaths: [
+          ...(operation.project.spriteTableManifestPaths ?? []),
+          plan.manifestPath,
+        ],
+      }
+      if (!(await persistAssetProject(operation, updatedProject))) {
+        throw new Error('Unable to save imported sprite table.')
+      }
+      if (!isCurrentResourceSession(operation)) return false
+
+      const importedUrls = Object.fromEntries(
+        plan.spriteTable.textures.map((texture, index) => {
+          const file = files[index]!
+          return [texture.id, URL.createObjectURL(file.file)]
+        }),
+      )
+      spriteTables.value = [...spriteTables.value, plan.spriteTable]
+      textureImageUrls.value = { ...textureImageUrls.value, [plan.spriteTable.id]: importedUrls }
+      selectedSpriteTableId.value = plan.spriteTable.id
+      selectedSpriteId.value = undefined
+      selectedTextRegionId.value = undefined
+      spriteManagementView.value = 'grid'
+      mode.value = 'sprites'
+      pendingLooseSpriteImport = undefined
+      return true
+    } catch (caughtError) {
+      for (const path of [...writtenPaths].reverse()) {
+        await removeResourceFile(operation.storage, path)
+      }
+      if (isCurrentResourceSession(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
+      return false
+    } finally {
+      importProgress.value = undefined
+      finishResourceOperation(operation)
     }
   }
 
@@ -1400,10 +1601,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     previewBackground,
     lastBuildReport,
     buildProgress,
+    importProgress,
     lastSavedAt,
     openLocalProject,
     createLocalProject,
     saveProject,
+    prepareLooseSpriteImport,
+    cancelLooseSpriteImport,
+    importPreparedLooseSprites,
     buildTextures,
     saveProjectName,
     undo,

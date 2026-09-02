@@ -51,6 +51,12 @@ const selectedImageUrl = computed(() => {
 const statusText = computed(() => {
   if (workspace.status === 'opening') return t('status.opening')
   if (workspace.status === 'saving') return t('status.saving')
+  if (workspace.status === 'importing') {
+    const progress = workspace.importProgress
+    return progress?.total
+      ? t('status.importingProgress', { completed: progress.completed, total: progress.total })
+      : t('status.importing')
+  }
   if (workspace.status === 'building') {
     const progress = workspace.buildProgress
     return progress?.total
@@ -61,11 +67,14 @@ const statusText = computed(() => {
   if (workspace.isDirty) return t('status.unsaved')
   return t('status.ready')
 })
-const hasBuildProgress = computed(
-  () => workspace.status === 'building' && (workspace.buildProgress?.total ?? 0) > 0,
-)
-const buildProgressValue = computed(() => {
-  const progress = workspace.buildProgress
+const operationProgress = computed(() => {
+  if (workspace.status === 'importing') return workspace.importProgress
+  if (workspace.status === 'building') return workspace.buildProgress
+  return undefined
+})
+const hasOperationProgress = computed(() => (operationProgress.value?.total ?? 0) > 0)
+const operationProgressValue = computed(() => {
+  const progress = operationProgress.value
   return progress?.total ? (progress.completed / progress.total) * 100 : 0
 })
 const lastBuildText = computed(() => {
@@ -675,8 +684,8 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
       <div role="status" aria-live="polite" aria-atomic="true" class="flex items-center">
         <span>{{ statusText }}</span>
         <Progress
-          v-if="hasBuildProgress"
-          :model-value="buildProgressValue"
+          v-if="hasOperationProgress"
+          :model-value="operationProgressValue"
           class="ml-2 w-20"
           :aria-label="statusText"
         />

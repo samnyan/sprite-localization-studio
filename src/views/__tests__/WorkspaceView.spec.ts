@@ -199,6 +199,23 @@ describe('WorkspaceView', () => {
     )
   })
 
+  it('shows loose sprite import progress in the status bar', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.status = 'importing'
+    workspace.importProgress = { completed: 1, total: 26 }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.find('footer').text()).toContain('Importing sprites 1/26…')
+    expect(wrapper.get('[data-slot="progress"]').attributes('aria-label')).toBe(
+      'Importing sprites 1/26…',
+    )
+  })
+
   it('notifies the output directory after a successful texture build', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)

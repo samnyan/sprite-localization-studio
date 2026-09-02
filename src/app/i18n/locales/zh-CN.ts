@@ -7,6 +7,7 @@ export default {
     edit: '编辑',
     newProject: '新建工程',
     openProject: '打开工程…',
+    importSprites: '导入散件贴图…',
     save: '保存',
     undo: '撤销',
     redo: '重做',
@@ -82,6 +83,14 @@ export default {
     left: '左对齐',
     center: '居中',
     right: '右对齐',
+  },
+  spriteImport: {
+    title: '导入散件贴图',
+    description: '在“{directory}”中发现 {count} 张 PNG 图片。',
+    destination: '图片会复制到 textures/{directory}，并作为一个 Sprite Table 导入。',
+    confirm: '导入 {count} 张图片',
+    success: '已导入 {count} 个 Sprite。',
+    successDescription: '已创建 textures/{directory}，构造贴图时会保留该目录结构。',
   },
   imagePreview: {
     title: '图片预览',
@@ -264,6 +273,8 @@ export default {
     ready: '就绪',
     opening: '正在打开…',
     saving: '正在保存…',
+    importing: '正在导入贴图…',
+    importingProgress: '正在导入贴图 {completed}/{total}…',
     building: '正在构造贴图…',
     buildingProgress: '正在构造贴图 {completed}/{total}…',
     error: '需要处理',
@@ -276,6 +287,11 @@ export default {
     build: {
       blockedByTextDiagnostics: '请先修复翻译问题，再构造贴图。',
       partialFailure: '{count} 张贴图构造失败，请查看下方详情。',
+    },
+    spriteImport: {
+      emptyDirectory: '所选文件夹中没有 PNG 图片。',
+      spriteTableExists: '“{name}”对应的 Sprite Table 已存在。',
+      targetExists: '导入目标已存在：{path}。',
     },
     unknown: '操作失败：{message}',
     project: {
