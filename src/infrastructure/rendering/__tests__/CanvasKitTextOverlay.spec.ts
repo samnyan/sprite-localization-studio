@@ -82,7 +82,10 @@ describe('drawCanvasKitTextOverlay', () => {
     vi.mocked(loadCanvasKit).mockResolvedValue(createRuntime(createSurface(calls)))
     prepareRenderer(calls)
 
-    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toBe(true)
+    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toEqual({
+      rendered: true,
+      renderer: 'canvaskit',
+    })
 
     expect(overlay).toMatchObject({ width: 320, height: 180 })
     expect(calls).toEqual([
@@ -104,7 +107,7 @@ describe('drawCanvasKitTextOverlay', () => {
     await expect(drawCanvasKitTextOverlay(createTarget(calls), [], () => {
       calls.push('shouldCommit')
       return false
-    })).resolves.toBe(false)
+    })).resolves.toEqual({ rendered: false, renderer: 'canvas' })
 
     expect(calls).toEqual([
       'canvas.clear',
@@ -121,7 +124,11 @@ describe('drawCanvasKitTextOverlay', () => {
     vi.mocked(loadCanvasKit).mockResolvedValue(createRuntime(createSurface(calls)))
     prepareRenderer(calls, new CanvasKitTextFallbackError('Glyph is unavailable.'))
 
-    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toBe(false)
+    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toEqual({
+      rendered: false,
+      renderer: 'canvas',
+      fallbackReason: 'text-fallback',
+    })
 
     expect(calls).toEqual(['canvas.clear', 'renderer.draw', 'surface.dispose'])
   })
@@ -145,7 +152,11 @@ describe('drawCanvasKitTextOverlay', () => {
     vi.mocked(loadCanvasKit).mockResolvedValue(createRuntime(null))
     prepareRenderer(calls)
 
-    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toBe(false)
+    await expect(drawCanvasKitTextOverlay(createTarget(calls), [])).resolves.toEqual({
+      rendered: false,
+      renderer: 'canvas',
+      fallbackReason: 'surface-unavailable',
+    })
 
     expect(calls).toEqual([])
   })

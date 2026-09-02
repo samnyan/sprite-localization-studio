@@ -125,18 +125,32 @@ async function render(currentRenderId: number): Promise<void> {
     }
     if (props.output && props.translation) {
       try {
-        const rendered = await drawCanvasKitTextOverlay(
+        const result = await drawCanvasKitTextOverlay(
           logicalCanvas,
           props.translation.textRegions,
           () => currentRenderId === renderId && canvas.value === target,
         )
         if (currentRenderId !== renderId) return
-        if (!rendered) {
+        if (!result.rendered) {
           drawTranslationText(context, props.translation.textRegions)
         }
-      } catch {
+        console.debug(
+          `[Translation preview] table=${props.translation.spriteTableId} sprite=${props.sprite.id} ` +
+            `renderer=${result.renderer}${result.fallbackReason ? ` (${result.fallbackReason})` : ''} ` +
+            `logical=${logicalSize.width}x${logicalSize.height}`,
+        )
+      } catch (error) {
         if (currentRenderId !== renderId || canvas.value !== target) return
+        console.warn(
+          `[Translation preview] table=${props.translation.spriteTableId} sprite=${props.sprite.id} ` +
+            'CanvasKit error; falling back to Canvas2D.',
+          error,
+        )
         drawTranslationText(context, props.translation.textRegions)
+        console.debug(
+          `[Translation preview] table=${props.translation.spriteTableId} sprite=${props.sprite.id} ` +
+            `renderer=canvas (canvaskit-error) logical=${logicalSize.width}x${logicalSize.height}`,
+        )
       }
     }
 

@@ -12,6 +12,11 @@ import type {
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
+import {
+  alignTextBlockBounds,
+  layoutTextBaselines,
+  type TextLineVerticalBounds,
+} from '@/domain/text-region/textVerticalLayout'
 import { requiresComplexTextShaping } from '@/domain/text-region/textScript'
 import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
@@ -104,6 +109,35 @@ function hasUnresolvedGlyphs(font: Font, text: string): boolean {
 
 function spacedLineWidth(font: Font, text: string, letterSpacing: number): number {
   return planTextRun(text, letterSpacing, (unit) => lineWidth(font, unit)).width
+}
+
+function canvasKitLineBounds(
+  font: Font,
+  text: string,
+  fontSize: number,
+  outsideStroke: number,
+): TextLineVerticalBounds {
+  const glyphs = font.getGlyphIDs(text || 'Mg')
+  const bounds = (font as Partial<Font>).getGlyphBounds?.(glyphs)
+  if (bounds?.length) {
+    let top = Number.POSITIVE_INFINITY
+    let bottom = Number.NEGATIVE_INFINITY
+    for (let index = 0; index < bounds.length; index += 4) {
+      top = Math.min(top, bounds[index + 1] ?? top)
+      bottom = Math.max(bottom, bounds[index + 3] ?? bottom)
+    }
+    if (Number.isFinite(top) && Number.isFinite(bottom)) {
+      return {
+        ascent: Math.max(0, -top) + outsideStroke,
+        descent: Math.max(0, bottom) + outsideStroke,
+      }
+    }
+  }
+  const metrics = font.getMetrics()
+  return {
+    ascent: Math.max(0, -metrics.ascent || fontSize * 0.8) + outsideStroke,
+    descent: Math.max(0, metrics.descent || fontSize * 0.2) + outsideStroke,
+  }
 }
 
 function drawLine(
@@ -285,18 +319,18 @@ function drawTextRegionCore(
         true,
       )
     }
-    const startY = config.verticalAlign === 'top'
-      ? -region.rect.height / 2 + layout.lineHeight / 2
-      : config.verticalAlign === 'bottom'
-        ? region.rect.height / 2 - layout.height + layout.lineHeight / 2
-        : -layout.height / 2 + layout.lineHeight / 2
-    const metrics = activeFont.getMetrics()
-    const baselineOffset = -(metrics.ascent + metrics.descent) / 2
+    const outsideStroke = config.stroke?.position === 'outside' ? config.stroke.width : 0
+    const baselines = layoutTextBaselines(
+      layout.lines.map((line) => canvasKitLineBounds(activeFont, line, layout.fontSize, outsideStroke)),
+      layout.lineHeight,
+      region.rect.height,
+      config.verticalAlign,
+    )
     const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
     for (const [index, plan] of linePlans.entries()) {
       const width = plan.width
       const x = config.align === 'left' ? -region.rect.width / 2 : config.align === 'right' ? region.rect.width / 2 - width : -width / 2
-      const baseline = startY + index * layout.lineHeight + baselineOffset
+      const baseline = baselines[index] ?? 0
       for (const shadow of shadows) {
         if ((shadow.alpha ?? 1) <= 0) continue
         const shadowPaint = createPaint(
@@ -383,12 +417,12 @@ function drawParagraphTextRegion(
     if (paragraph.unresolvedCodepoints().length) {
       throw new CanvasKitTextFallbackError('CanvasKit paragraph has unresolved glyphs.')
     }
-    const paragraphHeight = paragraph.getHeight()
-    const y = config.verticalAlign === 'top'
-      ? -region.rect.height / 2
-      : config.verticalAlign === 'bottom'
-        ? region.rect.height / 2 - paragraphHeight
-        : -paragraphHeight / 2
+    const shapedLines = (paragraph as Partial<Paragraph>).getShapedLines?.() ?? []
+    const top = shapedLines.length ? Math.min(...shapedLines.map((line) => line.top)) : 0
+    const bottom = shapedLines.length
+      ? Math.max(...shapedLines.map((line) => line.bottom))
+      : paragraph.getHeight()
+    const y = alignTextBlockBounds(top, bottom, region.rect.height, config.verticalAlign)
     canvas.save()
     saved = true
     canvas.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)

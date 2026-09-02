@@ -111,6 +111,20 @@ function storeLogicalSprite(
   textureContext.drawImage(stored, sprite.frame.x, sprite.frame.y)
 }
 
+function describeSpriteGeometry(sprite: Sprite): string {
+  const logicalSize = getLogicalSpriteSize(sprite)
+  const storedSize = getLogicalTrimmedSize(sprite)
+  const transform = getLogicalToStoredTransform(sprite)
+  const trimOffset = sprite.trimOffset ?? { x: 0, y: 0 }
+  return [
+    `logical=${logicalSize.width}x${logicalSize.height}`,
+    `trimmed=${storedSize.width}x${storedSize.height}@${trimOffset.x},${trimOffset.y}`,
+    `frame=${sprite.frame.x},${sprite.frame.y},${sprite.frame.width}x${sprite.frame.height}`,
+    `rotation=${sprite.rotation}`,
+    `logicalToStored=[${transform.a},${transform.b},${transform.c},${transform.d},${transform.e},${transform.f}]`,
+  ].join(' ')
+}
+
 export class CanvasTextureBuilder implements LocalizedTextureBuilder {
   private readonly imageCache = new Map<string, ImageBitmap>()
 
@@ -137,7 +151,7 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
         if (!sprite) continue
 
         try {
-          await this.applyTranslation(outputContext, source, sprite, translation)
+          await this.applyTranslation(outputContext, source, sprite, translation, task.outputPath)
         } catch (error) {
           throw new LocalizedTextureBuildSpriteError(
             error instanceof Error ? error.message : String(error),
@@ -158,6 +172,7 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
     source: ImageBitmap,
     sprite: Sprite,
     translation: SpriteTranslation,
+    outputPath: string,
   ): Promise<void> {
     const logicalSize = getLogicalSpriteSize(sprite)
     const logical = createCanvas(logicalSize.width, logicalSize.height)
@@ -172,13 +187,28 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
     }
 
     try {
-      if (!(await drawCanvasKitTextOverlay(logical, translation.textRegions))) {
+      const result = await drawCanvasKitTextOverlay(logical, translation.textRegions)
+      if (!result.rendered) {
         drawTranslationText(logicalContext, translation.textRegions)
       }
-    } catch {
+      console.debug(
+        `[Texture build] output=${outputPath} sprite=${sprite.id} renderer=${result.renderer}` +
+          `${result.fallbackReason ? ` (${result.fallbackReason})` : ''} ${describeSpriteGeometry(sprite)}`,
+      )
+    } catch (error) {
+      console.warn(
+        `[Texture build] output=${outputPath} sprite=${sprite.id} CanvasKit error; falling back to Canvas2D.`,
+        error,
+      )
       drawTranslationText(logicalContext, translation.textRegions)
+      console.debug(
+        `[Texture build] output=${outputPath} sprite=${sprite.id} renderer=canvas (canvaskit-error) ${describeSpriteGeometry(sprite)}`,
+      )
     }
     storeLogicalSprite(outputContext, logical, sprite)
+    console.debug(
+      `[Texture build] output=${outputPath} sprite=${sprite.id} writeback complete ${describeSpriteGeometry(sprite)}`,
+    )
   }
 
   private async loadBackground(translation: SpriteTranslation): Promise<ImageBitmap> {

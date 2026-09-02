@@ -1,6 +1,7 @@
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
+import { layoutTextBaselines, type TextLineVerticalBounds } from '@/domain/text-region/textVerticalLayout'
 
 function withAlpha(value: string, alpha?: number): string {
   if (alpha === undefined) return value
@@ -105,6 +106,18 @@ function drawInsideLine(
   context.restore()
 }
 
+function canvasLineBounds(
+  context: CanvasRenderingContext2D,
+  text: string,
+  fontSize: number,
+  outsideStroke: number,
+): TextLineVerticalBounds {
+  const metrics = context.measureText(text || 'Mg')
+  const ascent = metrics.actualBoundingBoxAscent || metrics.fontBoundingBoxAscent || fontSize * 0.8
+  const descent = metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.2
+  return { ascent: ascent + outsideStroke, descent: descent + outsideStroke }
+}
+
 export function drawTextRegion(
   context: CanvasRenderingContext2D,
   text: string,
@@ -157,7 +170,7 @@ export function drawTextRegion(
       ))
     : undefined
   context.textAlign = config.align
-  context.textBaseline = 'middle'
+  context.textBaseline = 'alphabetic'
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
   const x =
     config.align === 'left'
@@ -165,15 +178,17 @@ export function drawTextRegion(
       : config.align === 'right'
         ? region.rect.width / 2
         : 0
-  const startY = config.verticalAlign === 'top'
-    ? -region.rect.height / 2 + layout.lineHeight / 2
-    : config.verticalAlign === 'bottom'
-      ? region.rect.height / 2 - layout.height + layout.lineHeight / 2
-      : -layout.height / 2 + layout.lineHeight / 2
+  const outsideStroke = config.stroke?.position === 'outside' ? config.stroke.width : 0
+  const baselines = layoutTextBaselines(
+    layout.lines.map((line) => canvasLineBounds(context, line, layout.fontSize, outsideStroke)),
+    layout.lineHeight,
+    region.rect.height,
+    config.verticalAlign,
+  )
   for (const [index, line] of layout.lines.entries()) {
     const plan = linePlans?.[index]
     context.save()
-    context.translate(0, startY + index * layout.lineHeight)
+    context.translate(0, baselines[index] ?? 0)
     context.lineWidth = config.stroke && config.stroke.width > 0 ? config.stroke.width * 2 : 0
     context.strokeStyle = stroke ?? 'transparent'
     context.fillStyle = fill ?? 'transparent'

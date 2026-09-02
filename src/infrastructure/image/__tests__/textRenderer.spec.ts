@@ -50,7 +50,7 @@ describe('drawTextRegion', () => {
       stroke: { width: 1, position: 'outside', paint: { mode: 'solid', color: '#000000' } },
     })
 
-    expect(measureText).toHaveBeenCalledTimes(4)
+    expect(measureText).toHaveBeenCalledTimes(5)
   })
 
   it('keeps native whole-run drawing when letter spacing is disabled', () => {
@@ -68,7 +68,7 @@ describe('drawTextRegion', () => {
       shadow: undefined,
     })
 
-    expect(measureText).toHaveBeenCalledTimes(1)
+    expect(measureText).toHaveBeenCalledTimes(2)
     expect(fillText).toHaveBeenCalledExactlyOnceWith('AB', 0, 0)
     expect(strokeText).toHaveBeenCalledExactlyOnceWith('AB', 0, 0)
   })
