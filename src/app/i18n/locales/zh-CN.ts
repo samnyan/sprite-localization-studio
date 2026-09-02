@@ -207,6 +207,7 @@ export default {
     untitled: '未命名工程',
     settings: '工程设置',
     name: '名称',
+    rename: '重命名工程',
     schema: 'Schema',
     sourceLocale: '源语言',
     targetLocales: '目标语言',

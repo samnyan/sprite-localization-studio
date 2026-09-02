@@ -206,6 +206,7 @@ export default {
     untitled: 'Untitled Project',
     settings: 'Project Settings',
     name: 'Name',
+    rename: 'Rename Project',
     schema: 'Schema',
     sourceLocale: 'Source locale',
     targetLocales: 'Target locales',
