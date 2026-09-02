@@ -24,6 +24,11 @@ export default {
     black: '黑色',
     white: '白色',
   },
+  defaultTranslationBackground: {
+    label: '默认底图',
+    original: '原 Sprite',
+    blank: '空白',
+  },
   toolbar: {
     project: '工程',
     noProject: '未打开工程',

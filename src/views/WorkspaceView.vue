@@ -220,6 +220,10 @@ async function updateTranslationKey(event: FocusEvent): Promise<void> {
 function selectPreviewBackground(background: 'transparent' | 'black' | 'white'): void {
   workspace.setPreviewBackground(background)
 }
+
+function selectDefaultTranslationBackground(background: 'original' | 'blank'): void {
+  workspace.setDefaultTranslationBackground(background)
+}
 </script>
 
 <template>
@@ -287,6 +291,25 @@ function selectPreviewBackground(background: 'transparent' | 'black' | 'white'):
               :value="option"
             >
               {{ t(`previewBackground.${option}`) }}
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger class="rounded px-2 py-1.5 text-xs hover:bg-accent">
+          {{ t('defaultTranslationBackground.label') }}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuRadioGroup
+            :model-value="workspace.defaultTranslationBackground"
+            @update:model-value="selectDefaultTranslationBackground($event as 'original' | 'blank')"
+          >
+            <DropdownMenuRadioItem
+              v-for="option in ['original', 'blank'] as const"
+              :key="option"
+              :value="option"
+            >
+              {{ t(`defaultTranslationBackground.${option}`) }}
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>

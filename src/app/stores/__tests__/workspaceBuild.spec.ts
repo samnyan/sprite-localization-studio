@@ -123,6 +123,35 @@ describe('workspace texture builds', () => {
     await workspace.saveProject()
   })
 
+  it('uses the selected default background for newly enabled sprite translations', async () => {
+    setActivePinia(createPinia())
+    const workspace = useWorkspaceStore()
+    setWorkspaceProjectSessionForTesting({
+      save: vi.fn<(project: unknown) => Promise<void>>(async () => undefined),
+    } as unknown as ProjectRepository)
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.spriteTables = [{
+      schemaVersion: 1,
+      id: 'ui',
+      name: 'UI',
+      textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 80, height: 32 } }],
+      sprites: [{
+        id: 'button',
+        name: 'Button',
+        textureId: 'atlas',
+        frame: { x: 0, y: 0, width: 80, height: 32 },
+        rotation: 0,
+        trimmed: false,
+      }],
+    }]
+    workspace.openSprite('ui', 'button')
+    workspace.setDefaultTranslationBackground('blank')
+
+    expect(workspace.setSpriteTranslationEnabled(true)).toBe(true)
+    expect(workspace.selectedSpriteTranslation).toMatchObject({ backgroundType: 'blank' })
+    await workspace.saveProject()
+  })
+
   it('deletes an in-use background template after moving all references to the selected fallback', async () => {
     setActivePinia(createPinia())
     const workspace = useWorkspaceStore()

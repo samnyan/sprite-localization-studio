@@ -24,6 +24,11 @@ export default {
     black: 'Black',
     white: 'White',
   },
+  defaultTranslationBackground: {
+    label: 'Default background',
+    original: 'Original Sprite',
+    blank: 'Blank',
+  },
   toolbar: {
     project: 'Project',
     noProject: 'No project',

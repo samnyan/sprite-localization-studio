@@ -229,6 +229,19 @@ describe('WorkspaceView', () => {
     expect(buildButton.find('svg').attributes('data-icon')).toBe('inline-start')
   })
 
+  it('shows the default translation background selector beside preview background', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.text()).toContain('Background color')
+    expect(wrapper.text()).toContain('Default background')
+  })
+
   it('shows build progress in the status bar and a spinner in the build action', () => {
     const pinia = createPinia()
     setActivePinia(pinia)

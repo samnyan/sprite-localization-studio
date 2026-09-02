@@ -61,6 +61,7 @@ type WorkspaceStatus =
   | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
 export type PreviewBackground = 'transparent' | 'black' | 'white'
+export type DefaultTranslationBackground = 'original' | 'blank'
 export type SpriteManagementView = 'grid' | 'editor'
 
 interface WorkspaceError {
@@ -189,6 +190,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const mode = ref<WorkspaceMode>('sprites')
   const spriteManagementView = ref<SpriteManagementView>('grid')
   const previewBackground = ref<PreviewBackground>('transparent')
+  const defaultTranslationBackground = ref<DefaultTranslationBackground>('original')
   const lastBuildReport = ref<LocalizedTextureBuildReport>()
   const buildProgress = ref<LocalizedTextureBuildProgress>()
   const importProgress = ref<LocalizedTextureBuildProgress>()
@@ -867,6 +869,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             {
               spriteTableId: selectedSpriteTable.value.id,
               spriteId: selectedSprite.value.id,
+              backgroundType: defaultTranslationBackground.value,
               textRegions: [],
             },
           ]
@@ -1574,6 +1577,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     previewBackground.value = nextBackground
   }
 
+  function setDefaultTranslationBackground(nextBackground: DefaultTranslationBackground): void {
+    defaultTranslationBackground.value = nextBackground
+  }
+
   return {
     project,
     spriteTables,
@@ -1606,6 +1613,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     mode,
     spriteManagementView,
     previewBackground,
+    defaultTranslationBackground,
     lastBuildReport,
     buildProgress,
     importProgress,
@@ -1652,5 +1660,6 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectProject,
     setMode,
     setPreviewBackground,
+    setDefaultTranslationBackground,
   }
 })
