@@ -76,6 +76,19 @@ afterEach(() => {
 })
 
 describe('TextStyleEditorDialog project fonts', () => {
+  it('uses rounded outline joins for legacy styles that do not persist a join', async () => {
+    const wrapper = mountEditor({
+      render: {
+        ...DEFAULT_TEXT_RENDER,
+        stroke: { width: 2, position: 'outside', paint: { mode: 'solid', color: '#000000' } },
+      },
+    })
+
+    const render = await save(wrapper)
+
+    expect(render).toMatchObject({ stroke: { join: 'round' } })
+  })
+
   it('persists the selected project font ID with its normalized descriptor', async () => {
     const wrapper = mountEditor()
 

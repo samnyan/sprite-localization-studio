@@ -7,19 +7,21 @@ function createContext() {
   const measureText = vi.fn<(text: string) => TextMetrics>((text) => ({ width: text.length * 10 }) as TextMetrics)
   const fillText = vi.fn<(text: string, x: number, y: number) => void>()
   const strokeText = vi.fn<(text: string, x: number, y: number) => void>()
+  const context = {
+    beginPath: () => undefined,
+    clip: () => undefined,
+    fillText,
+    lineJoin: 'miter' as CanvasLineJoin,
+    measureText,
+    rect: () => undefined,
+    restore: () => undefined,
+    rotate: () => undefined,
+    save: () => undefined,
+    strokeText,
+    translate: () => undefined,
+  }
   return {
-    context: {
-      beginPath: () => undefined,
-      clip: () => undefined,
-      fillText,
-      measureText,
-      rect: () => undefined,
-      restore: () => undefined,
-      rotate: () => undefined,
-      save: () => undefined,
-      strokeText,
-      translate: () => undefined,
-    } as unknown as CanvasRenderingContext2D,
+    context: context as unknown as CanvasRenderingContext2D,
     fillText,
     measureText,
     strokeText,
@@ -51,6 +53,27 @@ describe('drawTextRegion', () => {
     })
 
     expect(measureText).toHaveBeenCalledTimes(5)
+    expect((context as unknown as { lineJoin: CanvasLineJoin }).lineJoin).toBe('round')
+  })
+
+  it('applies the configured outline join', () => {
+    const { context } = createContext()
+
+    drawTextRegion(context, 'AB', region, {
+      fontFamily: 'sans-serif',
+      fontSize: 24,
+      fontWeight: 700,
+      color: '#ffffff',
+      align: 'center',
+      stroke: {
+        width: 1,
+        position: 'outside',
+        join: 'bevel',
+        paint: { mode: 'solid', color: '#000000' },
+      },
+    })
+
+    expect((context as unknown as { lineJoin: CanvasLineJoin }).lineJoin).toBe('bevel')
   })
 
   it('keeps native whole-run drawing when letter spacing is disabled', () => {

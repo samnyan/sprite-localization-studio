@@ -192,6 +192,49 @@ describe('isCanvasKitTextRenderSupported', () => {
     expect(calls).toEqual(['font.delete'])
   })
 
+  it('applies the configured outline join to the CanvasKit stroke paint', () => {
+    vi.spyOn(canvasKitTypefaceCache, 'resolve').mockReturnValue({} as never)
+    const joins: unknown[] = []
+    const font = {
+      delete: () => undefined,
+      getGlyphIDs: () => [12],
+      getGlyphWidths: () => [10],
+      getMetrics: () => ({ ascent: -8, descent: 2 }),
+      setSize: () => undefined,
+    }
+    const canvasKit = {
+      Color4f: () => [],
+      Font: class { constructor() { return font } },
+      Paint: class {
+        delete() {}
+        setAntiAlias() {}
+        setColor() {}
+        setStrokeJoin(join: unknown) { joins.push(join) }
+        setStrokeWidth() {}
+        setStyle() {}
+      },
+      PaintStyle: { Stroke: 'stroke' },
+      StrokeJoin: { Bevel: 'bevel', Miter: 'miter', Round: 'round' },
+    }
+    const canvas = {
+      drawText: () => undefined,
+      restore: () => undefined,
+      rotate: () => undefined,
+      save: () => undefined,
+      translate: () => undefined,
+    }
+    const region = {
+      id: 'title', rect: { x: 0, y: 0, width: 200, height: 80 }, rotation: 0, translationKey: 'title',
+    }
+
+    drawTextRegionWithCanvasKit(canvasKit as never, canvas as never, 'A', region, {
+      ...DEFAULT_TEXT_RENDER,
+      stroke: { width: 2, position: 'outside', join: 'bevel', paint: { mode: 'solid', color: '#000000' } },
+    })
+
+    expect(joins).toEqual(['bevel'])
+  })
+
   it('does not treat layout-only newline controls as unresolved glyphs', () => {
     vi.spyOn(canvasKitTypefaceCache, 'resolve').mockReturnValue({} as never)
     const requested: string[] = []

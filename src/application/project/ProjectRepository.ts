@@ -121,6 +121,10 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
       Number.isFinite(record.width) &&
       (record.width as number) >= 0 &&
       (record.position === 'inside' || record.position === 'outside') &&
+      (record.join === undefined ||
+        record.join === 'round' ||
+        record.join === 'bevel' ||
+        record.join === 'miter') &&
       isPaint(record.paint)
     )
   }

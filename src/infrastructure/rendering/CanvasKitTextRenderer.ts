@@ -10,7 +10,12 @@ import type {
 } from 'canvaskit-wasm'
 
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
-import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
+import type {
+  TextPaint,
+  TextRegion,
+  TextRenderConfig,
+  TextStrokeJoin,
+} from '@/domain/text-region/types'
 import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
 import {
   alignTextBlockBounds,
@@ -60,6 +65,7 @@ function createPaint(
   width: number,
   height: number,
   strokeWidth?: number,
+  strokeJoin?: TextStrokeJoin,
 ): { paint: Paint; shader?: Shader } | undefined {
   const paint = new canvasKit.Paint()
   paint.setAntiAlias(true)
@@ -72,6 +78,13 @@ function createPaint(
   if (strokeWidth !== undefined) {
     paint.setStyle(canvasKit.PaintStyle.Stroke)
     paint.setStrokeWidth(strokeWidth)
+    paint.setStrokeJoin(
+      strokeJoin === 'bevel'
+        ? canvasKit.StrokeJoin.Bevel
+        : strokeJoin === 'miter'
+          ? canvasKit.StrokeJoin.Miter
+          : canvasKit.StrokeJoin.Round,
+    )
   }
   if (textPaint.mode !== 'gradient') return { paint }
 
@@ -306,7 +319,14 @@ function drawTextRegionCore(
     )
     stroke =
       config.stroke && config.stroke.width > 0
-        ? createPaint(canvasKit, config.stroke.paint, region.rect.width, region.rect.height, config.stroke.width * 2)
+        ? createPaint(
+            canvasKit,
+            config.stroke.paint,
+            region.rect.width,
+            region.rect.height,
+            config.stroke.width * 2,
+            config.stroke.join ?? 'round',
+          )
         : undefined
     canvas.save()
     saved = true

@@ -43,6 +43,7 @@ import type {
   TextPaint,
   TextRenderConfig,
   TextShadow,
+  TextStroke,
   TextStyleTemplate,
 } from '@/domain/text-region/types'
 import TextStyleCanvasPreview from '@/components/translation/TextStyleCanvasPreview.vue'
@@ -69,7 +70,7 @@ const emit = defineEmits<{
   deleteTemplate: [id: string]
 }>()
 const { locale, t } = useI18n()
-const draft = ref<TextRenderConfig>({ ...DEFAULT_TEXT_RENDER })
+const draft = ref<TextRenderConfig>(createDraft())
 const selectedProjectFontId = ref<string>()
 const styleMode = ref<'template' | 'individual'>('individual')
 const editingTemplate = ref<TextStyleTemplate>()
@@ -83,6 +84,24 @@ const fontWeights = [100, 200, 300, 400, 500, 600, 700, 800, 900] as const
 const availableTemplates = computed(() => [...textStyleTemplates, ...(props.templates ?? [])])
 const previewText = computed(() => props.text || (locale.value.startsWith('zh') ? '文本' : 'Text'))
 const templatePreviewText = computed(() => (locale.value.startsWith('zh') ? '文本' : 'Text'))
+
+function createDraft(render?: TextRenderConfig): TextRenderConfig {
+  const defaultFill: TextPaint =
+    DEFAULT_TEXT_RENDER.fill ?? { mode: 'solid', color: DEFAULT_TEXT_RENDER.color }
+  const defaultStroke = DEFAULT_TEXT_RENDER.stroke!
+  const stroke = render?.stroke
+  return {
+    ...DEFAULT_TEXT_RENDER,
+    ...render,
+    fill: { ...defaultFill, ...render?.fill },
+    stroke: {
+      ...defaultStroke,
+      ...stroke,
+      join: stroke?.join ?? defaultStroke.join ?? 'round',
+      paint: { ...defaultStroke.paint, ...stroke?.paint },
+    } as TextStroke,
+  }
+}
 
 function ensureShadows(): TextShadow[] {
   if (!draft.value.shadows) draft.value.shadows = draft.value.shadow ? [draft.value.shadow] : []
@@ -161,9 +180,7 @@ watch(
   () => [props.open, props.render, props.styleId] as const,
   () => {
     if (!props.open) return
-    draft.value = JSON.parse(
-      JSON.stringify({ ...DEFAULT_TEXT_RENDER, ...props.render }),
-    ) as TextRenderConfig
+    draft.value = JSON.parse(JSON.stringify(createDraft(props.render))) as TextRenderConfig
     selectedProjectFontId.value = draft.value.fontId
     styleMode.value = props.styleId ? 'template' : 'individual'
     editingTemplate.value = undefined
@@ -192,7 +209,7 @@ function editTemplate(template: TextStyleTemplate): void {
   if (!props.templates?.some((item) => item.id === template.id)) return
   editingTemplate.value = template
   styleMode.value = 'individual'
-  draft.value = JSON.parse(JSON.stringify(template.render)) as TextRenderConfig
+  draft.value = JSON.parse(JSON.stringify(createDraft(template.render))) as TextRenderConfig
   selectedProjectFontId.value = draft.value.fontId
 }
 
@@ -636,6 +653,18 @@ function save(): void {
                 ></Select
               ></FormField
             >
+            <FormField :label="t('style.join')">
+              <Select v-model="draft.stroke!.join">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent
+                  ><SelectGroup
+                    ><SelectItem value="round">{{ t('style.round') }}</SelectItem
+                    ><SelectItem value="bevel">{{ t('style.bevel') }}</SelectItem
+                    ><SelectItem value="miter">{{ t('style.miter') }}</SelectItem></SelectGroup
+                  ></SelectContent
+                >
+              </Select>
+            </FormField>
             <FormField :label="t('style.color')"
               ><input
                 v-model="draft.stroke!.paint.color"

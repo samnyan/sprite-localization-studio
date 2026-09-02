@@ -171,6 +171,7 @@ export function drawTextRegion(
     : undefined
   context.textAlign = config.align
   context.textBaseline = 'alphabetic'
+  context.lineJoin = config.stroke?.join ?? 'round'
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
   const x =
     config.align === 'left'

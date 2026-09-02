@@ -5,6 +5,7 @@ export type TextVerticalAlign = 'top' | 'middle' | 'bottom'
 export type TextOverflow = 'visible' | 'clip' | 'ellipsis'
 export type PaintMode = 'transparent' | 'solid' | 'gradient'
 export type StrokePosition = 'inside' | 'outside'
+export type TextStrokeJoin = 'round' | 'bevel' | 'miter'
 
 export interface GradientStop {
   color: string
@@ -28,6 +29,7 @@ export interface TextStroke {
   width: number
   position: StrokePosition
   paint: TextPaint
+  join?: TextStrokeJoin
 }
 
 export interface TextShadow {

@@ -55,6 +55,24 @@ describe('parseProjectManifest', () => {
     expect(isTextRenderConfig({ ...render, fontId: 'font-1' })).toBe(true)
     expect(isTextRenderConfig({ ...render, fontId: '' })).toBe(false)
     expect(isTextRenderConfig({ ...render, fontId: 1 })).toBe(false)
+    expect(isTextRenderConfig({
+      ...render,
+      stroke: {
+        width: 2,
+        position: 'outside',
+        join: 'round',
+        paint: { mode: 'solid', color: '#000000' },
+      },
+    })).toBe(true)
+    expect(isTextRenderConfig({
+      ...render,
+      stroke: {
+        width: 2,
+        position: 'outside',
+        join: 'sharp',
+        paint: { mode: 'solid', color: '#000000' },
+      },
+    })).toBe(false)
   })
 
   it('migrates the minimal v1 project manifest in memory', () => {
