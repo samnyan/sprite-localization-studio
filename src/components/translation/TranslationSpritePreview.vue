@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { useElementSize } from '@vueuse/core'
 
 import type { Size } from '@/domain/shared/geometry'
 import type { Sprite } from '@/domain/sprite/types'
@@ -31,6 +32,8 @@ const props = withDefaults(
 )
 
 const canvas = ref<HTMLCanvasElement>()
+const enlargedSurface = ref<HTMLDivElement>()
+const { width: enlargedSurfaceWidth, height: enlargedSurfaceHeight } = useElementSize(enlargedSurface)
 let renderId = 0
 let frame: number | undefined
 let disposed = false
@@ -48,6 +51,24 @@ const displayRotation = computed(() => {
   return rotations[0] === 90 || rotations[0] === 180 || rotations[0] === 270
     ? rotations[0]
     : 0
+})
+const displayedSize = computed(() => {
+  const logicalSize = getLogicalSpriteSize(props.sprite)
+  const rotation = displayRotation.value
+  return rotation === 90 || rotation === 270
+    ? { width: logicalSize.height, height: logicalSize.width }
+    : logicalSize
+})
+const enlargedCanvasStyle = computed(() => {
+  const size = displayedSize.value
+  const scale = Math.min(
+    enlargedSurfaceWidth.value > 0 ? enlargedSurfaceWidth.value / size.width : 1,
+    enlargedSurfaceHeight.value > 0 ? enlargedSurfaceHeight.value / size.height : 1,
+  )
+  return {
+    width: `${Math.max(1, Math.floor(size.width * scale))}px`,
+    height: `${Math.max(1, Math.floor(size.height * scale))}px`,
+  }
 })
 
 function loadImage(url: string): Promise<HTMLImageElement> {
@@ -200,8 +221,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div
+    v-if="enlarged"
+    ref="enlargedSurface"
+    class="flex size-full min-h-0 min-w-0 items-center justify-center"
+  >
+    <div
+      class="shrink-0 overflow-hidden rounded border"
+      :class="backgroundClass"
+      :style="enlargedCanvasStyle"
+    >
+      <canvas
+        ref="canvas"
+        class="block size-full [image-rendering:auto]"
+        :aria-label="sprite.name"
+      ></canvas>
+    </div>
+  </div>
+  <div
+    v-else
     class="flex items-center justify-center overflow-hidden rounded border"
-    :class="[backgroundClass, enlarged ? 'size-full' : 'inline-flex max-w-full']"
+    :class="[backgroundClass, 'inline-flex max-w-full']"
   >
     <canvas
       ref="canvas"

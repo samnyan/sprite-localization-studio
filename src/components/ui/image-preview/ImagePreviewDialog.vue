@@ -96,9 +96,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 <template>
   <Dialog :open="open" @update:open="(value) => !value && emit('close')">
     <DialogContent
-      class="top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 rounded-none border-0 bg-transparent p-3 shadow-none sm:p-12"
+      class="!inset-0 !m-0 !h-dvh !w-dvw !max-w-none !translate-x-0 !translate-y-0 rounded-none border-0 bg-transparent p-0 shadow-none"
       :show-close-button="false"
-      @pointerdown.self="emit('close')"
     >
       <DialogHeader class="sr-only">
         <DialogTitle>{{ title ?? activeImage?.title ?? activeImage?.alt ?? t('imagePreview.title') }}</DialogTitle>
@@ -111,61 +110,62 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
       >
         <X data-icon="inline-start" />
       </Button>
-      <div class="relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div
-          class="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded"
-          :class="backgroundClass"
-        >
-          <slot name="image" :image="activeImage" :index="activeIndex">
-            <slot :image="activeImage" :index="activeIndex">
+      <div
+        class="absolute inset-0 flex items-center justify-center overflow-hidden p-3 pb-16 sm:p-12 sm:pb-20"
+        data-testid="image-preview-stage"
+        @pointerdown.self="emit('close')"
+      >
+        <slot name="image" :image="activeImage" :index="activeIndex">
+          <slot :image="activeImage" :index="activeIndex">
+            <div class="max-h-full max-w-full overflow-hidden rounded border" :class="backgroundClass">
               <img
                 v-if="activeImage?.src"
                 :src="activeImage.src"
                 :alt="activeImage.alt ?? ''"
-                class="h-full w-full object-contain"
+                class="block max-h-full max-w-full object-contain"
               />
-            </slot>
+            </div>
           </slot>
-          <template v-if="hasMultipleImages && mode === 'list'">
-            <Button
-              class="absolute left-3 top-1/2 -translate-y-1/2"
-              :aria-label="t('imagePreview.previous')"
-              :disabled="activeIndex === 0"
-              size="icon"
-              variant="outline"
-              @click="previousImage"
-            >
-              <ChevronLeft data-icon="inline-start" />
-            </Button>
-            <Button
-              class="absolute top-1/2 right-3 -translate-y-1/2"
-              :aria-label="t('imagePreview.next')"
-              :disabled="activeIndex === images.length - 1"
-              size="icon"
-              variant="outline"
-              @click="nextImage"
-            >
-              <ChevronRight data-icon="inline-start" />
-            </Button>
-          </template>
-        </div>
-        <div
-          v-if="hasMultipleImages && mode === 'compare'"
-          class="flex justify-center gap-2"
-          role="tablist"
-        >
+        </slot>
+        <template v-if="hasMultipleImages && mode === 'list'">
           <Button
-            v-for="(image, index) in images"
-            :key="image.title ?? image.alt ?? index"
-            :aria-selected="activeIndex === index"
-            :variant="activeIndex === index ? 'default' : 'outline'"
-            role="tab"
-            size="sm"
-            @click="selectImage(index)"
+            class="absolute left-3 top-1/2 -translate-y-1/2"
+            :aria-label="t('imagePreview.previous')"
+            :disabled="activeIndex === 0"
+            size="icon"
+            variant="outline"
+            @click="previousImage"
           >
-            {{ image.title ?? image.alt ?? index + 1 }}
+            <ChevronLeft data-icon="inline-start" />
           </Button>
-        </div>
+          <Button
+            class="absolute top-1/2 right-3 -translate-y-1/2"
+            :aria-label="t('imagePreview.next')"
+            :disabled="activeIndex === images.length - 1"
+            size="icon"
+            variant="outline"
+            @click="nextImage"
+          >
+            <ChevronRight data-icon="inline-start" />
+          </Button>
+        </template>
+      </div>
+      <div
+        v-if="hasMultipleImages && mode === 'compare'"
+        class="fixed bottom-3 left-1/2 flex -translate-x-1/2 gap-2 sm:bottom-7"
+        role="tablist"
+      >
+        <Button
+          v-for="(image, index) in images"
+          :key="image.title ?? image.alt ?? index"
+          :aria-selected="activeIndex === index"
+          :variant="activeIndex === index ? 'default' : 'outline'"
+          role="tab"
+          size="sm"
+          @click="selectImage(index)"
+        >
+          {{ image.title ?? image.alt ?? index + 1 }}
+        </Button>
       </div>
     </DialogContent>
   </Dialog>

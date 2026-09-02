@@ -33,6 +33,15 @@ describe('ImagePreviewDialog', () => {
     expect(wrapper.get('img').attributes()).toMatchObject({ src: 'blob:image', alt: 'Preview image' })
     expect(wrapper.get('img').classes()).toContain('object-contain')
     expect(wrapper.get('img').element.parentElement?.classList).toContain('bg-black')
+    expect(wrapper.get('[data-testid="dialog"] > div').classes()).toEqual(
+      expect.arrayContaining([
+        '!inset-0',
+        '!w-dvw',
+        '!h-dvh',
+        '!translate-x-0',
+        '!translate-y-0',
+      ]),
+    )
     expect(wrapper.get('[aria-label="Close preview"]').classes()).toContain('fixed')
     expect(wrapper.get('[aria-label="Close preview"]').classes()).toContain('bg-black')
 
@@ -69,6 +78,25 @@ describe('ImagePreviewDialog', () => {
     await wrapper.vm.$nextTick()
     expect(wrapper.get('img').attributes('src')).toBe('blob:first')
     wrapper.unmount()
+  })
+
+  it('closes when the empty image stage is clicked', async () => {
+    setLocale('en')
+    const wrapper = mount(ImagePreviewDialog, {
+      props: { open: true, imageUrl: 'blob:image' },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          Dialog: { template: '<div><slot /></div>' },
+          DialogContent: { template: '<div><slot /></div>' },
+          DialogHeader: { template: '<div><slot /></div>' },
+          DialogTitle: { template: '<span><slot /></span>' },
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="image-preview-stage"]').trigger('pointerdown')
+    expect(wrapper.emitted('close')).toEqual([[]])
   })
 
   it('opens a comparison view at the requested image and switches from its tabs', async () => {
