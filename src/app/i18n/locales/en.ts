@@ -133,6 +133,7 @@ export default {
     custom: 'Custom',
     template: 'Template',
     edit: 'Edit',
+    copyPrevious: 'Same as above',
     useTemplate: 'Use template',
     templateMode: 'Font templates',
     individualMode: 'Individual style',
@@ -252,6 +253,8 @@ export default {
     upgradeAvailable: 'Sprite Table schema upgrade available',
     upgradeAvailableDescription:
       '{count} Sprite Table manifest(s) use schema v1 and can be upgraded to schema v2.',
+    upgradeAction: 'Upgrade',
+    upgradeSuccess: 'Upgraded {count} Sprite Table manifest(s) to schema v2.',
   },
   spriteGrid: {
     previewSize: 'Preview size',

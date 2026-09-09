@@ -14,6 +14,7 @@ describe('LooseSpriteImport', () => {
 
     expect(plan.manifestPath).toBe('manifests/spr_ent_name.sprite-table.json')
     expect(plan.spriteTable).toMatchObject({ id: 'spr_ent_name', name: 'spr_ent_name' })
+    expect(plan.spriteTable.schemaVersion).toBe(2)
     expect(plan.spriteTable.textures).toEqual([
       {
         id: 'BASE',

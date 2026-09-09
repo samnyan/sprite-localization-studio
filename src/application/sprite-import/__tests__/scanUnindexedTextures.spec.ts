@@ -90,8 +90,10 @@ describe('scanUnindexedTextures', () => {
     expect(progress[0]).toEqual([0, 2])
     expect(progress[progress.length - 1]).toEqual([2, 2])
     const manifest = JSON.parse(await storage.readText('manifests/data_jp.sprite-table.json')) as {
+      schemaVersion: number
       textures: { id: string; size: { width: number; height: number } }[]
     }
+    expect(manifest.schemaVersion).toBe(2)
     expect(manifest.textures).toEqual([
       {
         id: 'common/Texture/TestMode/0',

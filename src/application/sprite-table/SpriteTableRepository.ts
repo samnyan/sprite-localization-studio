@@ -263,6 +263,21 @@ export interface SpriteTableLoadManyResult {
   upgradeManifestPaths: string[]
 }
 
+function serializeSpriteTableManifest(spriteTable: SpriteTable): string {
+  return `${JSON.stringify(
+    {
+      ...spriteTable,
+      schemaVersion: SPRITE_TABLE_SCHEMA_VERSION,
+      textures: spriteTable.textures.map((texture) => ({
+        ...texture,
+        format: texture.format ?? { container: 'png' },
+      })),
+    },
+    null,
+    2,
+  )}\n`
+}
+
 export class SpriteTableRepository {
   constructor(private readonly storage: ProjectStorage) {}
 
@@ -289,6 +304,14 @@ export class SpriteTableRepository {
     }
 
     return { spriteTable, needsUpgrade: sourceSchemaVersion === 1 }
+  }
+
+  async upgrade(manifestPath: string): Promise<SpriteTableLoadResult> {
+    const result = await this.loadWithMetadata(manifestPath)
+    if (!result.needsUpgrade) return result
+
+    await this.storage.writeText(manifestPath, serializeSpriteTableManifest(result.spriteTable))
+    return { ...result, needsUpgrade: false }
   }
 
   async loadMany(manifestPaths: string[]): Promise<SpriteTable[]> {

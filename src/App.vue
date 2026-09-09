@@ -14,14 +14,33 @@ import 'vue-sonner/style.css'
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
 const looseSpriteImport = ref<LooseSpriteImportPreview>()
+let notifiedUpgradePaths = new Set<string>()
+let notifiedUpgradeDirectory = ''
 useWorkspaceShortcuts()
 
+async function upgradeSpriteTables(): Promise<void> {
+  const count = await workspace.upgradeSpriteTableManifests()
+  if (count > 0) {
+    toast.success(t('spriteTable.upgradeSuccess', { count }))
+  }
+}
+
 watch(
-  () => workspace.spriteTableUpgradePaths,
-  (paths) => {
-    if (!paths.length) return
+  () => [workspace.directoryName, workspace.spriteTableUpgradePaths] as const,
+  ([directory, paths]) => {
+    if (directory !== notifiedUpgradeDirectory) {
+      notifiedUpgradeDirectory = directory
+      notifiedUpgradePaths = new Set()
+    }
+    const newPaths = paths.filter((path) => !notifiedUpgradePaths.has(path))
+    if (!newPaths.length) return
+    for (const path of newPaths) notifiedUpgradePaths.add(path)
     toast.info(t('spriteTable.upgradeAvailable'), {
-      description: t('spriteTable.upgradeAvailableDescription', { count: paths.length }),
+      description: t('spriteTable.upgradeAvailableDescription', { count: newPaths.length }),
+      action: {
+        label: t('spriteTable.upgradeAction'),
+        onClick: () => void upgradeSpriteTables(),
+      },
     })
   },
   { deep: true },

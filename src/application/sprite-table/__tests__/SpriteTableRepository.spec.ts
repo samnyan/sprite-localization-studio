@@ -146,13 +146,27 @@ describe('parseSpriteTableManifest', () => {
   })
 
   it('reports schema v1 manifests that can be upgraded', async () => {
+    const files = new Map([['manifests/ui.json', manifestWith([])]])
     const storage = {
-      readText: async () => manifestWith([]),
+      readText: async (path: string) => files.get(path) ?? '',
+      async writeText(path: string, text: string) {
+        files.set(path, text)
+      },
     } as unknown as ProjectStorage
 
-    const result = await new SpriteTableRepository(storage).loadWithMetadata('manifests/ui.json')
+    const repository = new SpriteTableRepository(storage)
+    const result = await repository.loadWithMetadata('manifests/ui.json')
 
     expect(result.needsUpgrade).toBe(true)
     expect(result.spriteTable.schemaVersion).toBe(2)
+
+    const upgraded = await repository.upgrade('manifests/ui.json')
+    expect(upgraded.needsUpgrade).toBe(false)
+    const upgradedManifest = JSON.parse(files.get('manifests/ui.json') ?? '') as {
+      schemaVersion: number
+      textures: unknown[]
+    }
+    expect(upgradedManifest.schemaVersion).toBe(2)
+    expect(upgradedManifest.textures[0]).toMatchObject({ format: { container: 'png' } })
   })
 })

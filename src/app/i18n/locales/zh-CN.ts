@@ -132,6 +132,7 @@ export default {
     custom: '自定义',
     template: '模板',
     edit: '编辑',
+    copyPrevious: '同上',
     useTemplate: '使用模板',
     templateMode: '字体模板',
     individualMode: '单独样式',
@@ -251,6 +252,8 @@ export default {
     sprites: 'Sprites',
     upgradeAvailable: 'Sprite Table Schema 可以升级',
     upgradeAvailableDescription: '{count} 个 Sprite Table manifest 使用 v1，可升级到 v2。',
+    upgradeAction: '升级',
+    upgradeSuccess: '已将 {count} 个 Sprite Table manifest 升级到 v2。',
   },
   spriteGrid: {
     previewSize: '预览大小',

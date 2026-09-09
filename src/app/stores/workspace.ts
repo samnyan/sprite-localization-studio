@@ -862,6 +862,44 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
+  async function upgradeSpriteTableManifests(): Promise<number> {
+    const paths = [...spriteTableUpgradePaths.value]
+    if (!paths.length || !project.value || !activeStorage || isBusy.value) return 0
+    const operation = beginResourceOperation()
+    if (!operation) return 0
+
+    const repository = new SpriteTableRepository(operation.storage)
+    const upgradedTables = new Map<string, SpriteTable>()
+    const remaining = new Set(paths)
+    let upgradedCount = 0
+    try {
+      status.value = 'saving'
+      error.value = undefined
+      for (const path of paths) {
+        const result = await repository.upgrade(path)
+        upgradedTables.set(result.spriteTable.id, result.spriteTable)
+        remaining.delete(path)
+        upgradedCount += 1
+        if (!isCurrentResourceSession(operation)) return upgradedCount
+        spriteTables.value = spriteTables.value.map(
+          (spriteTable) => upgradedTables.get(spriteTable.id) ?? spriteTable,
+        )
+        spriteTableUpgradePaths.value = [...remaining]
+      }
+      status.value = 'ready'
+      return upgradedCount
+    } catch (caughtError) {
+      if (isCurrentResourceSession(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+        spriteTableUpgradePaths.value = [...remaining]
+      }
+      return upgradedCount
+    } finally {
+      finishResourceOperation(operation)
+    }
+  }
+
   function undo(): boolean {
     const current = project.value
     if (activeResourceOperation || !current || !history.canUndo) return false
@@ -1942,6 +1980,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     createLocalProject,
     loadImageUrl,
     ensureTextureImageUrl,
+    upgradeSpriteTableManifests,
     saveProject,
     prepareLooseSpriteImport,
     prepareScanUnindexedTextures,
