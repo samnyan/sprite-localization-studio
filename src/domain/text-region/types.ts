@@ -40,6 +40,13 @@ export interface TextShadow {
   alpha?: number
 }
 
+export interface TextPadding {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
 export interface TextStyleLayer {
   id: string
   enabled: boolean
@@ -58,6 +65,7 @@ export interface TextRenderConfig {
   verticalAlign?: TextVerticalAlign
   lineHeight?: number
   letterSpacing?: number
+  padding?: TextPadding
   wrap?: boolean
   maxLines?: number
   overflow?: TextOverflow

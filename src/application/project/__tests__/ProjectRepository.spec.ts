@@ -55,24 +55,28 @@ describe('parseProjectManifest', () => {
     expect(isTextRenderConfig({ ...render, fontId: 'font-1' })).toBe(true)
     expect(isTextRenderConfig({ ...render, fontId: '' })).toBe(false)
     expect(isTextRenderConfig({ ...render, fontId: 1 })).toBe(false)
-    expect(isTextRenderConfig({
-      ...render,
-      stroke: {
-        width: 2,
-        position: 'outside',
-        join: 'round',
-        paint: { mode: 'solid', color: '#000000' },
-      },
-    })).toBe(true)
-    expect(isTextRenderConfig({
-      ...render,
-      stroke: {
-        width: 2,
-        position: 'outside',
-        join: 'sharp',
-        paint: { mode: 'solid', color: '#000000' },
-      },
-    })).toBe(false)
+    expect(
+      isTextRenderConfig({
+        ...render,
+        stroke: {
+          width: 2,
+          position: 'outside',
+          join: 'round',
+          paint: { mode: 'solid', color: '#000000' },
+        },
+      }),
+    ).toBe(true)
+    expect(
+      isTextRenderConfig({
+        ...render,
+        stroke: {
+          width: 2,
+          position: 'outside',
+          join: 'sharp',
+          paint: { mode: 'solid', color: '#000000' },
+        },
+      }),
+    ).toBe(false)
   })
 
   it('migrates the minimal v1 project manifest in memory', () => {
@@ -266,25 +270,51 @@ describe('parseProjectManifest', () => {
       align: 'center',
       verticalAlign: 'bottom',
       letterSpacing: 1.5,
+      padding: { top: 1, right: 2, bottom: 3, left: 4 },
       wrap: true,
       maxLines: 2,
       overflow: 'ellipsis',
       autoFit: { minFontSize: 12, maxFontSize: 24 },
     }
-    expect(parseProjectManifest(JSON.stringify({
-      schemaVersion: 3,
-      name: 'Sample',
-      textStyleTemplates: [{ id: 'layout', name: 'Layout', render }],
-    }))).toMatchObject({ textStyleTemplates: [{ id: 'layout' }] })
-    expect(() => parseProjectManifest(JSON.stringify({
-      schemaVersion: 3,
-      name: 'Sample',
-      textStyleTemplates: [{
-        id: 'invalid-layout',
-        name: 'Invalid layout',
-        render: { ...render, autoFit: { minFontSize: 24, maxFontSize: 12 } },
-      }],
-    }))).toThrowError(expect.objectContaining({ code: 'invalidTextStyleTemplates' }))
+    expect(
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 3,
+          name: 'Sample',
+          textStyleTemplates: [{ id: 'layout', name: 'Layout', render }],
+        }),
+      ),
+    ).toMatchObject({ textStyleTemplates: [{ id: 'layout' }] })
+    expect(() =>
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 3,
+          name: 'Sample',
+          textStyleTemplates: [
+            {
+              id: 'invalid-layout',
+              name: 'Invalid layout',
+              render: { ...render, autoFit: { minFontSize: 24, maxFontSize: 12 } },
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidTextStyleTemplates' }))
+    expect(() =>
+      parseProjectManifest(
+        JSON.stringify({
+          schemaVersion: 3,
+          name: 'Sample',
+          textStyleTemplates: [
+            {
+              id: 'invalid-padding',
+              name: 'Invalid padding',
+              render: { ...render, padding: { top: 0, right: -1, bottom: 0, left: 0 } },
+            },
+          ],
+        }),
+      ),
+    ).toThrowError(expect.objectContaining({ code: 'invalidTextStyleTemplates' }))
   })
 
   it('rejects duplicate sprite translation metadata and invalid regions', () => {

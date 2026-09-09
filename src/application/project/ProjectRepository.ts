@@ -142,6 +142,13 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
           (record.alpha as number) <= 1))
     )
   }
+  const isPadding = (padding: unknown): boolean => {
+    if (!padding || typeof padding !== 'object' || Array.isArray(padding)) return false
+    const record = padding as Record<string, unknown>
+    return ['top', 'right', 'bottom', 'left'].every(
+      (side) => Number.isFinite(record[side]) && (record[side] as number) >= 0,
+    )
+  }
   return (
     isNonEmptyString(config.fontFamily) &&
     (config.fontId === undefined || isNonEmptyString(config.fontId)) &&
@@ -162,6 +169,7 @@ export function isTextRenderConfig(value: unknown): value is TextStyleTemplate['
     (config.lineHeight === undefined ||
       (Number.isFinite(config.lineHeight) && (config.lineHeight as number) > 0)) &&
     (config.letterSpacing === undefined || Number.isFinite(config.letterSpacing)) &&
+    (config.padding === undefined || isPadding(config.padding)) &&
     (config.wrap === undefined || typeof config.wrap === 'boolean') &&
     (config.maxLines === undefined ||
       (Number.isInteger(config.maxLines) && (config.maxLines as number) > 0)) &&
@@ -423,10 +431,7 @@ export function parseProjectManifest(text: string): ProjectManifest {
     throw new ProjectFormatError('invalidSpriteBackgrounds')
   }
 
-  if (
-    record.textStyleTemplates !== undefined &&
-    !isTextStyleTemplates(record.textStyleTemplates)
-  ) {
+  if (record.textStyleTemplates !== undefined && !isTextStyleTemplates(record.textStyleTemplates)) {
     throw new ProjectFormatError('invalidTextStyleTemplates')
   }
 
@@ -448,9 +453,7 @@ export function parseProjectManifest(text: string): ProjectManifest {
 }
 
 function migrateV2Manifest(record: Record<string, unknown>): ProjectManifest {
-  return parseProjectManifest(
-    JSON.stringify({ ...record, schemaVersion: PROJECT_SCHEMA_VERSION }),
-  )
+  return parseProjectManifest(JSON.stringify({ ...record, schemaVersion: PROJECT_SCHEMA_VERSION }))
 }
 
 function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest {
@@ -477,10 +480,7 @@ function migrateLegacyManifest(record: Record<string, unknown>): ProjectManifest
     throw new ProjectFormatError('invalidTranslationBackgrounds')
   }
 
-  if (
-    record.textStyleTemplates !== undefined &&
-    !isTextStyleTemplates(record.textStyleTemplates)
-  ) {
+  if (record.textStyleTemplates !== undefined && !isTextStyleTemplates(record.textStyleTemplates)) {
     throw new ProjectFormatError('invalidTextStyleTemplates')
   }
 

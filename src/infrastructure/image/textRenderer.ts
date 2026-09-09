@@ -1,7 +1,11 @@
 import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 import type { TextPaint, TextRegion, TextRenderConfig } from '@/domain/text-region/types'
 import { layoutText, planTextRun, type TextRunPlan } from '@/domain/text-region/textLayout'
-import { layoutTextBaselines, type TextLineVerticalBounds } from '@/domain/text-region/textVerticalLayout'
+import {
+  layoutTextBaselines,
+  type TextLineVerticalBounds,
+} from '@/domain/text-region/textVerticalLayout'
+import { resolveTextContentArea } from '@/domain/text-region/textPadding'
 
 function withAlpha(value: string, alpha?: number): string {
   if (alpha === undefined) return value
@@ -9,8 +13,10 @@ function withAlpha(value: string, alpha?: number): string {
   if (!match) return value
   const hex = match[1]!
   const short = hex.length === 3 || hex.length === 4
-  const channel = (index: number) => parseInt(short ? hex[index]! + hex[index]! : hex.slice(index * 2, index * 2 + 2), 16)
-  const existing = hex.length === 4 ? channel(3) / 255 : hex.length === 8 ? parseInt(hex.slice(6), 16) / 255 : 1
+  const channel = (index: number) =>
+    parseInt(short ? hex[index]! + hex[index]! : hex.slice(index * 2, index * 2 + 2), 16)
+  const existing =
+    hex.length === 4 ? channel(3) / 255 : hex.length === 8 ? parseInt(hex.slice(6), 16) / 255 : 1
   return `rgba(${channel(0)}, ${channel(1)}, ${channel(2)}, ${Math.max(0, Math.min(1, existing * alpha))})`
 }
 
@@ -26,8 +32,13 @@ function paintStyle(
   const angle = ((paint.gradientAngle ?? 0) * Math.PI) / 180
   const dx = Math.cos(angle)
   const dy = Math.sin(angle)
-  const extent = Math.abs(dx) * width / 2 + Math.abs(dy) * height / 2
-  const gradient = context.createLinearGradient(-dx * extent, -dy * extent, dx * extent, dy * extent)
+  const extent = (Math.abs(dx) * width) / 2 + (Math.abs(dy) * height) / 2
+  const gradient = context.createLinearGradient(
+    -dx * extent,
+    -dy * extent,
+    dx * extent,
+    dy * extent,
+  )
   const stops = paint.gradientStops?.length
     ? paint.gradientStops
     : paint.gradientEnd
@@ -49,11 +60,12 @@ function drawPlannedCharacters(
   x: number,
   draw: (character: string, x: number) => void,
 ): void {
-  const start = context.textAlign === 'left'
-    ? x
-    : context.textAlign === 'right'
-      ? x - plan.width
-      : x - plan.width / 2
+  const start =
+    context.textAlign === 'left'
+      ? x
+      : context.textAlign === 'right'
+        ? x - plan.width
+        : x - plan.width / 2
   context.save()
   context.textAlign = 'left'
   let cursor = start
@@ -114,7 +126,8 @@ function canvasLineBounds(
 ): TextLineVerticalBounds {
   const metrics = context.measureText(text || 'Mg')
   const ascent = metrics.actualBoundingBoxAscent || metrics.fontBoundingBoxAscent || fontSize * 0.8
-  const descent = metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.2
+  const descent =
+    metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.2
   return { ascent: ascent + outsideStroke, descent: descent + outsideStroke }
 }
 
@@ -125,12 +138,18 @@ export function drawTextRegion(
   render: TextRenderConfig,
 ): void {
   const config = { ...DEFAULT_TEXT_RENDER, ...render }
+  const contentArea = resolveTextContentArea(region.rect.width, region.rect.height, config.padding)
   context.save()
   context.translate(region.rect.x + region.rect.width / 2, region.rect.y + region.rect.height / 2)
   context.rotate((region.rotation * Math.PI) / 180)
   if (config.overflow !== 'visible') {
     context.beginPath()
-    context.rect(-region.rect.width / 2, -region.rect.height / 2, region.rect.width, region.rect.height)
+    context.rect(
+      -region.rect.width / 2,
+      -region.rect.height / 2,
+      region.rect.width,
+      region.rect.height,
+    )
     context.clip()
   }
   const fill = paintStyle(
@@ -148,26 +167,21 @@ export function drawTextRegion(
   }
   const layout = layoutText(
     text,
-    region.rect.width,
-    region.rect.height,
+    contentArea.width,
+    contentArea.height,
     config,
     (line, fontSize) => {
       setFont(fontSize)
-      return planTextRun(
-        line,
-        config.letterSpacing ?? 0,
-        (unit) => context.measureText(unit).width,
-      ).width
+      return planTextRun(line, config.letterSpacing ?? 0, (unit) => context.measureText(unit).width)
+        .width
     },
   )
   setFont(layout.fontSize)
   const letterSpacing = config.letterSpacing ?? 0
   const linePlans = letterSpacing
-    ? layout.lines.map((line) => planTextRun(
-        line,
-        letterSpacing,
-        (unit) => context.measureText(unit).width,
-      ))
+    ? layout.lines.map((line) =>
+        planTextRun(line, letterSpacing, (unit) => context.measureText(unit).width),
+      )
     : undefined
   context.textAlign = config.align
   context.textBaseline = 'alphabetic'
@@ -175,17 +189,17 @@ export function drawTextRegion(
   const shadows = config.shadows ?? (config.shadow ? [config.shadow] : [])
   const x =
     config.align === 'left'
-      ? -region.rect.width / 2
+      ? -region.rect.width / 2 + (config.padding?.left ?? 0)
       : config.align === 'right'
-        ? region.rect.width / 2
-        : 0
+        ? region.rect.width / 2 - (config.padding?.right ?? 0)
+        : contentArea.offsetX
   const outsideStroke = config.stroke?.position === 'outside' ? config.stroke.width : 0
   const baselines = layoutTextBaselines(
     layout.lines.map((line) => canvasLineBounds(context, line, layout.fontSize, outsideStroke)),
     layout.lineHeight,
-    region.rect.height,
+    contentArea.height,
     config.verticalAlign,
-  )
+  ).map((baseline) => baseline + contentArea.offsetY)
   for (const [index, line] of layout.lines.entries()) {
     const plan = linePlans?.[index]
     context.save()

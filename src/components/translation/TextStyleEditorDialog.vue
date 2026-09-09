@@ -42,6 +42,7 @@ import { DEFAULT_TEXT_RENDER, textStyleTemplates } from '@/domain/text-region/st
 import type {
   GradientStop,
   TextPaint,
+  TextPadding,
   TextRenderConfig,
   TextShadow,
   TextStroke,
@@ -92,11 +93,18 @@ function createDraft(render?: TextRenderConfig): TextRenderConfig {
     color: DEFAULT_TEXT_RENDER.color,
   }
   const defaultStroke = DEFAULT_TEXT_RENDER.stroke!
+  const defaultPadding: TextPadding = DEFAULT_TEXT_RENDER.padding ?? {
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  }
   const stroke = render?.stroke
   return {
     ...DEFAULT_TEXT_RENDER,
     ...render,
     fill: { ...defaultFill, ...render?.fill },
+    padding: { ...defaultPadding, ...render?.padding },
     stroke: {
       ...defaultStroke,
       ...stroke,
@@ -549,6 +557,50 @@ function save(): void {
                 min="0.1"
                 step="0.1"
             /></FormField>
+            <FormField class="col-span-full" :label="t('style.padding')">
+              <div class="grid grid-cols-4 gap-2">
+                <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {{ t('style.paddingTop') }}
+                  <Input
+                    v-model.number="draft.padding!.top"
+                    class="text-foreground"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {{ t('style.paddingRight') }}
+                  <Input
+                    v-model.number="draft.padding!.right"
+                    class="text-foreground"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {{ t('style.paddingBottom') }}
+                  <Input
+                    v-model.number="draft.padding!.bottom"
+                    class="text-foreground"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </label>
+                <label class="flex flex-col gap-1 text-xs text-muted-foreground">
+                  {{ t('style.paddingLeft') }}
+                  <Input
+                    v-model.number="draft.padding!.left"
+                    class="text-foreground"
+                    type="number"
+                    min="0"
+                    step="1"
+                  />
+                </label>
+              </div>
+            </FormField>
             <FormField :label="t('translation.align')">
               <Select v-model="draft.align">
                 <SelectTrigger><SelectValue /></SelectTrigger>

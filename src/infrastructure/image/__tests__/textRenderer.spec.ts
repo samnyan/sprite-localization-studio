@@ -4,7 +4,9 @@ import type { TextRegion } from '@/domain/text-region/types'
 import { drawTextRegion } from '@/infrastructure/image/textRenderer'
 
 function createContext() {
-  const measureText = vi.fn<(text: string) => TextMetrics>((text) => ({ width: text.length * 10 }) as TextMetrics)
+  const measureText = vi.fn<(text: string) => TextMetrics>(
+    (text) => ({ width: text.length * 10 }) as TextMetrics,
+  )
   const fillText = vi.fn<(text: string, x: number, y: number) => void>()
   const strokeText = vi.fn<(text: string, x: number, y: number) => void>()
   const context = {
@@ -94,5 +96,22 @@ describe('drawTextRegion', () => {
     expect(measureText).toHaveBeenCalledTimes(2)
     expect(fillText).toHaveBeenCalledExactlyOnceWith('AB', 0, 0)
     expect(strokeText).toHaveBeenCalledExactlyOnceWith('AB', 0, 0)
+  })
+
+  it('uses horizontal padding as the alignment boundary', () => {
+    const { context, fillText } = createContext()
+
+    drawTextRegion(context, 'AB', region, {
+      fontFamily: 'sans-serif',
+      fontSize: 24,
+      fontWeight: 700,
+      color: '#ffffff',
+      align: 'left',
+      padding: { top: 0, right: 0, bottom: 0, left: 20 },
+      shadow: undefined,
+      stroke: undefined,
+    })
+
+    expect(fillText).toHaveBeenCalledExactlyOnceWith('AB', -80, 0)
   })
 })

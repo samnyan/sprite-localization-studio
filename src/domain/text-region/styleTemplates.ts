@@ -10,6 +10,7 @@ export const DEFAULT_TEXT_RENDER: TextRenderConfig = {
   verticalAlign: 'middle',
   lineHeight: 1.2,
   letterSpacing: 0,
+  padding: { top: 0, right: 0, bottom: 0, left: 0 },
   wrap: false,
   overflow: 'visible',
   fill: { mode: 'solid', color: '#ffffff', alpha: 1, gradientAngle: 0 },

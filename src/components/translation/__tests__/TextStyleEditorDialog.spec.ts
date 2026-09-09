@@ -116,6 +116,19 @@ describe('TextStyleEditorDialog project fonts', () => {
     expect(render).not.toHaveProperty('fontId')
   })
 
+  it('persists the four padding values', async () => {
+    const wrapper = mountEditor()
+    const numberInputs = wrapper.findAll('input[type="number"]')
+    await numberInputs[2]!.setValue('1')
+    await numberInputs[3]!.setValue('2')
+    await numberInputs[4]!.setValue('3')
+    await numberInputs[5]!.setValue('4')
+
+    const render = await save(wrapper)
+
+    expect(render).toMatchObject({ padding: { top: 1, right: 2, bottom: 3, left: 4 } })
+  })
+
   it('clears the project font ID when the family is manually edited', async () => {
     const wrapper = mountEditor()
     await wrapper.findComponent(Select).vm.$emit('update:modelValue', 'project-font')
