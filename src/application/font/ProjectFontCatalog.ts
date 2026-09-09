@@ -1,7 +1,9 @@
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { ProjectFont, ProjectFontCatalog } from '@/domain/font/types'
+import { inferFontStyle, inferFontWeight } from '@/domain/font/fontStyle'
+import { extractFontFaces } from '@/application/font/fontData'
 
-const FONT_FILE_PATTERN = /\.(ttf|otf)$/i
+const FONT_FILE_PATTERN = /\.(ttf|otf|ttc)$/i
 
 function localizedName(value: Record<string, string> | undefined): string | undefined {
   return value?.en ?? Object.values(value ?? {})[0]
@@ -13,19 +15,6 @@ function fontName(names: unknown, key: string): string | undefined {
   return Object.values(collections)
     .map((collection) => localizedName(collection[key]))
     .find((value) => value !== undefined)
-}
-
-function fontWeight(subfamily?: string): number | undefined {
-  const value = (subfamily ?? '').toLowerCase().replace(/[\s-]/g, '')
-  if (value.includes('thin')) return 100
-  if (value.includes('extralight') || value.includes('ultralight')) return 200
-  if (value.includes('light')) return 300
-  if (value.includes('medium')) return 500
-  if (value.includes('semibold') || value.includes('demibold')) return 600
-  if (value.includes('extrabold') || value.includes('ultrabold')) return 800
-  if (value.includes('black') || value.includes('heavy')) return 900
-  if (value.includes('bold')) return 700
-  return value.includes('regular') ? 400 : undefined
 }
 
 async function fingerprint(path: string, data: ArrayBuffer): Promise<string> {
@@ -51,7 +40,10 @@ export async function scanProjectFonts(storage: ProjectStorage): Promise<Project
       : {
           fonts: [],
           diagnostics: [
-            { path: 'fonts', message: error instanceof Error ? error.message : 'Unable to scan fonts.' },
+            {
+              path: 'fonts',
+              message: error instanceof Error ? error.message : 'Unable to scan fonts.',
+            },
           ],
         }
   }
@@ -67,35 +59,41 @@ export async function scanProjectFonts(storage: ProjectStorage): Promise<Project
   const descriptors = new Set<string>()
   for (const entry of fontEntries) {
     try {
-      const data = await storage.readBinary(entry.path)
-      const font = parse(data)
-      const family = fontName(font.names, 'fontFamily')
-      if (!family) throw new Error('Font family metadata is missing.')
-      const subfamily = fontName(font.names, 'fontSubfamily')
-      const tableWeight = Number((font.tables.os2 as { usWeightClass?: unknown } | undefined)?.usWeightClass)
-      const weight = Number.isFinite(tableWeight) && tableWeight > 0 ? tableWeight : fontWeight(subfamily)
-      const style = subfamily?.toLowerCase().includes('oblique')
-        ? 'oblique'
-        : subfamily?.toLowerCase().includes('italic')
-          ? 'italic'
-          : 'normal'
-      const descriptor = `${family}\u0000${weight ?? 400}\u0000${style}`
-      if (descriptors.has(descriptor)) {
-        diagnostics.push({ path: entry.path, message: 'Duplicate font family, weight, and style.' })
-        continue
+      const sourceData = await storage.readBinary(entry.path)
+      const faces = extractFontFaces(sourceData)
+      for (const [faceIndex, data] of faces.entries()) {
+        const font = parse(data)
+        const family = fontName(font.names, 'fontFamily')
+        if (!family) throw new Error('Font family metadata is missing.')
+        const subfamily = fontName(font.names, 'fontSubfamily')
+        const tableWeight = Number(
+          (font.tables.os2 as { usWeightClass?: unknown } | undefined)?.usWeightClass,
+        )
+        const weight =
+          Number.isFinite(tableWeight) && tableWeight > 0 ? tableWeight : inferFontWeight(subfamily)
+        const style = inferFontStyle(subfamily)
+        const descriptor = `${family}\u0000${weight ?? 400}\u0000${style}`
+        if (descriptors.has(descriptor)) {
+          diagnostics.push({
+            path: entry.path,
+            message: 'Duplicate font family, weight, and style.',
+          })
+          continue
+        }
+        descriptors.add(descriptor)
+        fonts.push({
+          id: await fingerprint(`${entry.path}\u0000${faceIndex}`, data),
+          path: entry.path,
+          ...(faces.length > 1 ? { faceIndex } : {}),
+          family,
+          ...(subfamily ? { subfamily } : {}),
+          ...(fontName(font.names, 'postScriptName')
+            ? { postscriptName: fontName(font.names, 'postScriptName') }
+            : {}),
+          ...(weight ? { weight } : {}),
+          style,
+        })
       }
-      descriptors.add(descriptor)
-      fonts.push({
-        id: await fingerprint(entry.path, data),
-        path: entry.path,
-        family,
-        ...(subfamily ? { subfamily } : {}),
-        ...(fontName(font.names, 'postScriptName')
-          ? { postscriptName: fontName(font.names, 'postScriptName') }
-          : {}),
-        ...(weight ? { weight } : {}),
-        style,
-      })
     } catch (error) {
       diagnostics.push({
         path: entry.path,

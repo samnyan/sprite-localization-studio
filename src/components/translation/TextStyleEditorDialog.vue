@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import { useSystemFonts } from '@/app/composables/useSystemFonts'
 import FormField from '@/components/ui/FormField.vue'
 import {
   AlertDialog,
@@ -48,8 +49,7 @@ import type {
 } from '@/domain/text-region/types'
 import TextStyleCanvasPreview from '@/components/translation/TextStyleCanvasPreview.vue'
 import type { PreviewBackground } from '@/app/stores/workspace'
-import type { ProjectFont } from '@/domain/font/types'
-import type { FontDiagnostic } from '@/domain/font/types'
+import type { FontDiagnostic, ProjectFont, SystemFont } from '@/domain/font/types'
 
 const props = defineProps<{
   open: boolean
@@ -72,6 +72,7 @@ const emit = defineEmits<{
 const { locale, t } = useI18n()
 const draft = ref<TextRenderConfig>(createDraft())
 const selectedProjectFontId = ref<string>()
+const { fonts: systemFonts, status: systemFontStatus, canQuery, requestFonts } = useSystemFonts()
 const styleMode = ref<'template' | 'individual'>('individual')
 const editingTemplate = ref<TextStyleTemplate>()
 const renamingTemplate = ref<TextStyleTemplate>()
@@ -86,8 +87,10 @@ const previewText = computed(() => props.text || (locale.value.startsWith('zh') 
 const templatePreviewText = computed(() => (locale.value.startsWith('zh') ? '文本' : 'Text'))
 
 function createDraft(render?: TextRenderConfig): TextRenderConfig {
-  const defaultFill: TextPaint =
-    DEFAULT_TEXT_RENDER.fill ?? { mode: 'solid', color: DEFAULT_TEXT_RENDER.color }
+  const defaultFill: TextPaint = DEFAULT_TEXT_RENDER.fill ?? {
+    mode: 'solid',
+    color: DEFAULT_TEXT_RENDER.color,
+  }
   const defaultStroke = DEFAULT_TEXT_RENDER.stroke!
   const stroke = render?.stroke
   return {
@@ -154,12 +157,41 @@ function selectProjectFont(value: unknown): void {
   if (typeof value !== 'string') return
   const id = value
   const font = props.fonts?.find((item) => item.id === id)
-  if (!font) return
+  if (font) {
+    selectedProjectFontId.value = id
+    draft.value.fontId = id
+    draft.value.fontFamily = font.family
+    draft.value.fontWeight = font.weight ?? 400
+    draft.value.fontStyle = font.style ?? 'normal'
+    return
+  }
+  const systemFont = systemFonts.value.find((item, index) => systemFontKey(item, index) === id)
+  if (!systemFont) return
   selectedProjectFontId.value = id
-  draft.value.fontId = id
-  draft.value.fontFamily = font.family
-  draft.value.fontWeight = font.weight ?? 400
-  draft.value.fontStyle = font.style ?? 'normal'
+  draft.value.fontId = undefined
+  draft.value.fontFamily = systemFont.family
+  draft.value.fontWeight = systemFont.weight
+  draft.value.fontStyle = systemFont.style
+}
+
+function systemFontKey(font: SystemFont, index: number): string {
+  return `system:${font.postscriptName ?? `${font.family}:${font.weight}:${font.style}:${index}`}`
+}
+
+function projectFontFileName(font: ProjectFont): string {
+  const fileName = font.path.split('/').pop() ?? font.path
+  return fileName.replace(/\.(ttf|otf|ttc)$/i, '')
+}
+
+function selectedFontValue(render: TextRenderConfig): string | undefined {
+  if (render.fontId) return render.fontId
+  const index = systemFonts.value.findIndex(
+    (font) =>
+      font.family === render.fontFamily &&
+      font.weight === render.fontWeight &&
+      font.style === (render.fontStyle ?? 'normal'),
+  )
+  return index < 0 ? undefined : systemFontKey(systemFonts.value[index]!, index)
 }
 
 function updateFontFamily(value: string | number): void {
@@ -181,7 +213,7 @@ watch(
   () => {
     if (!props.open) return
     draft.value = JSON.parse(JSON.stringify(createDraft(props.render))) as TextRenderConfig
-    selectedProjectFontId.value = draft.value.fontId
+    selectedProjectFontId.value = selectedFontValue(draft.value)
     styleMode.value = props.styleId ? 'template' : 'individual'
     editingTemplate.value = undefined
     renamingTemplate.value = undefined
@@ -404,18 +436,64 @@ function save(): void {
                 class="h-8 w-full rounded border bg-background px-2 text-foreground"
                 @update:model-value="updateFontFamily"
             /></FormField>
-            <FormField :label="t('style.projectFont')">
-              <Select :model-value="selectedProjectFontId" @update:model-value="selectProjectFont">
-                <SelectTrigger><SelectValue :placeholder="t('style.manualFont')" /></SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem v-for="font in fonts" :key="font.id" :value="font.id">
-                      {{ font.family }}{{ font.weight ? ` ${font.weight}` : '' }}
-                      {{ font.style === 'normal' ? '' : ` · ${font.style}` }}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+            <FormField :label="t('style.fontSource')">
+              <div class="flex gap-2">
+                <Select
+                  class="min-w-0 flex-1"
+                  :model-value="selectedProjectFontId"
+                  @update:model-value="selectProjectFont"
+                >
+                  <SelectTrigger class="w-full">
+                    <SelectValue :placeholder="t('style.manualFont')">{{
+                      draft.fontFamily
+                    }}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent class="w-[min(40rem,calc(100vw-2rem))] max-w-[calc(100vw-2rem)]">
+                    <SelectGroup>
+                      <SelectItem v-for="font in fonts" :key="font.id" :value="font.id">
+                        <span class="flex w-full items-center justify-between gap-3">
+                          <span
+                            >{{ font.family }}{{ font.weight ? ` ${font.weight}` : ''
+                            }}{{ font.style === 'normal' ? '' : ` · ${font.style}` }}</span
+                          >
+                          <span class="text-xs text-muted-foreground">
+                            {{ `${t('style.project')}: ${projectFontFileName(font)}` }}
+                          </span>
+                        </span>
+                      </SelectItem>
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectItem
+                        v-for="(font, index) in systemFonts"
+                        :key="systemFontKey(font, index)"
+                        :value="systemFontKey(font, index)"
+                      >
+                        <span class="flex w-full items-center justify-between gap-3">
+                          <span
+                            >{{ font.family }} {{ font.weight
+                            }}{{ font.style === 'normal' ? '' : ` · ${font.style}` }}</span
+                          >
+                          <span class="text-xs text-muted-foreground">{{ t('style.system') }}</span>
+                        </span>
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  :disabled="systemFontStatus === 'loading' || !canQuery"
+                  :title="!canQuery ? t('style.systemFontsUnsupported') : undefined"
+                  @click="requestFonts"
+                >
+                  {{
+                    systemFontStatus === 'loading'
+                      ? t('style.loadingSystemFonts')
+                      : t('style.loadSystemFonts')
+                  }}
+                </Button>
+              </div>
             </FormField>
             <FormField :label="t('style.fontWeight')">
               <Select
@@ -436,18 +514,17 @@ function save(): void {
               <option v-for="font in fonts" :key="font.id" :value="font.family">
                 {{ font.family }}{{ font.subfamily ? ` · ${font.subfamily}` : '' }}
               </option>
+              <option
+                v-for="(font, index) in systemFonts"
+                :key="systemFontKey(font, index)"
+                :value="font.family"
+              >
+                {{ font.family }}{{ font.subfamily ? ` · ${font.subfamily}` : '' }}
+              </option>
             </datalist>
             <p class="col-span-full -mt-2 text-xs text-muted-foreground">
               {{ t('style.fontHint') }}
             </p>
-            <div
-              v-if="fonts?.length"
-              class="col-span-full flex flex-wrap gap-1 text-xs text-muted-foreground"
-            >
-              <span v-for="font in fonts" :key="font.id" class="rounded border px-2 py-1">
-                {{ font.family }}{{ font.weight ? ` ${font.weight}` : '' }} · {{ font.path }}
-              </span>
-            </div>
             <div
               v-if="fontDiagnostics?.length"
               class="col-span-full rounded border border-destructive/30 p-2 text-xs text-destructive"

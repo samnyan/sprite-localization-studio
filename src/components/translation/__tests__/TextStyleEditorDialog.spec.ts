@@ -104,6 +104,18 @@ describe('TextStyleEditorDialog project fonts', () => {
     })
   })
 
+  it('uses the fallback system font list without creating a project font reference', async () => {
+    const wrapper = mountEditor()
+
+    const selects = wrapper.findAllComponents(Select)
+    await selects[0]!.vm.$emit('update:modelValue', 'system:Arial:400:normal:0')
+    await nextTick()
+    const render = await save(wrapper)
+
+    expect(render).toMatchObject({ fontFamily: 'Arial', fontWeight: 400, fontStyle: 'normal' })
+    expect(render).not.toHaveProperty('fontId')
+  })
+
   it('clears the project font ID when the family is manually edited', async () => {
     const wrapper = mountEditor()
     await wrapper.findComponent(Select).vm.$emit('update:modelValue', 'project-font')

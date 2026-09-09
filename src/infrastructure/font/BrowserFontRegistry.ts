@@ -1,5 +1,6 @@
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import type { FontDiagnostic, ProjectFont } from '@/domain/font/types'
+import { extractFontFaces } from '@/application/font/fontData'
 
 export class BrowserFontRegistry {
   private readonly faces = new Map<string, FontFace>()
@@ -19,7 +20,9 @@ export class BrowserFontRegistry {
     const results = await Promise.all(
       fonts.map(async (font) => {
         try {
-          const data = await storage.readBinary(font.path)
+          const sourceData = await storage.readBinary(font.path)
+          const data = extractFontFaces(sourceData)[font.faceIndex ?? 0]
+          if (!data) throw new Error('Font face is unavailable.')
           const face = new FontFace(font.family, data, {
             ...(font.weight ? { weight: String(font.weight) } : {}),
             ...(font.style ? { style: font.style } : {}),
