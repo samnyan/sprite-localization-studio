@@ -8,12 +8,23 @@ import { type LooseSpriteImportPreview, useWorkspaceStore } from '@/app/stores/w
 import AppMenuBar from '@/components/workspace/AppMenuBar.vue'
 import LooseSpriteImportDialog from '@/components/workspace/LooseSpriteImportDialog.vue'
 import AlertDialogHost from '@/components/ui/AlertDialogHost.vue'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
 const workspace = useWorkspaceStore()
 const { t } = useI18n()
 const looseSpriteImport = ref<LooseSpriteImportPreview>()
+const projectRenameOpen = ref(false)
+const projectRenameDraft = ref('')
 let notifiedUpgradePaths = new Set<string>()
 let notifiedUpgradeDirectory = ''
 useWorkspaceShortcuts()
@@ -48,6 +59,17 @@ watch(
 
 function newProject(): void {
   void workspace.createLocalProject(t('project.untitled'))
+}
+
+function openProjectRename(): void {
+  if (!workspace.project) return
+  projectRenameDraft.value = workspace.project.name
+  projectRenameOpen.value = true
+}
+
+async function renameProject(): Promise<void> {
+  if (!workspace.saveProjectName(projectRenameDraft.value)) return
+  if (await workspace.saveProject()) projectRenameOpen.value = false
 }
 
 async function prepareLooseSpriteImport(): Promise<void> {
@@ -94,6 +116,7 @@ function cancelLooseSpriteImport(): void {
   <div class="flex h-screen min-w-[800px] flex-col overflow-hidden bg-background text-foreground">
     <AppMenuBar
       :project-path="workspace.directoryName"
+      :project-name="workspace.project?.name"
       :can-undo="workspace.canUndo"
       :can-redo="workspace.canRedo"
       :can-copy-text-region="workspace.canCopyTextRegion"
@@ -108,6 +131,7 @@ function cancelLooseSpriteImport(): void {
       @redo="workspace.redo"
       @copy-text-region="workspace.copyTextRegion"
       @paste-text-region="workspace.pasteTextRegion"
+      @rename-project="openProjectRename"
     />
     <main class="flex min-h-0 flex-1">
       <RouterView />
@@ -120,6 +144,29 @@ function cancelLooseSpriteImport(): void {
       @confirm="importLooseSprites"
       @cancel="cancelLooseSpriteImport"
     />
+    <Dialog v-model:open="projectRenameOpen">
+      <DialogContent class="sm:max-w-md" :show-close-button="false">
+        <DialogHeader
+          ><DialogTitle>{{ t('project.rename') }}</DialogTitle></DialogHeader
+        >
+        <Input
+          v-model="projectRenameDraft"
+          :aria-label="t('project.name')"
+          @keyup.enter="renameProject"
+        />
+        <DialogFooter>
+          <Button variant="outline" @click="projectRenameOpen = false">{{
+            t('common.cancel')
+          }}</Button>
+          <Button
+            :disabled="!projectRenameDraft.trim() || workspace.isBusy"
+            data-testid="confirm-project-rename"
+            @click="renameProject"
+            >{{ t('common.save') }}</Button
+          >
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <Toaster />
   </div>
 </template>

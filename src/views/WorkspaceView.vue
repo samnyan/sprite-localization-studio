@@ -2,7 +2,6 @@
 import { computed, ref, watch } from 'vue'
 import {
   FilePlus2,
-  Folder,
   FolderOpen,
   FileOutput,
   Image,
@@ -26,19 +25,12 @@ import TranslationWorkspace from '@/components/translation/TranslationWorkspace.
 import TextureTreeNodeView from '@/components/workspace/TextureTreeNode.vue'
 import { Button } from '@/components/ui/button'
 import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from '@/components/ui/context-menu'
-import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -60,8 +52,6 @@ const workspace = useWorkspaceStore()
 const { locale, t } = useI18n()
 const projectName = ref(workspace.project?.name ?? '')
 const saved = ref(false)
-const projectRenameOpen = ref(false)
-const projectRenameDraft = ref('')
 const expandedTexturePaths = ref(new Set<string>())
 const selectedTreeSpriteId = ref<string>()
 const selectedGridSpriteIds = ref(new Set<string>())
@@ -217,11 +207,6 @@ function selectSpriteTable(spriteTableId: string): void {
   workspace.selectSpriteTable(spriteTableId)
 }
 
-function selectProject(): void {
-  selectedTreeSpriteId.value = undefined
-  workspace.selectProject()
-}
-
 watch([() => workspace.selectedSpriteTableId, () => workspace.selectedTextureDirectory], () => {
   selectedGridSpriteIds.value = new Set()
   lastGridSpriteId.value = undefined
@@ -348,17 +333,6 @@ function updateProjectName(): boolean {
 async function saveProject(): Promise<void> {
   if (!updateProjectName()) return
   saved.value = await workspace.saveProject()
-}
-
-function openProjectRename(): void {
-  if (!workspace.project) return
-  projectRenameDraft.value = workspace.project.name
-  projectRenameOpen.value = true
-}
-
-async function renameProject(): Promise<void> {
-  if (!workspace.saveProjectName(projectRenameDraft.value)) return
-  if (await workspace.saveProject()) projectRenameOpen.value = false
 }
 
 async function buildTextures(): Promise<void> {
@@ -568,31 +542,10 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         </div>
         <div class="min-h-0 flex-1 overflow-auto p-1.5 text-xs">
           <template v-if="workspace.project">
-            <ContextMenu>
-              <ContextMenuTrigger as-child>
-                <button
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
-                  :class="{ 'bg-accent': !workspace.selectedSpriteTableId }"
-                  data-testid="project-root"
-                  @click="selectProject"
-                >
-                  <Folder class="size-3.5 shrink-0" aria-hidden="true" /><span
-                    class="truncate font-medium"
-                    >{{ workspace.project.name }}</span
-                  >
-                </button>
-              </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem data-testid="rename-project" @select="openProjectRename">
-                  {{ t('project.rename') }}
-                </ContextMenuItem>
-              </ContextMenuContent>
-            </ContextMenu>
             <div v-for="spriteTable in workspace.spriteTables" :key="spriteTable.id" class="mt-0.5">
               <button
                 type="button"
-                class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-5 text-left hover:bg-accent"
+                class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-2 text-left hover:bg-accent"
                 :class="{
                   'bg-accent':
                     workspace.selectedSpriteTableId === spriteTable.id &&
@@ -612,7 +565,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                 v-for="node in textureTrees.get(spriteTable.id)"
                 :key="node.path"
                 :node="node"
-                :depth="3"
+                :depth="1"
                 :expanded-paths="expandedTexturePaths"
                 :selected-directory="workspace.selectedTextureDirectory"
                 :selected-sprite-id="selectedTreeSpriteId"
@@ -998,30 +951,6 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         workspace.directoryName
       }}</span>
     </footer>
-
-    <Dialog v-model:open="projectRenameOpen">
-      <DialogContent class="sm:max-w-md" :show-close-button="false">
-        <DialogHeader
-          ><DialogTitle>{{ t('project.rename') }}</DialogTitle></DialogHeader
-        >
-        <Input
-          v-model="projectRenameDraft"
-          :aria-label="t('project.name')"
-          @keyup.enter="renameProject"
-        />
-        <DialogFooter>
-          <Button variant="outline" @click="projectRenameOpen = false">{{
-            t('common.cancel')
-          }}</Button>
-          <Button
-            :disabled="!projectRenameDraft.trim() || workspace.isBusy"
-            data-testid="confirm-project-rename"
-            @click="renameProject"
-            >{{ t('common.save') }}</Button
-          >
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
 
     <Dialog v-model:open="bulkTranslationConfirmOpen">
       <DialogContent class="sm:max-w-md" :show-close-button="false">

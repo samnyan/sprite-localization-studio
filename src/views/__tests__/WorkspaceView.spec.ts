@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { toast } from 'vue-sonner'
 
@@ -14,50 +14,6 @@ vi.mock('vue-sonner', () => ({ toast: { success: vi.fn<() => void>() } }))
 
 describe('WorkspaceView', () => {
   afterEach(() => setWorkspaceProjectSessionForTesting())
-
-  it('renames the project from the root context menu and persists it', async () => {
-    const pinia = createPinia()
-    setActivePinia(pinia)
-    setLocale('en')
-
-    const save = vi.fn<(project: unknown) => Promise<void>>(async () => undefined)
-    setWorkspaceProjectSessionForTesting({ save } as unknown as ProjectRepository)
-
-    const workspace = useWorkspaceStore()
-    workspace.project = { schemaVersion: 3, name: 'Example' }
-    const wrapper = mount(WorkspaceView, {
-      global: {
-        plugins: [pinia, i18n],
-        stubs: {
-          ContextMenu: { template: '<div><slot /></div>' },
-          ContextMenuTrigger: { props: ['asChild'], template: '<slot />' },
-          ContextMenuContent: { template: '<div><slot /></div>' },
-          ContextMenuItem: {
-            emits: ['select'],
-            template: '<button v-bind="$attrs" @click="$emit(\'select\')"><slot /></button>',
-          },
-          Dialog: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
-          DialogContent: { template: '<div><slot /></div>' },
-          DialogFooter: { template: '<div><slot /></div>' },
-          DialogHeader: { template: '<div><slot /></div>' },
-          DialogTitle: { template: '<h2><slot /></h2>' },
-        },
-      },
-    })
-
-    await wrapper.get('[data-testid="rename-project"]').trigger('click')
-    const input = wrapper.get<HTMLInputElement>('input[aria-label="Name"]')
-    expect(input.element.value).toBe('Example')
-
-    await input.setValue('Renamed Project')
-    await wrapper.get('[data-testid="confirm-project-rename"]').trigger('click')
-    await flushPromises()
-    await nextTick()
-
-    expect(workspace.project?.name).toBe('Renamed Project')
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ name: 'Renamed Project' }))
-    expect(wrapper.find('input[aria-label="Name"]').exists()).toBe(false)
-  })
 
   it('shows sprite tables, child sprites, and selected sprite metadata', () => {
     const pinia = createPinia()
@@ -126,6 +82,7 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('page-01')
     expect(wrapper.text()).not.toContain('page-00')
     expect(wrapper.text()).toContain('button_start')
+    expect(wrapper.find('[data-testid="project-root"]').exists()).toBe(false)
     const resourceItems = wrapper.findAll('aside button').map((button) => button.text())
     expect(resourceItems.some((item) => item.startsWith('UI Table'))).toBe(true)
     expect(resourceItems).not.toContain('button_start')

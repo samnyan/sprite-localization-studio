@@ -7,6 +7,12 @@ import { useTheme } from '@/app/composables/useTheme'
 import { setLocale, type SupportedLocale } from '@/app/i18n'
 import { Button } from '@/components/ui/button'
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
+import {
   Menubar,
   MenubarContent,
   MenubarItem,
@@ -18,6 +24,7 @@ import {
 
 const props = defineProps<{
   projectPath?: string
+  projectName?: string
   canUndo?: boolean
   canRedo?: boolean
   canCopyTextRegion?: boolean
@@ -34,6 +41,7 @@ const emit = defineEmits<{
   redo: []
   copyTextRegion: []
   pasteTextRegion: []
+  renameProject: []
 }>()
 const { locale, t } = useI18n()
 const { theme, toggleTheme } = useTheme()
@@ -101,9 +109,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
           >
         </MenubarContent>
       </MenubarMenu>
-      <span class="ml-2 truncate border-l pl-3 text-muted-foreground">{{
-        projectPath || t('app.name')
-      }}</span>
+      <ContextMenu>
+        <ContextMenuTrigger as-child>
+          <button
+            type="button"
+            class="ml-2 max-w-64 truncate rounded border-l py-1 pl-3 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+            :title="projectName || t('app.name')"
+            data-testid="project-name-menu"
+          >
+            {{ projectName || t('app.name') }}
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem
+            data-testid="rename-project"
+            :disabled="busy || !projectName"
+            @select="emit('renameProject')"
+          >
+            {{ t('project.rename') }}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </Menubar>
     <div class="ml-auto flex items-center gap-1">
       <label class="sr-only" for="app-language">{{ t('language.label') }}</label>
