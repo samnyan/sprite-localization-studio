@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useElementSize } from '@vueuse/core'
 
 import type { Size } from '@/domain/shared/geometry'
@@ -16,7 +16,8 @@ import {
 
 const props = withDefaults(
   defineProps<{
-    imageUrl: string
+    imageUrl?: string
+    ensureImage?: () => Promise<string | undefined>
     textureSize: Size
     sprite: Sprite
     translation?: SpriteTranslation
@@ -32,11 +33,14 @@ const props = withDefaults(
 )
 
 const canvas = ref<HTMLCanvasElement>()
+const resolvedImageUrl = ref<string>()
 const enlargedSurface = ref<HTMLDivElement>()
-const { width: enlargedSurfaceWidth, height: enlargedSurfaceHeight } = useElementSize(enlargedSurface)
+const { width: enlargedSurfaceWidth, height: enlargedSurfaceHeight } =
+  useElementSize(enlargedSurface)
 let renderId = 0
 let frame: number | undefined
 let disposed = false
+let imageObserver: IntersectionObserver | undefined
 
 const backgroundClass = computed(() => {
   if (props.previewBackground === 'black') return 'bg-black'
@@ -48,9 +52,7 @@ const displayRotation = computed(() => {
     (region) => ((region.rotation % 360) + 360) % 360,
   )
   if (!rotations?.length || !rotations.every((rotation) => rotation === rotations[0])) return 0
-  return rotations[0] === 90 || rotations[0] === 180 || rotations[0] === 270
-    ? rotations[0]
-    : 0
+  return rotations[0] === 90 || rotations[0] === 180 || rotations[0] === 270 ? rotations[0] : 0
 })
 const displayedSize = computed(() => {
   const logicalSize = getLogicalSpriteSize(props.sprite)
@@ -92,9 +94,17 @@ function scheduleRender(): void {
   })
 }
 
+async function requestImage(): Promise<void> {
+  if (props.imageUrl || resolvedImageUrl.value || !props.ensureImage) return
+  const url = await props.ensureImage()
+  if (!disposed) resolvedImageUrl.value = url
+}
+
 async function render(currentRenderId: number): Promise<void> {
   try {
-    const image = await loadImage(props.imageUrl)
+    const imageUrl = props.imageUrl ?? resolvedImageUrl.value
+    if (!imageUrl) return
+    const image = await loadImage(imageUrl)
     if (currentRenderId !== renderId || !canvas.value) return
     if (
       image.naturalWidth !== props.textureSize.width ||
@@ -201,7 +211,7 @@ async function render(currentRenderId: number): Promise<void> {
 watch(
   () =>
     [
-      props.imageUrl,
+      props.imageUrl ?? resolvedImageUrl.value,
       props.textureSize,
       props.sprite,
       props.translation,
@@ -213,8 +223,25 @@ watch(
   { immediate: true, deep: true },
 )
 
+onMounted(() => {
+  if (!props.ensureImage || props.imageUrl) return
+  if (typeof IntersectionObserver === 'undefined') {
+    void requestImage().catch(() => undefined)
+    return
+  }
+
+  imageObserver = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return
+    imageObserver?.disconnect()
+    imageObserver = undefined
+    void requestImage().catch(() => undefined)
+  })
+  if (enlargedSurface.value) imageObserver.observe(enlargedSurface.value)
+})
+
 onBeforeUnmount(() => {
   disposed = true
+  imageObserver?.disconnect()
   if (frame !== undefined) window.cancelAnimationFrame(frame)
 })
 </script>
@@ -239,6 +266,7 @@ onBeforeUnmount(() => {
   </div>
   <div
     v-else
+    ref="enlargedSurface"
     class="flex items-center justify-center overflow-hidden rounded border"
     :class="[backgroundClass, 'inline-flex max-w-full']"
   >

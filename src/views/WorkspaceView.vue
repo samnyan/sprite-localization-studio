@@ -57,6 +57,7 @@ const saved = ref(false)
 const projectRenameOpen = ref(false)
 const projectRenameDraft = ref('')
 const expandedTexturePaths = ref(new Set<string>())
+const selectedTreeSpriteId = ref<string>()
 
 const errorText = computed(() =>
   workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
@@ -68,6 +69,17 @@ const selectedImageUrl = computed(() => {
     ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
     : undefined
 })
+watch(
+  [() => workspace.selectedSpriteTableId, () => workspace.selectedTexture?.id],
+  () => {
+    const spriteTable = workspace.selectedSpriteTable
+    const texture = workspace.selectedTexture
+    if (spriteTable && texture) {
+      void workspace.ensureTextureImageUrl(spriteTable.id, texture.id).catch(() => undefined)
+    }
+  },
+  { immediate: true },
+)
 const textureTrees = computed(
   () => new Map(workspace.spriteTables.map((table) => [table.id, createTextureTree(table)])),
 )
@@ -154,13 +166,28 @@ function toggleTexturePath(path: string): void {
 }
 
 function selectTextureDirectory(node: TextureTreeNode): void {
+  selectedTreeSpriteId.value = undefined
   workspace.selectSpriteTable(node.spriteTableId)
   workspace.selectTextureDirectory(node.path)
 }
 
 function selectTextureSprite(node: TextureTreeNode): void {
-  if (node.spriteId) workspace.openSprite(node.spriteTableId, node.spriteId)
-  else selectTextureDirectory(node)
+  if (!node.spriteId) {
+    selectTextureDirectory(node)
+    return
+  }
+  selectedTreeSpriteId.value = node.spriteId
+  workspace.openSprite(node.spriteTableId, node.spriteId)
+}
+
+function selectSpriteTable(spriteTableId: string): void {
+  selectedTreeSpriteId.value = undefined
+  workspace.selectSpriteTable(spriteTableId)
+}
+
+function selectProject(): void {
+  selectedTreeSpriteId.value = undefined
+  workspace.selectProject()
 }
 
 watch(
@@ -410,7 +437,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                   class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-accent"
                   :class="{ 'bg-accent': !workspace.selectedSpriteTableId }"
                   data-testid="project-root"
-                  @click="workspace.selectProject"
+                  @click="selectProject"
                 >
                   <Folder class="size-3.5 shrink-0" aria-hidden="true" /><span
                     class="truncate font-medium"
@@ -434,7 +461,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                     !workspace.selectedSpriteId &&
                     !workspace.selectedTextureDirectory,
                 }"
-                @click="workspace.selectSpriteTable(spriteTable.id)"
+                @click="selectSpriteTable(spriteTable.id)"
               >
                 <Images class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
                   spriteTable.name
@@ -450,7 +477,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                 :depth="3"
                 :expanded-paths="expandedTexturePaths"
                 :selected-directory="workspace.selectedTextureDirectory"
-                :selected-sprite-id="workspace.selectedSpriteId"
+                :selected-sprite-id="selectedTreeSpriteId"
                 @toggle="toggleTexturePath"
                 @select-directory="selectTextureDirectory"
                 @select-sprite="selectTextureSprite"
@@ -498,6 +525,10 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
           v-else-if="workspace.selectedSpriteTable && workspace.spriteManagementView === 'grid'"
           :sprite-table="workspace.selectedSpriteTable"
           :texture-urls="workspace.textureImageUrls[workspace.selectedSpriteTable.id] ?? {}"
+          :load-texture="
+            (textureId) =>
+              workspace.ensureTextureImageUrl(workspace.selectedSpriteTable!.id, textureId)
+          "
           :visible-sprite-ids="workspace.selectedTextureIds"
           :selected-sprite-id="workspace.selectedSpriteId"
           :preview-background="workspace.previewBackground"

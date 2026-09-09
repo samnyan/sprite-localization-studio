@@ -16,6 +16,7 @@ const props = withDefaults(
   defineProps<{
     spriteTable: SpriteTable
     textureUrls: Record<string, string>
+    loadTexture?: (textureId: string) => Promise<string | undefined>
     selectedSpriteId?: string
     previewBackground?: PreviewBackground
     visibleSpriteIds?: Set<string>
@@ -93,10 +94,11 @@ function setThumbnailCanvas(spriteId: string, element: unknown): void {
 
 async function drawThumbnail(sprite: Sprite): Promise<void> {
   const canvas = thumbnailCanvases.get(sprite.id)
-  const url = props.textureUrls[sprite.textureId]
-  if (!canvas || !url) return
+  if (!canvas) return
 
   try {
+    const url = props.textureUrls[sprite.textureId] ?? (await props.loadTexture?.(sprite.textureId))
+    if (!url) return
     const image = await imageFor(url)
     if (thumbnailCanvases.get(sprite.id) !== canvas) return
     const size = thumbnailSize.value

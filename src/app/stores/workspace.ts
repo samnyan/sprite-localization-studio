@@ -108,6 +108,20 @@ let activeRepository: ProjectRepository | undefined
 let activeStorage: ProjectStorage | undefined
 let projectActivation = 0
 
+function imageMimeType(path: string): string {
+  const extension = path.split('.').pop()?.toLocaleLowerCase()
+  return (
+    {
+      avif: 'image/avif',
+      gif: 'image/gif',
+      jpeg: 'image/jpeg',
+      jpg: 'image/jpeg',
+      png: 'image/png',
+      webp: 'image/webp',
+    }[extension ?? ''] ?? 'application/octet-stream'
+  )
+}
+
 export function setWorkspaceProjectSessionForTesting(
   repository?: ProjectRepository,
   storage?: ProjectStorage,
@@ -227,6 +241,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let activeResourceOperation: ResourceOperation | undefined
   let pendingLooseSpriteImport: PendingLooseSpriteImport | undefined
   let pendingTextureScan = false
+  const imageLoads = new Map<string, Promise<string | undefined>>()
+  const imageUrlsByPath = new Map<string, string>()
 
   const hasProject = computed(() => project.value !== undefined)
   const isBusy = computed(
@@ -296,8 +312,15 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   )
 
   function revokeTextureImageUrls(urls: TextureImageUrls): void {
+    const revoked = new Set<string>()
     for (const textureUrls of Object.values(urls)) {
-      for (const url of Object.values(textureUrls)) URL.revokeObjectURL(url)
+      for (const url of Object.values(textureUrls)) {
+        URL.revokeObjectURL(url)
+        revoked.add(url)
+      }
+    }
+    for (const [path, url] of imageUrlsByPath) {
+      if (revoked.has(url)) imageUrlsByPath.delete(path)
     }
   }
 
@@ -305,44 +328,65 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     for (const url of Object.values(urls)) URL.revokeObjectURL(url)
   }
 
-  async function loadTextureImages(
-    storage: ProjectStorage,
-    loadedSpriteTables: SpriteTable[],
-    onProgress?: (completed: number, total: number) => void,
-  ): Promise<TextureImageUrls> {
-    const batchSize = 16
-    const urls: TextureImageUrls = {}
-    const textures = loadedSpriteTables.flatMap((spriteTable) =>
-      spriteTable.textures.map((texture) => ({ spriteTableId: spriteTable.id, texture })),
-    )
-    const total = textures.length
-    let completed = 0
-    for (const spriteTable of loadedSpriteTables) urls[spriteTable.id] = {}
-    onProgress?.(0, total)
+  function revokeCachedImageUrls(): void {
+    for (const url of imageUrlsByPath.values()) URL.revokeObjectURL(url)
+    imageUrlsByPath.clear()
+  }
 
-    try {
-      for (let start = 0; start < textures.length; start += batchSize) {
-        const batch = textures.slice(start, start + batchSize)
-        const results = await Promise.allSettled(
-          batch.map(async ({ spriteTableId, texture }) => {
-            const data = await storage.readBinary(`textures/${texture.imagePath}`)
-            urls[spriteTableId]![texture.id] = URL.createObjectURL(
-              new Blob([data], { type: 'image/png' }),
-            )
-            completed += 1
-            onProgress?.(completed, total)
-          }),
-        )
-        const failed = results.find(
-          (result): result is PromiseRejectedResult => result.status === 'rejected',
-        )
-        if (failed) throw failed.reason
+  async function loadImageUrl(path: string): Promise<string | undefined> {
+    const existing = imageUrlsByPath.get(path)
+    if (existing) return existing
+    const storage = activeStorage
+    if (!storage) return undefined
+
+    const pending = imageLoads.get(path)
+    if (pending) return pending
+
+    const session = documentSession
+    const loading = (async () => {
+      const data = await storage.readBinary(path)
+      const url = URL.createObjectURL(new Blob([data], { type: imageMimeType(path) }))
+      if (session !== documentSession || activeStorage !== storage) {
+        URL.revokeObjectURL(url)
+        return undefined
       }
-      return urls
-    } catch (caughtError) {
-      revokeTextureImageUrls(urls)
-      throw caughtError
+      imageUrlsByPath.set(path, url)
+      return url
+    })()
+    imageLoads.set(path, loading)
+    loading.then(
+      () => {
+        if (imageLoads.get(path) === loading) imageLoads.delete(path)
+      },
+      () => {
+        if (imageLoads.get(path) === loading) imageLoads.delete(path)
+      },
+    )
+    return loading
+  }
+
+  async function ensureTextureImageUrl(
+    spriteTableId: string,
+    textureId: string,
+  ): Promise<string | undefined> {
+    const existing = textureImageUrls.value[spriteTableId]?.[textureId]
+    if (existing) return existing
+
+    const spriteTable = spriteTables.value.find((item) => item.id === spriteTableId)
+    const texture = spriteTable?.textures.find((item) => item.id === textureId)
+    if (!texture) return undefined
+
+    const session = documentSession
+    const url = await loadImageUrl(`textures/${texture.imagePath}`)
+    if (!url || session !== documentSession) return undefined
+    textureImageUrls.value = {
+      ...textureImageUrls.value,
+      [spriteTableId]: {
+        ...textureImageUrls.value[spriteTableId],
+        [textureId]: url,
+      },
     }
+    return url
   }
 
   function clearAutosave(): void {
@@ -584,26 +628,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       const loadedSpriteTables = await new SpriteTableRepository(operation.storage).loadMany(
         updatedProject.spriteTableManifestPaths ?? [],
       )
-      const existingTableIds = new Set(spriteTables.value.map((table) => table.id))
-      const newSpriteTables = loadedSpriteTables.filter((table) => !existingTableIds.has(table.id))
-      const newTextureCount = newSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
       const scanTextureCount = results.reduce((sum, result) => sum + result.imagePaths.length, 0)
-      const reloadTotal = scanTextureCount + newTextureCount
-      importProgress.value = { completed: scanTextureCount, total: reloadTotal }
-      const loadedImageUrls = await loadTextureImages(
-        operation.storage,
-        newSpriteTables,
-        (completed) => {
-          importProgress.value = { completed: scanTextureCount + completed, total: reloadTotal }
-        },
-      )
+      importProgress.value = { completed: scanTextureCount, total: scanTextureCount }
       if (!isCurrentResourceSession(operation)) {
-        revokeTextureImageUrls(loadedImageUrls)
         return false
       }
       project.value = updatedProject
       spriteTables.value = loadedSpriteTables
-      textureImageUrls.value = { ...textureImageUrls.value, ...loadedImageUrls }
       selectedSpriteTableId.value = loadedSpriteTables[loadedSpriteTables.length - 1]?.id
       selectedSpriteId.value = undefined
       selectedTextureDirectory.value = undefined
@@ -851,6 +882,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     loadedProject: ProjectManifest,
     activation: number,
   ): Promise<boolean> {
+    documentSession += 1
+    imageLoads.clear()
     openProgress.value = { completed: 0, total: 1 }
     const loadedSpriteTables = await new SpriteTableRepository(storage).loadMany(
       loadedProject.spriteTableManifestPaths ?? [],
@@ -860,51 +893,40 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       ...(loadedProject.backgroundTemplates ?? []),
       ...(loadedProject.spriteBackgrounds ?? []),
     ]
-    const textureCount = loadedSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
-    const total = 1 + textureCount + backgrounds.length + 1
+    const total = 1 + backgrounds.length + 1
     openProgress.value = { completed: 1, total }
-    const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables, (completed) => {
+    const loadedBackgrounds = await loadBackgroundImages(storage, backgrounds, (completed) => {
       openProgress.value = { completed: 1 + completed, total }
     })
     if (activation !== projectActivation) {
-      revokeTextureImageUrls(loadedImageUrls)
-      return false
-    }
-    const loadedBackgrounds = await loadBackgroundImages(storage, backgrounds, (completed) => {
-      openProgress.value = { completed: 1 + textureCount + completed, total }
-    })
-    if (activation !== projectActivation) {
-      revokeTextureImageUrls(loadedImageUrls)
       revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     openProgress.value = { completed: total - 1, total }
     const loadedFonts = await scanProjectFonts(storage)
     if (activation !== projectActivation) {
-      revokeTextureImageUrls(loadedImageUrls)
       revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     openProgress.value = { completed: total, total }
     const fontRegistration = await projectFontRegistry.register(storage, loadedFonts.fonts)
     if (activation !== projectActivation) {
-      revokeTextureImageUrls(loadedImageUrls)
       revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
     const firstSpriteTable = loadedSpriteTables[0]
 
     revokeTextureImageUrls(textureImageUrls.value)
+    revokeCachedImageUrls()
     revokeBackgroundImageUrls(backgroundImageUrls.value)
     canvasKitTypefaceCache.dispose()
-    documentSession += 1
     lastBuildReport.value = undefined
     activeRepository = repository
     activeStorage = storage
     project.value = loadedProject
     resetDocumentHistory()
     spriteTables.value = loadedSpriteTables
-    textureImageUrls.value = loadedImageUrls
+    textureImageUrls.value = {}
     backgroundImageUrls.value = loadedBackgrounds.urls
     projectFonts.value = loadedFonts.fonts.filter((font) =>
       fontRegistration.registeredIds.includes(font.id),
@@ -1710,9 +1732,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const spriteTable = spriteTables.value.find((item) => item.id === spriteTableId)
     const sprite = spriteTable?.sprites.find((item) => item.id === spriteId)
     if (!spriteTable || !sprite) return
+    const changedSpriteTable = selectedSpriteTableId.value !== spriteTable.id
     selectedSpriteTableId.value = spriteTable.id
     selectedSpriteId.value = sprite.id
-    selectedTextureDirectory.value = undefined
+    if (changedSpriteTable) selectedTextureDirectory.value = undefined
     selectedTextRegionId.value = undefined
   }
 
@@ -1806,6 +1829,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     lastSavedAt,
     openLocalProject,
     createLocalProject,
+    loadImageUrl,
+    ensureTextureImageUrl,
     saveProject,
     prepareLooseSpriteImport,
     prepareScanUnindexedTextures,

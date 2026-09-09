@@ -92,7 +92,7 @@ const translationRows = computed(() => {
       const imageUrl = texture
         ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
         : undefined
-      return translation && texture && imageUrl
+      return translation && texture
         ? [
             {
               sprite,
@@ -817,6 +817,9 @@ onUnmounted(() => {
               >
                 <TranslationSpritePreview
                   :image-url="row.imageUrl"
+                  :ensure-image="
+                    () => workspace.ensureTextureImageUrl(row.spriteTable.id, row.texture.id)
+                  "
                   :texture-size="row.texture.size"
                   :sprite="row.sprite"
                   :translation="row.translation"
@@ -909,6 +912,9 @@ onUnmounted(() => {
               >
                 <TranslationSpritePreview
                   :image-url="row.imageUrl"
+                  :ensure-image="
+                    () => workspace.ensureTextureImageUrl(row.spriteTable.id, row.texture.id)
+                  "
                   :texture-size="row.texture.size"
                   :sprite="row.sprite"
                   :translation="row.translation"
@@ -1036,7 +1042,12 @@ onUnmounted(() => {
       <template #image="{ index }">
         <TranslationSpritePreview
           v-if="previewRow && previewing"
+          :key="spriteKey(previewRow.spriteTable.id, previewRow.sprite.id)"
           :image-url="previewRow.imageUrl"
+          :ensure-image="
+            () =>
+              workspace.ensureTextureImageUrl(previewRow!.spriteTable.id, previewRow!.texture.id)
+          "
           :texture-size="previewRow.texture.size"
           :sprite="previewRow.sprite"
           :translation="previewRow.translation"
