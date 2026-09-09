@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { useElementSize, useScroll } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { LoaderCircle } from '@lucide/vue'
 
 import { Slider } from '@/components/ui/slider'
 import type { PreviewBackground } from '@/app/stores/workspace'
@@ -44,6 +45,7 @@ const viewport = ref<HTMLElement>()
 const previewSize = ref([112])
 const thumbnailCanvases = new Map<string, HTMLCanvasElement>()
 const imagePromises = new Map<string, Promise<HTMLImageElement>>()
+const thumbnailStates = ref<Record<string, 'loading' | 'loaded' | 'error'>>({})
 const { width, height } = useElementSize(viewport)
 const { y } = useScroll(viewport)
 
@@ -111,28 +113,43 @@ function setThumbnailCanvas(spriteId: string, element: unknown): void {
   else thumbnailCanvases.delete(spriteId)
 }
 
+function setThumbnailState(spriteId: string, state: 'loading' | 'loaded' | 'error'): void {
+  thumbnailStates.value = { ...thumbnailStates.value, [spriteId]: state }
+}
+
 async function drawThumbnail(sprite: Sprite): Promise<void> {
-  const canvas = thumbnailCanvases.get(sprite.id)
-  if (!canvas) return
+  setThumbnailState(sprite.id, 'loading')
 
   try {
     const url = props.textureUrls[sprite.textureId] ?? (await props.loadTexture?.(sprite.textureId))
-    if (!url) return
+    if (!url) {
+      setThumbnailState(sprite.id, 'error')
+      return
+    }
     const image = await imageFor(url)
-    if (thumbnailCanvases.get(sprite.id) !== canvas) return
+    setThumbnailState(sprite.id, 'loaded')
+    await nextTick()
+    const canvas = thumbnailCanvases.get(sprite.id)
+    if (!canvas) return
     const size = thumbnailSize.value
     const ratio = window.devicePixelRatio || 1
     canvas.width = Math.max(1, Math.round(size * ratio))
     canvas.height = Math.max(1, Math.round(size * ratio))
     const context = canvas.getContext('2d')
-    if (!context) return
+    if (!context) {
+      setThumbnailState(sprite.id, 'error')
+      return
+    }
 
     context.setTransform(ratio, 0, 0, ratio, 0, 0)
     context.clearRect(0, 0, size, size)
     context.imageSmoothingEnabled = true
     context.imageSmoothingQuality = 'high'
     const logicalSize = getLogicalSpriteSize(sprite)
-    if (logicalSize.width <= 0 || logicalSize.height <= 0) return
+    if (logicalSize.width <= 0 || logicalSize.height <= 0) {
+      setThumbnailState(sprite.id, 'error')
+      return
+    }
 
     const scale = Math.min((size - 12) / logicalSize.width, (size - 12) / logicalSize.height)
     context.save()
@@ -157,7 +174,7 @@ async function drawThumbnail(sprite: Sprite): Promise<void> {
     )
     context.restore()
   } catch {
-    return
+    setThumbnailState(sprite.id, 'error')
   }
 }
 
@@ -245,7 +262,14 @@ watch(
                 :class="backgroundClass"
                 data-testid="sprite-grid-preview-background"
               >
+                <LoaderCircle
+                  v-if="thumbnailStates[sprite.id] === 'loading'"
+                  class="size-5 animate-spin text-muted-foreground"
+                  data-testid="sprite-grid-thumbnail-loading"
+                  aria-hidden="true"
+                />
                 <canvas
+                  v-else-if="thumbnailStates[sprite.id] === 'loaded'"
                   :ref="(element) => setThumbnailCanvas(sprite.id, element)"
                   class="block size-full [image-rendering:auto]"
                 ></canvas>

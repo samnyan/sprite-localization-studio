@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { parseTextureMetadata } from '@/infrastructure/image/textureParser'
+import {
+  createTextureImageBitmap,
+  parseTextureMetadata,
+} from '@/infrastructure/image/textureParser'
 
 function ddsHeader(options: {
   width: number
@@ -8,8 +11,11 @@ function ddsHeader(options: {
   fourCC: string
   dxgiFormat?: number
   mipCount?: number
+  payloadSize?: number
 }): ArrayBuffer {
-  const data = new ArrayBuffer(options.dxgiFormat === undefined ? 136 : 156)
+  const data = new ArrayBuffer(
+    (options.dxgiFormat === undefined ? 128 : 148) + (options.payloadSize ?? 8),
+  )
   const bytes = new Uint8Array(data)
   const view = new DataView(data)
   view.setUint32(0, 0x20534444, true)
@@ -27,6 +33,10 @@ function ddsHeader(options: {
 }
 
 describe('textureParser', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('reads legacy DDS dimensions and compression metadata', () => {
     const metadata = parseTextureMetadata(
       'textures/ui/atlas.dds',
@@ -77,5 +87,32 @@ describe('textureParser', () => {
       size: { width: 32, height: 48 },
       format: { container: 'png' },
     })
+  })
+
+  it('decodes DXT5 in a browser without a Node Buffer global', async () => {
+    const close = vi.fn<() => void>()
+    const createImageBitmap = vi.fn<
+      () => Promise<{ width: number; height: number; close: () => void }>
+    >(async () => ({ width: 4, height: 4, close }))
+    vi.stubGlobal('Buffer', undefined)
+    vi.stubGlobal(
+      'ImageData',
+      class ImageDataStub {
+        constructor(
+          readonly data: Uint8ClampedArray,
+          readonly width: number,
+          readonly height: number,
+        ) {}
+      },
+    )
+    vi.stubGlobal('createImageBitmap', createImageBitmap)
+
+    await expect(
+      createTextureImageBitmap(
+        'textures/ui/atlas.dds',
+        ddsHeader({ width: 4, height: 4, fourCC: 'DXT5', payloadSize: 16 }),
+      ),
+    ).resolves.toMatchObject({ width: 4, height: 4 })
+    expect(createImageBitmap).toHaveBeenCalledTimes(1)
   })
 })

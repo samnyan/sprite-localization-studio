@@ -37,7 +37,7 @@ describe('SpriteTableGrid', () => {
     const cells = wrapper.findAll('[data-testid="sprite-grid-item"]')
     expect(cells.length).toBeGreaterThan(0)
     expect(cells.length).toBeLessThan(sprites.length)
-    expect(cells[0]!.find('canvas').classes()).toContain('[image-rendering:auto]')
+    expect(cells[0]!.find('canvas').exists()).toBe(false)
     expect(cells[0]!.get('[data-testid="sprite-grid-preview-background"]').classes()).toContain(
       'bg-black',
     )
@@ -108,6 +108,7 @@ describe('SpriteTableGrid', () => {
 
     await flushPromises()
     const initialDrawCount = context.drawImage.mock.calls.length
+    expect(wrapper.find('[data-testid="sprite-grid-item"] canvas').exists()).toBe(true)
     const viewport = wrapper.get('[data-testid="sprite-grid-viewport"]')
     Object.defineProperty(viewport.element, 'scrollTop', { value: 1000, writable: true })
     await viewport.trigger('scroll')

@@ -66,6 +66,44 @@ function parserBuffer(data: ArrayBuffer): Parameters<typeof parseDDSHeader>[0] {
   return new Uint8Array(data) as unknown as Parameters<typeof parseDDSHeader>[0]
 }
 
+interface DecoderBuffer extends Uint8Array {
+  copy(
+    target: Uint8Array,
+    targetStart: number,
+    sourceStart?: number,
+    sourceEnd?: number,
+  ): void
+}
+
+interface DecoderBufferGlobal {
+  alloc(size: number): DecoderBuffer
+}
+
+function decodeDdsImage(
+  data: Parameters<typeof decodeImage>[0],
+  format: Parameters<typeof decodeImage>[1],
+  layer: Parameters<typeof decodeImage>[2],
+): ReturnType<typeof decodeImage> {
+  const scope = globalThis as unknown as { Buffer?: DecoderBufferGlobal }
+  if (scope.Buffer) return decodeImage(data, format, layer)
+
+  scope.Buffer = {
+    alloc(size) {
+      const buffer = new Uint8Array(size) as DecoderBuffer
+      buffer.copy = (target, targetStart, sourceStart = 0, sourceEnd = buffer.length) => {
+        target.set(buffer.subarray(sourceStart, sourceEnd), targetStart)
+      }
+      return buffer
+    },
+  }
+
+  try {
+    return decodeImage(data, format, layer)
+  } finally {
+    delete scope.Buffer
+  }
+}
+
 function parseDdsMetadata(data: ArrayBuffer): ParsedTextureMetadata {
   const bytes = new Uint8Array(data)
   if (bytes.byteLength < DDS_DX10_HEADER_OFFSET) throw new Error('Invalid DDS file.')
@@ -154,7 +192,7 @@ export async function createTextureImageBitmap(
   const info = parseDDSHeader(parserBuffer(data))
   const layer = info?.layers[0]
   if (!info || !layer) throw new Error('DDS mip level 0 is unavailable.')
-  const rgba = decodeImage(parserBuffer(data), info.format, layer)
+  const rgba = decodeDdsImage(parserBuffer(data), info.format, layer)
   const pixels = new Uint8ClampedArray(rgba.byteLength)
   pixels.set(rgba)
   return createImageBitmap(
