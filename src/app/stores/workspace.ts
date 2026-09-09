@@ -20,7 +20,11 @@ import {
   createSpriteBackgroundPath,
 } from '@/application/assets/backgroundPath'
 import {
+  createLocalizedTextureBuildPlan,
   runLocalizedTextureBuild,
+  textureBuildCacheKey,
+  type LocalizedTextureExportType,
+  type LocalizedTextureOverwriteType,
   type LocalizedTextureBuildReport,
   type LocalizedTextureBuildProgress,
 } from '@/application/build/LocalizedTextureBuild'
@@ -88,6 +92,8 @@ interface BackgroundLoadResult {
   urls: BackgroundImageUrls
   diagnostics: BackgroundDiagnostic[]
 }
+
+type SpriteIdentity = readonly [spriteTableId: string, spriteId: string]
 
 export interface LooseSpriteImportPreview {
   mode: 'import' | 'scan'
@@ -804,7 +810,67 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     }
   }
 
-  async function buildTextures(): Promise<boolean> {
+  async function existingTextureBuildKeys(
+    projectSnapshot: ProjectManifest,
+    spriteTablesSnapshot: SpriteTable[],
+  ): Promise<Set<string>> {
+    const existing = new Set<string>()
+    if (!activeStorage) return existing
+    const plan = createLocalizedTextureBuildPlan(projectSnapshot, spriteTablesSnapshot, {
+      exportType: 'all',
+      overwriteType: 'all',
+    })
+    for (const task of plan.tasks) {
+      if (task.cacheKey && (await activeStorage.exists(task.outputPath))) {
+        existing.add(task.cacheKey)
+      }
+    }
+    return existing
+  }
+
+  async function getTextureBuildSummary(): Promise<{
+    all: { total: number; changed: number }
+    translated: { total: number; changed: number }
+    existingOutputKeys: string[]
+  }> {
+    if (!project.value) {
+      return {
+        all: { total: 0, changed: 0 },
+        translated: { total: 0, changed: 0 },
+        existingOutputKeys: [],
+      }
+    }
+    const all = createLocalizedTextureBuildPlan(project.value, spriteTables.value, {
+      exportType: 'all',
+      overwriteType: 'all',
+    })
+    const existingOutputKeys = await existingTextureBuildKeys(project.value, spriteTables.value)
+    const changedAll = createLocalizedTextureBuildPlan(project.value, spriteTables.value, {
+      exportType: 'all',
+      overwriteType: 'changed',
+      existingOutputKeys,
+    })
+    const translated = createLocalizedTextureBuildPlan(project.value, spriteTables.value, {
+      exportType: 'translated',
+      overwriteType: 'all',
+    })
+    const changedTranslated = createLocalizedTextureBuildPlan(project.value, spriteTables.value, {
+      exportType: 'translated',
+      overwriteType: 'changed',
+      existingOutputKeys,
+    })
+    return {
+      all: { total: all.tasks.length, changed: changedAll.tasks.length },
+      translated: { total: translated.tasks.length, changed: changedTranslated.tasks.length },
+      existingOutputKeys: [...existingOutputKeys],
+    }
+  }
+
+  async function buildTextures(
+    exportType: LocalizedTextureExportType = 'all',
+    overwriteType: LocalizedTextureOverwriteType = 'all',
+    existingOutputKeys?: ReadonlySet<string>,
+  ): Promise<boolean> {
     if (!project.value || !activeStorage) return failProjectNotOpen()
     const session = documentSession
     lastBuildReport.value = undefined
@@ -815,6 +881,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const projectSnapshot = createBuildSnapshot(project.value)
     const spriteTablesSnapshot = createBuildSnapshot(spriteTables.value)
     const storage = activeStorage
+    const outputKeys =
+      overwriteType === 'changed'
+        ? (existingOutputKeys ??
+          (await existingTextureBuildKeys(projectSnapshot, spriteTablesSnapshot)))
+        : undefined
     status.value = 'building'
     error.value = undefined
 
@@ -826,6 +897,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         (progress) => {
           if (session === documentSession) buildProgress.value = progress
         },
+        { exportType, overwriteType, existingOutputKeys: outputKeys },
       )
       if (result.status === 'blocked') {
         if (session === documentSession) {
@@ -833,6 +905,30 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           error.value = { key: 'errors.build.blockedByTextDiagnostics' }
         }
         return false
+      }
+      const builtTextures = result.report.textures.filter((texture) => texture.cacheKey)
+      if (builtTextures.length && session === documentSession && project.value) {
+        const builtKeys = new Set(
+          builtTextures.flatMap((texture) => (texture.cacheKey ? [texture.cacheKey] : [])),
+        )
+        const translations = (project.value.translations ?? []).map((translation) => {
+          const textureId = spriteTables.value
+            .find((table) => table.id === translation.spriteTableId)
+            ?.sprites.find((sprite) => sprite.id === translation.spriteId)?.textureId
+          const key = textureId
+            ? textureBuildCacheKey(translation.spriteTableId, textureId)
+            : undefined
+          return key && builtKeys.has(key) ? { ...translation, edited: false } : translation
+        })
+        if (
+          dispatchProjectAction('textureBuild.cache', {
+            ...project.value,
+            translations,
+          }) &&
+          !(await saveProject())
+        ) {
+          return false
+        }
       }
       if (result.status === 'failed') {
         if (session === documentSession) {
@@ -1075,9 +1171,45 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return false
   }
 
-  function saveTranslations(type: string, translations: SpriteTranslation[]): boolean {
+  function markTranslationsEdited(
+    translations: SpriteTranslation[],
+    editedSprites: readonly SpriteIdentity[],
+  ): SpriteTranslation[] {
+    const editedTextureKeys = new Set(
+      editedSprites.flatMap(([spriteTableId, spriteId]) => {
+        const textureId = spriteTables.value
+          .find((table) => table.id === spriteTableId)
+          ?.sprites.find((sprite) => sprite.id === spriteId)?.textureId
+        return textureId ? [textureBuildCacheKey(spriteTableId, textureId)] : []
+      }),
+    )
+    if (!editedTextureKeys.size) return translations
+
+    return translations.map((translation) => {
+      const textureId = spriteTables.value
+        .find((table) => table.id === translation.spriteTableId)
+        ?.sprites.find((sprite) => sprite.id === translation.spriteId)?.textureId
+      return textureId &&
+        editedTextureKeys.has(textureBuildCacheKey(translation.spriteTableId, textureId))
+        ? { ...translation, edited: true }
+        : translation
+    })
+  }
+
+  function markAllTranslationsEdited(translations: SpriteTranslation[]): SpriteTranslation[] {
+    return translations.map((translation) => ({ ...translation, edited: true }))
+  }
+
+  function saveTranslations(
+    type: string,
+    translations: SpriteTranslation[],
+    editedSprites: readonly SpriteIdentity[] = [],
+  ): boolean {
     if (!project.value) return failProjectNotOpen()
-    return dispatchProjectAction(type, { ...project.value, translations })
+    return dispatchProjectAction(type, {
+      ...project.value,
+      translations: markTranslationsEdited(translations, editedSprites),
+    })
   }
 
   function translationIdentity(translation: SpriteTranslation): boolean {
@@ -1106,6 +1238,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             },
           ]
         : translations.filter((translation) => !translationIdentity(translation)),
+      [[selectedSpriteTable.value.id, selectedSprite.value.id]],
     )
   }
 
@@ -1178,7 +1311,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     if (!changed) return true
     selectedTextRegionId.value = undefined
-    return saveTranslations('spriteTranslation.batchEnable', updatedTranslations)
+    return saveTranslations(
+      'spriteTranslation.batchEnable',
+      updatedTranslations,
+      sprites.map((sprite) => [spriteTableId, sprite.id]),
+    )
   }
 
   function batchDisableSpriteTranslations(
@@ -1203,7 +1340,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
     if (updatedTranslations.length === translations.length) return true
     selectedTextRegionId.value = undefined
-    return saveTranslations('spriteTranslation.batchDisable', updatedTranslations)
+    return saveTranslations(
+      'spriteTranslation.batchDisable',
+      updatedTranslations,
+      [...selectedIds].map((spriteId) => [spriteTableId, spriteId]),
+    )
   }
 
   function setBatchSpriteTranslationsEnabled(
@@ -1233,6 +1374,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       (project.value?.translations ?? []).map((item) =>
         translationIdentity(item) ? { ...item, textRegions: [...item.textRegions, region] } : item,
       ),
+      [[translation.spriteTableId, translation.spriteId]],
     )
   }
 
@@ -1297,6 +1439,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       (project.value?.translations ?? []).map((item) =>
         translationIdentity(item) ? { ...item, textRegions: [...item.textRegions, region] } : item,
       ),
+      [[translation.spriteTableId, translation.spriteId]],
     )
     if (saved) selectedTextRegionId.value = region.id
     return saved
@@ -1364,6 +1507,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             }
           : translation,
       ),
+      [[selectedSpriteTable.value?.id ?? '', selectedSprite.value?.id ?? '']],
     )
   }
 
@@ -1396,6 +1540,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             }
           : item,
       ),
+      [[spriteTableId, spriteId]],
     )
   }
 
@@ -1469,7 +1614,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       !dispatchProjectAction('textStyleTemplate.save', {
         ...project.value,
         textStyleTemplates,
-        ...(updatedTranslations ? { translations: updatedTranslations } : {}),
+        ...(updatedTranslations
+          ? {
+              translations: id
+                ? markAllTranslationsEdited(updatedTranslations)
+                : updatedTranslations,
+            }
+          : {}),
       })
     ) {
       return undefined
@@ -1521,7 +1672,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       textStyleTemplates: templates
         .filter((item) => item.id !== id)
         .map((item) => (item.id === duplicate.id ? replacement : item)),
-      translations,
+      translations: markAllTranslationsEdited(translations),
     })
   }
 
@@ -1569,6 +1720,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
           ? { ...translation, backgroundId, backgroundType }
           : translation,
       ),
+      [[spriteTableId, spriteId]],
     )
   }
 
@@ -1731,7 +1883,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         background.id === id ? updated : background,
       )
       if (!backgroundTemplates) return false
-      if (!(await persistAssetProject(operation, { ...operation.project, backgroundTemplates }))) {
+      if (
+        !(await persistAssetProject(operation, {
+          ...operation.project,
+          backgroundTemplates,
+          translations: markAllTranslationsEdited(operation.project.translations ?? []),
+        }))
+      ) {
         await removeResourceFile(operation.storage, path)
         return false
       }
@@ -1791,7 +1949,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         !(await persistAssetProject(operation, {
           ...operation.project,
           backgroundTemplates,
-          ...(translations ? { translations } : {}),
+          ...(translations
+            ? { translations: fallback ? markAllTranslationsEdited(translations) : translations }
+            : {}),
         }))
       ) {
         return false
@@ -1851,6 +2011,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
             }
           : translation,
       ),
+      [[selectedSpriteTable.value?.id ?? '', selectedSprite.value?.id ?? '']],
     )
   }
 
@@ -1985,6 +2146,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     cancelLooseSpriteImport,
     importPreparedLooseSprites,
     buildTextures,
+    getTextureBuildSummary,
     saveProjectName,
     undo,
     redo,

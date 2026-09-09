@@ -100,6 +100,7 @@ export interface TextRegion {
 export interface SpriteTranslation {
   spriteTableId: string
   spriteId: string
+  edited?: boolean
   backgroundId?: string
   backgroundType?: 'original' | 'blank' | 'template' | 'sprite'
   textRegions: TextRegion[]

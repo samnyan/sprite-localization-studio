@@ -17,6 +17,10 @@ import { toast } from 'vue-sonner'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
+import type {
+  LocalizedTextureExportType,
+  LocalizedTextureOverwriteType,
+} from '@/application/build/LocalizedTextureBuild'
 import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import { createTextureTree, type TextureTreeNode } from '@/application/sprite-table/TextureTree'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
@@ -27,6 +31,7 @@ import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -58,6 +63,15 @@ const selectedGridSpriteIds = ref(new Set<string>())
 const lastGridSpriteId = ref<string>()
 const bulkTranslationConfirmOpen = ref(false)
 const bulkTranslationTarget = ref(false)
+const buildConfirmOpen = ref(false)
+const buildPreparing = ref(false)
+const buildExportType = ref<LocalizedTextureExportType>('all')
+const buildOverwriteType = ref<LocalizedTextureOverwriteType>('changed')
+const buildSummary = ref({
+  all: { total: 0, changed: 0 },
+  translated: { total: 0, changed: 0 },
+  existingOutputKeys: [] as string[],
+})
 
 const errorText = computed(() =>
   workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
@@ -335,8 +349,30 @@ async function saveProject(): Promise<void> {
   saved.value = await workspace.saveProject()
 }
 
-async function buildTextures(): Promise<void> {
-  if (await workspace.buildTextures()) {
+async function prepareBuildTextures(): Promise<void> {
+  if (!workspace.project || workspace.isBusy || buildPreparing.value) return
+  buildPreparing.value = true
+  try {
+    buildSummary.value = await workspace.getTextureBuildSummary()
+    buildExportType.value = 'all'
+    buildOverwriteType.value = 'changed'
+    buildConfirmOpen.value = true
+  } finally {
+    buildPreparing.value = false
+  }
+}
+
+async function confirmBuildTextures(): Promise<void> {
+  const exportType = buildExportType.value
+  const overwriteType = buildOverwriteType.value
+  buildConfirmOpen.value = false
+  if (
+    await workspace.buildTextures(
+      exportType,
+      overwriteType,
+      new Set(buildSummary.value.existingOutputKeys),
+    )
+  ) {
     toast.success(t('build.successToast'), { description: t('build.outputDirectory') })
   }
 }
@@ -504,11 +540,14 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         size="sm"
         class="ml-auto"
         data-testid="build-textures"
-        :disabled="workspace.isBusy || !workspace.project"
-        :aria-busy="workspace.status === 'building'"
-        @click="buildTextures"
+        :disabled="workspace.isBusy || buildPreparing || !workspace.project"
+        :aria-busy="workspace.status === 'building' || buildPreparing"
+        @click="prepareBuildTextures"
       >
-        <Spinner v-if="workspace.status === 'building'" data-icon="inline-start" />
+        <Spinner
+          v-if="workspace.status === 'building' || buildPreparing"
+          data-icon="inline-start"
+        />
         <FileOutput v-else data-icon="inline-start" aria-hidden="true" />
         {{ t('build.action') }}
       </Button>
@@ -970,6 +1009,81 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
             {{ t('common.cancel') }}
           </Button>
           <Button :disabled="workspace.isBusy" @click="confirmBatchTranslationToggle">
+            {{ t('common.ok') }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="buildConfirmOpen">
+      <DialogContent class="sm:max-w-md" :show-close-button="false">
+        <DialogHeader>
+          <DialogTitle>{{ t('build.confirmTitle') }}</DialogTitle>
+        </DialogHeader>
+        <DialogDescription class="text-sm text-muted-foreground">
+          {{ t('build.confirmMessage') }}
+        </DialogDescription>
+        <div class="space-y-2" role="radiogroup" :aria-label="t('build.exportType')">
+          <p class="text-xs font-semibold text-muted-foreground">{{ t('build.exportType') }}</p>
+          <label class="flex cursor-pointer items-start gap-2 rounded border p-3">
+            <input v-model="buildExportType" type="radio" value="all" class="mt-0.5" />
+            <span>
+              <span class="block text-sm font-medium">{{ t('build.allTextures') }}</span>
+              <span class="block text-xs text-muted-foreground">{{
+                t('build.allTexturesDescription', { count: buildSummary.all.total })
+              }}</span>
+            </span>
+          </label>
+          <label class="flex cursor-pointer items-start gap-2 rounded border p-3">
+            <input v-model="buildExportType" type="radio" value="translated" class="mt-0.5" />
+            <span>
+              <span class="block text-sm font-medium">{{ t('build.translatedTextures') }}</span>
+              <span class="block text-xs text-muted-foreground">{{
+                t('build.translatedTexturesDescription', { count: buildSummary.translated.total })
+              }}</span>
+            </span>
+          </label>
+        </div>
+        <div class="space-y-2" role="radiogroup" :aria-label="t('build.overwriteType')">
+          <p class="text-xs font-semibold text-muted-foreground">{{ t('build.overwriteType') }}</p>
+          <label class="flex cursor-pointer items-start gap-2 rounded border p-3">
+            <input v-model="buildOverwriteType" type="radio" value="changed" class="mt-0.5" />
+            <span>
+              <span class="block text-sm font-medium">{{ t('build.changedOnly') }}</span>
+              <span class="block text-xs text-muted-foreground">{{
+                t('build.changedOnlyDescription', {
+                  count:
+                    buildExportType === 'all'
+                      ? buildSummary.all.changed
+                      : buildSummary.translated.changed,
+                })
+              }}</span>
+            </span>
+          </label>
+          <label class="flex cursor-pointer items-start gap-2 rounded border p-3">
+            <input v-model="buildOverwriteType" type="radio" value="all" class="mt-0.5" />
+            <span>
+              <span class="block text-sm font-medium">{{ t('build.overwriteAll') }}</span>
+              <span class="block text-xs text-muted-foreground">{{
+                t('build.overwriteAllDescription', {
+                  count:
+                    buildExportType === 'all'
+                      ? buildSummary.all.total
+                      : buildSummary.translated.total,
+                })
+              }}</span>
+            </span>
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" @click="buildConfirmOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button
+            data-testid="confirm-build-textures"
+            :disabled="workspace.isBusy"
+            @click="confirmBuildTextures"
+          >
             {{ t('common.ok') }}
           </Button>
         </DialogFooter>

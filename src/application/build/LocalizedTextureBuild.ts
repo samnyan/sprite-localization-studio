@@ -4,6 +4,7 @@ import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/Te
 import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 
 export interface LocalizedTextureBuildTask {
+  cacheKey?: string
   spriteTable: SpriteTable
   texture: Texture
   translations: SpriteTranslation[]
@@ -18,11 +19,18 @@ export interface LocalizedTextureBuildPlan {
 export interface LocalizedTextureBuildOptions {
   /** Root directory for generated files, relative to project storage. */
   outputRoot?: string
+  exportType?: LocalizedTextureExportType
+  overwriteType?: LocalizedTextureOverwriteType
+  existingOutputKeys?: ReadonlySet<string>
 }
+
+export type LocalizedTextureExportType = 'all' | 'translated'
+export type LocalizedTextureOverwriteType = 'changed' | 'all'
 
 export interface BuiltTexture {
   outputPath: string
   modifiedSpriteCount: number
+  cacheKey?: string
 }
 
 export interface LocalizedTextureBuildFailure {
@@ -34,7 +42,10 @@ export interface LocalizedTextureBuildFailure {
 }
 
 export class LocalizedTextureBuildSpriteError extends Error {
-  constructor(message: string, readonly spriteId: string) {
+  constructor(
+    message: string,
+    readonly spriteId: string,
+  ) {
     super(message)
     this.name = 'LocalizedTextureBuildSpriteError'
   }
@@ -66,6 +77,10 @@ function outputLocale(project: ProjectManifest): string {
   return locale && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(locale) ? locale : 'default'
 }
 
+export function textureBuildCacheKey(spriteTableId: string, textureId: string): string {
+  return JSON.stringify([spriteTableId, textureId])
+}
+
 export function isSpriteTranslationModified(translation: SpriteTranslation): boolean {
   if (resolveBackgroundType(translation) !== 'original') {
     return true
@@ -82,24 +97,54 @@ export function createLocalizedTextureBuildPlan(
   const locale = outputLocale(project)
   const outputRoot = options.outputRoot?.trim() || 'output_textures'
   const translations = project.translations ?? []
+  const exportType = options.exportType ?? 'all'
+  const overwriteType = options.overwriteType ?? 'all'
+  const translationsByTexture = new Map<string, SpriteTranslation[]>()
+  const editedTextureKeys = new Set<string>()
+  const translatedTextureKeys = new Set<string>()
+  const spriteTablesById = new Map(spriteTables.map((spriteTable) => [spriteTable.id, spriteTable]))
+  for (const translation of translations) {
+    const spriteTable = spriteTablesById.get(translation.spriteTableId)
+    const textureId = spriteTable?.sprites.find(
+      (sprite) => sprite.id === translation.spriteId,
+    )?.textureId
+    if (!textureId) continue
+    const key = textureBuildCacheKey(translation.spriteTableId, textureId)
+    if (translation.edited) editedTextureKeys.add(key)
+    if (translation.textRegions.length > 0) translatedTextureKeys.add(key)
+    if (!isSpriteTranslationModified(translation)) continue
+    const entries = translationsByTexture.get(key) ?? []
+    entries.push(translation)
+    translationsByTexture.set(key, entries)
+  }
+  const tasks = spriteTables.flatMap((spriteTable) =>
+    spriteTable.textures.flatMap((texture) => {
+      const outputPath = `${outputRoot}/${locale}/${texture.imagePath}`
+      const cacheKey = textureBuildCacheKey(spriteTable.id, texture.id)
+      if (exportType === 'translated' && !translatedTextureKeys.has(cacheKey)) return []
+      if (
+        overwriteType === 'changed' &&
+        (options.existingOutputKeys?.has(cacheKey) ?? true) &&
+        !editedTextureKeys.has(cacheKey)
+      ) {
+        return []
+      }
+
+      return [
+        {
+          cacheKey,
+          spriteTable,
+          texture,
+          translations: translationsByTexture.get(cacheKey) ?? [],
+          outputPath,
+        },
+      ]
+    }),
+  )
 
   return {
     locale,
-    tasks: spriteTables.flatMap((spriteTable) =>
-      spriteTable.textures.map((texture) => ({
-        spriteTable,
-        texture,
-        translations: translations.filter(
-          (translation) =>
-            translation.spriteTableId === spriteTable.id &&
-            spriteTable.sprites.some(
-              (sprite) => sprite.id === translation.spriteId && sprite.textureId === texture.id,
-            ) &&
-            isSpriteTranslationModified(translation),
-        ),
-        outputPath: `${outputRoot}/${locale}/${texture.imagePath}`,
-      })),
-    ),
+    tasks,
   }
 }
 
@@ -115,9 +160,13 @@ export async function buildLocalizedTextures(
 
   for (const task of plan.tasks) {
     try {
-      textures.push(await builder.buildTexture(task))
+      textures.push({
+        ...(await builder.buildTexture(task)),
+        cacheKey: task.cacheKey,
+      })
     } catch (error) {
-      const spriteId = error instanceof LocalizedTextureBuildSpriteError ? error.spriteId : undefined
+      const spriteId =
+        error instanceof LocalizedTextureBuildSpriteError ? error.spriteId : undefined
       failures.push({
         spriteTableId: task.spriteTable.id,
         textureId: task.texture.id,

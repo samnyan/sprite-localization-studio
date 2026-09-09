@@ -81,6 +81,74 @@ describe('localized texture build plan', () => {
     ).toBe('default')
   })
 
+  it('only includes edited or unexported textures in incremental mode', () => {
+    const cacheKey = JSON.stringify(['ui', 'atlas'])
+    const clean = createLocalizedTextureBuildPlan(
+      { ...project([{ ...unchanged, edited: false }]) },
+      [spriteTable],
+      { overwriteType: 'changed', existingOutputKeys: new Set([cacheKey]) },
+    )
+    const edited = createLocalizedTextureBuildPlan(
+      { ...project([{ ...unchanged, edited: true }]) },
+      [spriteTable],
+      { overwriteType: 'changed', existingOutputKeys: new Set([cacheKey]) },
+    )
+    const unexported = createLocalizedTextureBuildPlan(project([]), [spriteTable], {
+      overwriteType: 'changed',
+      existingOutputKeys: new Set(),
+    })
+
+    expect(clean.tasks).toHaveLength(0)
+    expect(edited.tasks).toHaveLength(1)
+    expect(unexported.tasks).toHaveLength(1)
+  })
+
+  it('filters translated exports by texture and keeps atlas textures together', () => {
+    const tableWithUnusedTexture: SpriteTable = {
+      ...spriteTable,
+      textures: [
+        ...spriteTable.textures,
+        { id: 'unused', imagePath: 'unused.png', size: { width: 1, height: 1 } },
+      ],
+    }
+    const translated = createLocalizedTextureBuildPlan(
+      {
+        ...project([
+          {
+            ...unchanged,
+            textRegions: [
+              {
+                id: 'region',
+                rect: { x: 0, y: 0, width: 32, height: 32 },
+                rotation: 0,
+                translationKey: 'ui.button',
+              },
+            ],
+          },
+        ]),
+      },
+      [tableWithUnusedTexture],
+      { exportType: 'translated', overwriteType: 'all' },
+    )
+    const all = createLocalizedTextureBuildPlan(project([]), [tableWithUnusedTexture], {
+      exportType: 'all',
+      overwriteType: 'all',
+    })
+    const overwriteAll = createLocalizedTextureBuildPlan(
+      { ...project([{ ...unchanged, edited: false }]) },
+      [spriteTable],
+      {
+        exportType: 'all',
+        overwriteType: 'all',
+        existingOutputKeys: new Set([JSON.stringify(['ui', 'atlas'])]),
+      },
+    )
+
+    expect(translated.tasks.map((task) => task.texture.id)).toEqual(['atlas'])
+    expect(all.tasks).toHaveLength(2)
+    expect(overwriteAll.tasks).toHaveLength(1)
+  })
+
   it('preserves imported loose sprite directories in the build output', () => {
     const importedTable: SpriteTable = {
       ...spriteTable,
@@ -103,23 +171,25 @@ describe('localized texture build plan', () => {
     }
     const plan = createLocalizedTextureBuildPlan(project([]), [importedTable])
 
-    expect(plan.tasks[0]?.outputPath).toBe(
-      'output_textures/zh-CN/spr_ent_name/BTN_DELETE_A.png',
-    )
+    expect(plan.tasks[0]?.outputPath).toBe('output_textures/zh-CN/spr_ent_name/BTN_DELETE_A.png')
   })
 
   it('does not create a builder when translation diagnostics block the build', async () => {
     let builderCreated = false
     const result = await runLocalizedTextureBuild(
-      project([{
-        ...unchanged,
-        textRegions: [{
-          id: 'region',
-          rect: { x: 0, y: 0, width: 32, height: 32 },
-          rotation: 0,
-          translationKey: 'ui.button',
-        }],
-      }]),
+      project([
+        {
+          ...unchanged,
+          textRegions: [
+            {
+              id: 'region',
+              rect: { x: 0, y: 0, width: 32, height: 32 },
+              rotation: 0,
+              translationKey: 'ui.button',
+            },
+          ],
+        },
+      ]),
       [spriteTable],
       () => {
         builderCreated = true
@@ -127,20 +197,25 @@ describe('localized texture build plan', () => {
       },
     )
 
-    expect(result).toMatchObject({ status: 'blocked', diagnostics: [{ code: 'missingTranslation' }] })
+    expect(result).toMatchObject({
+      status: 'blocked',
+      diagnostics: [{ code: 'missingTranslation' }],
+    })
     expect(builderCreated).toBe(false)
   })
 
   it('creates a builder and reports a completed build after QA passes', async () => {
     const changed: SpriteTranslation = {
       ...unchanged,
-      textRegions: [{
-        id: 'region',
-        rect: { x: 0, y: 0, width: 32, height: 32 },
-        rotation: 0,
-        translationKey: 'ui.button',
-        translatedText: 'Start',
-      }],
+      textRegions: [
+        {
+          id: 'region',
+          rect: { x: 0, y: 0, width: 32, height: 32 },
+          rotation: 0,
+          translationKey: 'ui.button',
+          translatedText: 'Start',
+        },
+      ],
     }
     const builtPaths: string[] = []
     const now = vi.spyOn(performance, 'now').mockReturnValueOnce(100).mockReturnValueOnce(125.6)
@@ -176,15 +251,22 @@ describe('localized texture build plan', () => {
     }
     const builtPaths: string[] = []
 
-    const result = await runLocalizedTextureBuild(project([]), [spriteTableWithTwoTextures], () => ({
-      buildTexture: async (task) => {
-        if (task.texture.id === 'atlas') {
-          throw new LocalizedTextureBuildSpriteError('Background image could not be loaded.', 'button')
-        }
-        builtPaths.push(task.outputPath)
-        return { outputPath: task.outputPath, modifiedSpriteCount: 0 }
-      },
-    }))
+    const result = await runLocalizedTextureBuild(
+      project([]),
+      [spriteTableWithTwoTextures],
+      () => ({
+        buildTexture: async (task) => {
+          if (task.texture.id === 'atlas') {
+            throw new LocalizedTextureBuildSpriteError(
+              'Background image could not be loaded.',
+              'button',
+            )
+          }
+          builtPaths.push(task.outputPath)
+          return { outputPath: task.outputPath, modifiedSpriteCount: 0 }
+        },
+      }),
+    )
 
     expect(result).toMatchObject({
       status: 'failed',

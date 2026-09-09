@@ -302,6 +302,42 @@ describe('WorkspaceView', () => {
     )
   })
 
+  it('shows a loading state while preparing the texture build dialog', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    let resolveSummary!: (summary: {
+      all: { total: number; changed: number }
+      translated: { total: number; changed: number }
+      existingOutputKeys: string[]
+    }) => void
+    vi.spyOn(workspace, 'getTextureBuildSummary').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSummary = resolve
+      }),
+    )
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+    const button = wrapper.get('[data-testid="build-textures"]')
+
+    const click = button.trigger('click')
+    await nextTick()
+    expect(button.attributes('aria-busy')).toBe('true')
+    expect(button.attributes('disabled')).toBeDefined()
+    expect(button.find('[data-icon="inline-start"]').exists()).toBe(true)
+
+    resolveSummary({
+      all: { total: 0, changed: 0 },
+      translated: { total: 0, changed: 0 },
+      existingOutputKeys: [],
+    })
+    await click
+    await nextTick()
+    wrapper.unmount()
+  })
+
   it('notifies the output directory after a successful texture build', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
@@ -314,6 +350,15 @@ describe('WorkspaceView', () => {
 
     await wrapper.get('[data-testid="build-textures"]').trigger('click')
     await nextTick()
+    await nextTick()
+    const confirmButton = document.body.querySelector<HTMLButtonElement>(
+      '[data-testid="confirm-build-textures"]',
+    )
+    expect(confirmButton).not.toBeNull()
+    confirmButton?.click()
+    await nextTick()
+    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(toast.success).toHaveBeenCalledWith('Texture build complete', {
       description: 'Output written to output_textures.',
