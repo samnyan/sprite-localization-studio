@@ -42,10 +42,31 @@ describe('SpriteTableGrid', () => {
       'bg-black',
     )
 
+    await wrapper.setProps({
+      spriteTable: {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI',
+        textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 100, height: 100 } }],
+        sprites: [{ ...sprites[0]!, name: 'common/Texture/TestMode/0' }, ...sprites.slice(1)],
+      },
+    })
+    expect(
+      wrapper
+        .get('[data-testid="sprite-grid-item"] span[title="common/Texture/TestMode/0"]')
+        .text(),
+    ).toBe('0')
+
     await cells[0]!.trigger('click')
+    await cells[1]!.trigger('click', { ctrlKey: true })
+    await cells[2]!.trigger('click', { shiftKey: true })
     await cells[0]!.trigger('dblclick')
 
-    expect(wrapper.emitted('select')).toEqual([['sprite-0']])
+    expect(wrapper.emitted('select')).toEqual([
+      ['sprite-0', { ctrlKey: false, metaKey: false, shiftKey: false }],
+      ['sprite-1', { ctrlKey: true, metaKey: false, shiftKey: false }],
+      ['sprite-2', { ctrlKey: false, metaKey: false, shiftKey: true }],
+    ])
     expect(wrapper.emitted('open')).toEqual([['sprite-0']])
   })
 
@@ -93,5 +114,42 @@ describe('SpriteTableGrid', () => {
     await flushPromises()
 
     expect(context.drawImage.mock.calls.length).toBeGreaterThan(initialDrawCount)
+  })
+
+  it('emits selection actions without replacing the inspector selection', async () => {
+    setLocale('en')
+    const wrapper = mount(SpriteTableGrid, {
+      props: {
+        spriteTable: {
+          schemaVersion: 1,
+          id: 'ui',
+          name: 'UI',
+          textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 100, height: 100 } }],
+          sprites,
+        },
+        textureUrls: {},
+        selectedSpriteId: 'sprite-0',
+        selectedSpriteIds: new Set(['sprite-1']),
+      },
+      global: { plugins: [i18n], stubs: { Slider: true } },
+    })
+
+    await wrapper.get('[data-testid="sprite-grid-selection"]').trigger('change')
+    expect(wrapper.emitted('toggleSelection')).toEqual([['sprite-0']])
+    expect(wrapper.get('[data-testid="sprite-grid-item"]').attributes('aria-pressed')).toBe('true')
+
+    const batchButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Mark for translation'))
+    expect(batchButton).toBeDefined()
+    await batchButton!.trigger('click')
+    expect(wrapper.emitted('batchTranslate')).toEqual([[]])
+
+    const clearButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('Clear selection'))
+    expect(clearButton).toBeDefined()
+    await clearButton!.trigger('click')
+    expect(wrapper.emitted('clearSelection')).toEqual([[]])
   })
 })

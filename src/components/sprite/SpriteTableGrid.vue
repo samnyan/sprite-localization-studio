@@ -12,18 +12,32 @@ import {
   getStoredToLogicalTransform,
 } from '@/infrastructure/image/spriteGeometry'
 
+interface SpriteSelectionModifiers {
+  ctrlKey: boolean
+  metaKey: boolean
+  shiftKey: boolean
+}
+
 const props = withDefaults(
   defineProps<{
     spriteTable: SpriteTable
     textureUrls: Record<string, string>
     loadTexture?: (textureId: string) => Promise<string | undefined>
     selectedSpriteId?: string
+    selectedSpriteIds?: ReadonlySet<string>
+    batchDisabled?: boolean
     previewBackground?: PreviewBackground
     visibleSpriteIds?: Set<string>
   }>(),
   { previewBackground: 'transparent' },
 )
-const emit = defineEmits<{ select: [spriteId: string]; open: [spriteId: string] }>()
+const emit = defineEmits<{
+  select: [spriteId: string, modifiers: SpriteSelectionModifiers]
+  open: [spriteId: string]
+  toggleSelection: [spriteId: string]
+  batchTranslate: []
+  clearSelection: []
+}>()
 const { t } = useI18n()
 
 const viewport = ref<HTMLElement>()
@@ -72,6 +86,11 @@ const backgroundClass = computed(() => {
   if (props.previewBackground === 'white') return 'bg-white'
   return 'bg-checkerboard'
 })
+const selectedSpriteCount = computed(() => props.selectedSpriteIds?.size ?? 0)
+
+function displaySpriteName(sprite: Sprite): string {
+  return sprite.name.replace(/\\/g, '/').split('/').pop() || sprite.name
+}
 
 function imageFor(url: string): Promise<HTMLImageElement> {
   const existing = imagePromises.get(url)
@@ -163,6 +182,28 @@ watch(
           {{ t('spriteGrid.spriteCount', { count: visibleSprites.length }) }}
         </p>
       </div>
+      <div v-if="selectedSpriteCount > 0" class="flex shrink-0 items-center gap-2 text-xs">
+        <span class="text-muted-foreground">
+          {{ t('spriteGrid.selectedCount', { count: selectedSpriteCount }) }}
+        </span>
+        <button
+          type="button"
+          class="rounded border px-2 py-1 font-medium hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="batchDisabled || selectedSpriteCount === 0"
+          @click="emit('batchTranslate')"
+        >
+          {{ t('spriteGrid.batchTranslate') }}
+        </button>
+        <button
+          type="button"
+          class="rounded px-2 py-1 text-muted-foreground hover:bg-accent"
+          :aria-label="t('spriteGrid.clearSelection')"
+          :title="t('spriteGrid.clearSelection')"
+          @click="emit('clearSelection')"
+        >
+          {{ t('spriteGrid.clearSelection') }}
+        </button>
+      </div>
       <label class="ml-auto flex w-56 items-center gap-3 text-xs text-muted-foreground">
         <span class="shrink-0">{{ t('spriteGrid.previewSize') }}</span>
         <Slider
@@ -181,31 +222,49 @@ watch(
       </div>
       <div v-else class="relative" :style="{ height: `${totalHeight}px` }">
         <div class="absolute grid justify-center gap-2" :style="gridStyle">
-          <button
-            v-for="sprite in virtualSprites"
-            :key="sprite.id"
-            type="button"
-            class="flex flex-col gap-1 rounded-md p-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
-            :class="{ 'bg-accent ring-2 ring-primary': sprite.id === selectedSpriteId }"
-            :style="{ width: `${thumbnailSize}px` }"
-            :aria-label="sprite.name"
-            :aria-pressed="sprite.id === selectedSpriteId"
-            data-testid="sprite-grid-item"
-            @click="emit('select', sprite.id)"
-            @dblclick="emit('open', sprite.id)"
-          >
-            <span
-              class="flex aspect-square items-center justify-center overflow-hidden rounded border"
-              :class="backgroundClass"
-              data-testid="sprite-grid-preview-background"
+          <div v-for="sprite in virtualSprites" :key="sprite.id" class="relative">
+            <button
+              type="button"
+              class="flex flex-col gap-1 rounded-md p-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"
+              :class="{ 'bg-accent ring-2 ring-primary': sprite.id === selectedSpriteId }"
+              :style="{ width: `${thumbnailSize}px` }"
+              :aria-label="sprite.name"
+              :aria-pressed="sprite.id === selectedSpriteId"
+              data-testid="sprite-grid-item"
+              @click="
+                emit('select', sprite.id, {
+                  ctrlKey: $event.ctrlKey,
+                  metaKey: $event.metaKey,
+                  shiftKey: $event.shiftKey,
+                })
+              "
+              @dblclick="emit('open', sprite.id)"
             >
-              <canvas
-                :ref="(element) => setThumbnailCanvas(sprite.id, element)"
-                class="block size-full [image-rendering:auto]"
-              ></canvas>
-            </span>
-            <span class="truncate text-xs" :title="sprite.name">{{ sprite.name }}</span>
-          </button>
+              <span
+                class="flex aspect-square items-center justify-center overflow-hidden rounded border"
+                :class="backgroundClass"
+                data-testid="sprite-grid-preview-background"
+              >
+                <canvas
+                  :ref="(element) => setThumbnailCanvas(sprite.id, element)"
+                  class="block size-full [image-rendering:auto]"
+                ></canvas>
+              </span>
+              <span class="truncate text-xs" :title="sprite.name">{{
+                displaySpriteName(sprite)
+              }}</span>
+            </button>
+            <input
+              type="checkbox"
+              class="absolute right-2 top-2 size-4 accent-primary"
+              :checked="selectedSpriteIds?.has(sprite.id)"
+              :disabled="batchDisabled"
+              :aria-label="t('spriteGrid.selectSprite', { name: sprite.name })"
+              data-testid="sprite-grid-selection"
+              @click.stop
+              @change.stop="emit('toggleSelection', sprite.id)"
+            />
+          </div>
         </div>
       </div>
     </div>

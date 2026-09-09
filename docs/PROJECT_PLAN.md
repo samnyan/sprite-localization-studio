@@ -1,7 +1,7 @@
 # Sprite Localization Studio 项目计划
 
-> 更新日期：2026-09-01
-> 当前阶段：M5–M8 已完成；M9/M10 正在收口统一高保真渲染、质量与编辑体验。
+> 更新日期：2026-09-02
+> 当前阶段：M0–M8 已完成；M10 的主要 QA/交互交付已落地。M9 仍在收口：CanvasKit 与 Canvas 2D 回退必须在预览、缩略图和导出之间保持可解释、可复现的结果与性能。
 
 ## 1. 产品定义
 
@@ -39,17 +39,18 @@ Project → Fonts
 
 | 能力 | 当前实现 | 状态 |
 | --- | --- | --- |
-| 框架与工作区 | Vue、Pinia、Router、本地目录、中英文、主题、快捷键 | 已完成 |
-| Sprite 数据 | sprite-table manifest、列表、裁剪与方向预览 | 基本完成 |
-| TextRegion | 创建、拖拽/键盘微调变换、撤销/重做、持久化 | 基本完成 |
-| 翻译工作区 | 连续编辑、预览、底图和样式入口 | 基本完成 |
-| 样式 | 多点渐变、描边、多阴影、图层、模板 CRUD 与布局参数 | 已完成 |
-| 底图 | 共享模板与 Sprite 专属图片的持久化、选择与 CRUD | 已完成 |
-| CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退、受限 SkParagraph complex shaping | 进行中，复杂效果与性能验收待收口 |
+| 框架与工作区 | Vue、Pinia、Router、本地目录、中英文、主题、快捷键、工程根节点重命名 | 已完成 |
+| Sprite 数据 | sprite-table manifest、树形导航、裁剪/旋转预览、虚拟化 Grid、散件 Sprite 目录导入 | 已完成 |
+| TextRegion | 拖拽或一键整图创建、稳定坐标、旋转边界变换、键盘微调、复制/粘贴、撤销/重做、持久化 | 已完成 |
+| 翻译工作区 | 跨表连续编辑、筛选/诊断定位、原图/输出效果对比预览、底图和样式入口 | 已完成 |
+| 样式 | 字体模板/单独样式、保存覆盖删除、多点渐变、描边圆角、阴影、字重与布局参数 | 已完成；可编辑的 Photoshop 式效果图层列表仍属后续 |
+| 底图 | 共享图片模板 Grid CRUD；单行翻译可使用独立图片，但不作为模板管理 | 已完成 |
+| CanvasKit | 按需 runtime、预览与构建接线、字体缓存、Canvas 2D 保真回退、受限 SkParagraph complex shaping | 进行中；运行时仍可能回退 Canvas 2D，统一渲染与性能验收未完成 |
 | 字体 | `fonts/` 扫描、元数据、浏览器注册与编辑器选择 | 已完成 |
-| 构建 | localized Texture 回填、输出目录、部分失败报告与失败 Texture 定位 | 已完成 |
+| 构建 | localized Texture 回填、散件目录保持、进度、完成通知、部分失败报告与失败 Texture 定位 | 已完成 |
+| 编辑体验 | 工作区背景同步、缩放过滤、通用图片预览、右键菜单、可访问状态播报 | M10 已完成主要交付 |
 
-当前已形成覆盖 M0–M8 的可操作纵向切片；早期里程碑仍待收口的重点是 Sprite/Region 编辑体验，以及 M9 的复杂脚本 shaping 与性能验收。
+当前已形成覆盖 M0–M8 的完整生产主链，并提前完成了多项 M10 体验工作。后续优先级应是渲染一致性与性能验收，而非再扩展基础编辑能力。
 
 ## 4. 目标分层
 
@@ -80,25 +81,25 @@ src/
 | 里程碑 | 结果 | 状态 |
 | --- | --- | --- |
 | M0 | 工程骨架、本地目录、Schema、桌面应用壳 | 已完成 |
-| M1 | Atlas 导入与 Sprite Browser | 基本完成 |
-| M2 | TextRegion Editor | 基本完成 |
-| M3 | 基础样式与 Canvas 2D 预览 | 基本完成，排版待收口 |
-| M4 | Translation Workspace | 基本完成 |
+| M1 | Atlas 导入与 Sprite Browser | 已完成 |
+| M2 | TextRegion Editor | 已完成 |
+| M3 | 基础样式与 Canvas 2D 预览 | 已完成；视觉垂直居中与圆角描边已收口 |
+| M4 | Translation Workspace | 已完成 |
 | M5 | Localized Atlas Build | 已完成 |
 | M6 | 工程资源与底图模板 | 已完成 |
 | M7 | 字体样式模板与多点渐变 | 已完成 |
 | M8 | 工程字体管理 | 已完成 |
-| M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线与受限 SkParagraph 已完成；复杂效果与性能收口待完成 |
-| M10 | QA、性能、代码质量与体验 | 进行中：缺译文构建阻断、布局风险诊断、部分构建失败定位、保存状态、多条件筛选（包含表/状态/问题与关键词）与状态统计已完成 |
+| M9 | CanvasKit 统一渲染 | 进行中：核心、预览、导出接线与受限 SkParagraph 已完成；仍需收口运行时 renderer 一致性、复杂效果与性能 |
+| M10 | QA、性能、代码质量与体验 | 进行中：QA、筛选、虚拟 Sprite Grid、构建反馈、图片对比预览与多项编辑体验已完成；性能 profiling、翻译表虚拟化与可访问性完整验收待完成 |
 | M11+ | 批量、Rich Text、OCR/AI、协作 | 后续 |
 
 ## 6. M0–M4 收口事项
 
 - **M0**：CanvasKit bootstrap 延后到 M9；不能把依赖已安装视为接入完成。
-- **M1**：补齐包含 `0/90/180/270` 旋转、trim offset、透明边缘和多 Texture 的回归样本。
-- **M2**：键盘微调、选中 Region 的就地诊断提示、应用内 Region 复制/粘贴，以及基于 SVG CTM 逆变换的稳定缩放坐标换算已完成（支持矩阵逆变换、视口缩放与安全回退，并在逻辑 Sprite 边界内约束）。
-- **M3**：多点渐变、模板 CRUD、字距、换行、垂直对齐、AutoFit、缺字检查在 M7/M9 收口。
-- **M4**：多条件筛选（支持 SpriteTable/全部表、关键词、完成状态、QA 问题）、状态统计与一键清除筛选已在 M10 完成；批量选择与虚拟滚动在后续收口。
+- **M1**：已具备旋转/裁剪 Sprite 展示、虚拟化 Grid 与散件目录导入。后续仅补充真实工程的 `0/90/180/270`、trim offset、透明边缘和多 Texture 回归样本。
+- **M2**：键盘微调、就地诊断、复制/粘贴、稳定 SVG CTM 坐标换算、一键整图 Region，以及旋转后的边界计算均已完成。
+- **M3**：多点渐变、模板 CRUD、字距、换行、视觉垂直居中、AutoFit、缺字检查和圆角描边已收口；可编辑的多效果图层编排不在本里程碑范围。
+- **M4**：多条件筛选（SpriteTable/全部表、关键词、完成状态、QA 问题）、状态统计、一键清除、跨表写回及原图/输出效果对比预览已完成；批量选择与翻译表虚拟滚动留待后续。
 
 ## 7. 下一阶段：Product Stage 0.2
 
@@ -152,7 +153,7 @@ type BackgroundSource =
 #### 功能与验收
 
 - 共享模板支持上传、命名、查询、改名、替换、删除和搜索。
-- Sprite 专属图片进入对应 manifest/sprite 目录，不出现在共享列表。
+- 单行翻译可上传独立底图并进入对应 manifest/sprite 目录；它不是图片模板，不出现在共享模板列表。
 - 编辑器提供含缩略图、名称、类型、尺寸、选中态、空态和失败态的完整 Grid。
 - 删除被引用资源时显示引用数，并要求替换或解除引用；禁止悬空 ID。
 - 替换按“写新文件 → 更新 JSON → 删除旧文件”执行，失败时原引用仍可用。
@@ -232,8 +233,9 @@ interface ProjectFont {
 
 #### 当前进度与剩余收口
 
-- 已接入按需加载的 CanvasKit runtime，并让样式预览、Sprite 预览和 localized texture 导出共享文本渲染核心。
+- 已接入按需加载的 CanvasKit runtime，并让样式预览、Sprite 预览和 localized texture 导出共享文本场景、排版与视觉垂直居中计算。
 - 已建立软件 Surface 释放、异步旧结果丢弃、项目字体二进制传递与 Canvas 2D 保真回退边界。
+- CanvasKit 是否实际采用由字体、效果和运行时能力决定；开发日志以 debug 级别记录预览/导出所选 renderer 与回退原因。当前已观测到 Canvas 2D 回退，因此不能将“已接线”记为“已统一”。
 - 不支持的系统/CSS 字体、`inside` 描边和非 Hex 颜色必须走 Canvas 2D，不能静默替换为默认 Typeface。
 - 已使用 SkParagraph 为项目字体的复杂脚本提供换行、字距、行高、物理对齐、垂直对齐、maxLines/ellipsis 与基准方向 shaping；unresolved glyph 会原子回退 Canvas 2D。
 - CanvasKit 直接文本路径同样会在 Glyph ID 为 `0` 时原子回退 Canvas 2D，避免导出缺字占位符（已完成）。
@@ -245,8 +247,8 @@ interface ProjectFont {
 
 - 定义框架无关的 `RenderScene`、`TextLayoutResult`、`SpriteRenderer` 和资源缓存。
 - Vue 只提交序列化场景；adapter 管理 Surface、Image、Typeface、Paragraph 和 Paint。
-- Canvas 2D 仅保留为初始化失败时的 fallback，不再新增效果。
-- 预览、缩略图和 M5 构建调用同一 CanvasKit 核心。
+- Canvas 2D 保留为字体、效果或 CanvasKit runtime 不满足等价条件时的兼容 fallback；新效果优先实现于共享渲染层，并以预览/导出一致性为验收。
+- 预览、缩略图和 M5 构建调用同一文本渲染入口；其中由 CanvasKit 负责的能力与 Canvas 2D 回退必须使用同一排版结果。
 - 用 SkParagraph 实现换行、水平/垂直对齐、字距、行高、max lines 和 overflow。
 - 二分搜索实现 AutoFit，领域参数包含 `minFontSize/maxFontSize/maxLines`。
 - 用 SkPaint/Shader 实现多点渐变填充/描边、多描边/阴影图层和 Region rotation。
@@ -258,7 +260,7 @@ interface ProjectFont {
 - 常规 Sprite 输入到预览目标小于 50 ms；大图可降频但不阻塞输入。
 - 字体、Texture 和共享底图按工程缓存，只重算变化的依赖。
 - Worker/OffscreenCanvas 由 profiling 决定，不复制两套渲染逻辑。
-- 同一 RenderScene 在预览、缩略图和导出中一致。
+- 同一 RenderScene 在预览、缩略图和导出中一致，并能记录最终采用 CanvasKit 或 Canvas 2D 的原因。
 - 中文、日文、拉丁文、多行、旋转、AutoFit、渐变、描边、阴影有回归样本。
 - 连续切换 200 个 Sprite 后内存趋稳。
 
@@ -276,6 +278,21 @@ interface ProjectFont {
 - 大组件拆为容器、无状态表单和 application use case；组件不直接修改持久化对象。
 - 工程边界使用 Zod 或等价 schema 返回明确错误路径；写入统一经 Repository 串行化。
 - migration、路径安全、资源引用、样式合并、渐变、rotation/trim、字体 fallback 和构建不变量均有测试。
+
+#### 已纳入的增量交付（2026-09-02）
+
+- **Sprite 管理 Grid**：选择 SpriteTable 后以固定缩略图尺寸的虚拟 Grid 浏览；支持调节预览大小、单击选中并显示属性、双击进入编辑，树形侧栏子项保持并与 Grid 选中态同步。
+- **背景与图片预览**：工具栏背景颜色同步应用于 Sprite Grid 和单 Sprite 预览；图像尺寸移至画布外。通用 Image Preview Dialog 支持宽留白、固定右上关闭、点击遮罩关闭、键盘左右切换、多图列表和底部对比 Tab；翻译表的原 Sprite/输出效果会直接以翻译前后对比方式打开。
+- **构建反馈与导入**：构造贴图按钮有 loading 状态，状态栏显示 `completed/total` 进度，完成后通过 Sonner 提示 `output_textures`。支持“导入贴图”扫描目录、二次确认、保持原目录结构复制至 `textures/<directory>`，并为每张散件图生成单 Sprite manifest/table；导出维持相对目录。
+- **编辑和样式体验**：新增一键整图文字区域、默认底图类型（原 Sprite/空白）、旋转后尺寸/边界计算、旋转 Sprite 在翻译表中的可读方向、固定样式预览、模板缩略文字、字体字重与默认圆角描边。每条翻译可明确选择“字体模板”或“单独样式”；模板可另存、覆盖、重命名、删除并检查同名冲突。
+- **导航与工程操作**：应用品牌本地化为“Sprite Localization Studio / 贴图翻译助手”；工程根节点支持右键重命名，保存时更新 `project.json.name`。
+
+#### M9/M10 剩余验收重点
+
+- 用真实项目字体、中文/日文/拉丁文、旋转/裁剪 Sprite 和复杂样式，记录预览、翻译表缩略图、导出三端的 renderer、排版位置与像素差异；修复任何不一致后再宣告 CanvasKit 统一。
+- 建立常规 Sprite 小于 50ms、连续切换 200 Sprite 内存趋稳的 profile 基线；据数据决定是否引入 Worker/OffscreenCanvas。
+- 为翻译表的大工程增加虚拟化/按需渲染，并补齐窄窗口、键盘焦点、屏幕阅读器和深浅主题的人工验收。
+- 将现有 `layers` 数据模型发展为可编辑、可增删、可排序的 Photoshop 式效果列表；每个效果块独立编辑，支持多个描边、多个阴影、填充与明确渲染顺序。
 
 每个里程碑完成时运行：
 
@@ -311,20 +328,20 @@ B + C + G → H → Product Stage 0.2 验收
 
 ## 9. Product Stage 0.2 验收清单
 
-- [ ] 共享底图模板和 Sprite 专属底图均可选择、CRUD 并按约定目录落盘。
-- [ ] 样式可另存、覆盖、更新、删除项目模板，引用安全。
-- [ ] 渐变支持多个位置点、百分比、颜色和透明度。
-- [ ] `fonts/` 字体可发现、选择，并用于 CanvasKit 预览与导出。
-- [ ] 手动字体名称可用，且不可移植风险可见。
+- [x] 共享底图模板可选择、CRUD 并按约定目录落盘；单行独立底图不混入模板管理。
+- [x] 样式可另存、覆盖、更新、删除项目模板，引用安全。
+- [x] 渐变支持多个位置点、百分比、颜色和透明度。
+- [x] `fonts/` 字体可发现、选择；CanvasKit 可用时传递项目字体，其他情形明确回退 Canvas 2D。
+- [x] 手动字体名称可用，且不可移植风险可见。
 - [ ] CanvasKit 是预览、缩略图和导出的统一渲染器。
-- [ ] localized Texture 通过无修改/单 Sprite 修改像素不变量测试。
-- [ ] 重开 `D:\Temp\sts_test` 后资源、模板、字体和效果完整恢复。
-- [ ] 构建前 QA 可定位 overflow、缺字、缺资源和悬空引用。
-- [ ] type-check、unit tests、lint、build 全部通过。
+- [x] localized Texture 通过无修改/单 Sprite 修改像素不变量测试。
+- [ ] 重开 `D:\Temp\sts_test` 后资源、模板、字体和效果完整恢复（需要在最终 M9 验收时重新记录）。
+- [x] 构建前 QA 可定位缺译文、overflow、AutoFit、缺字体、缺底图和部分构建失败；更细的渲染失败诊断继续补齐。
+- [x] type-check、unit tests、lint、build 全部通过（最近一次：160 个单元测试）。
 
 ## 10. 后续路线
 
-- **M11 批量生产**：批量 Style/Background/Region、复制粘贴、查找替换、相似 Sprite 分组和问题筛选。
+- **M11 渲染效果编排与批量生产**：将现有 `layers` 模型升级为 Photoshop 式效果块列表（多描边、多阴影、填充、排序）；补齐批量 Style/Background/Region、复制粘贴、查找替换、相似 Sprite 分组和问题筛选。
 - **M12 Rich Text**：有限 markup → AST → SkParagraph spans；首期仅 bold、italic、color、size。
 - **M13 OCR/AI Provider**：OCR 只初始化 sourceText，AI 去字只生成候选底图，失败不破坏手工作业。
 - **M14 交换与协作**：CSV/XLIFF、Git 友好拆分、TMS 对接；审核、评论和多人协作后置。

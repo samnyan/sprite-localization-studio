@@ -15,6 +15,11 @@ export interface LocalizedTextureBuildPlan {
   tasks: LocalizedTextureBuildTask[]
 }
 
+export interface LocalizedTextureBuildOptions {
+  /** Root directory for generated files, relative to project storage. */
+  outputRoot?: string
+}
+
 export interface BuiltTexture {
   outputPath: string
   modifiedSpriteCount: number
@@ -72,8 +77,10 @@ export function isSpriteTranslationModified(translation: SpriteTranslation): boo
 export function createLocalizedTextureBuildPlan(
   project: ProjectManifest,
   spriteTables: SpriteTable[],
+  options: LocalizedTextureBuildOptions = {},
 ): LocalizedTextureBuildPlan {
   const locale = outputLocale(project)
+  const outputRoot = options.outputRoot?.trim() || 'output_textures'
   const translations = project.translations ?? []
 
   return {
@@ -90,7 +97,7 @@ export function createLocalizedTextureBuildPlan(
             ) &&
             isSpriteTranslationModified(translation),
         ),
-        outputPath: `output_textures/${locale}/${texture.imagePath}`,
+        outputPath: `${outputRoot}/${locale}/${texture.imagePath}`,
       })),
     ),
   }
@@ -140,12 +147,13 @@ export async function runLocalizedTextureBuild(
   spriteTables: SpriteTable[],
   createBuilder: () => LocalizedTextureBuilder,
   onProgress?: (progress: LocalizedTextureBuildProgress) => void,
+  options: LocalizedTextureBuildOptions = {},
 ): Promise<LocalizedTextureBuildResult> {
   const diagnostics = collectTextDiagnostics(project)
   if (diagnostics.length) return { status: 'blocked', diagnostics }
 
   const report = await buildLocalizedTextures(
-    createLocalizedTextureBuildPlan(project, spriteTables),
+    createLocalizedTextureBuildPlan(project, spriteTables, options),
     createBuilder(),
     onProgress,
   )

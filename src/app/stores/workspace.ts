@@ -1071,6 +1071,113 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     )
   }
 
+  function batchEnableSpriteTranslations(
+    spriteTableId: string,
+    spriteIds: readonly string[],
+  ): boolean {
+    if (!project.value) return failProjectNotOpen()
+    const spriteTable = spriteTables.value.find((table) => table.id === spriteTableId)
+    if (!spriteTable || spriteIds.length === 0) return false
+
+    const selectedIds = new Set(spriteIds)
+    const sprites = spriteTable.sprites.filter((sprite) => selectedIds.has(sprite.id))
+    if (sprites.length === 0) return false
+
+    const translations = project.value.translations ?? []
+    const translationBySpriteId = new Map(
+      translations
+        .filter((translation) => translation.spriteTableId === spriteTableId)
+        .map((translation) => [translation.spriteId, translation]),
+    )
+    const usedTranslationKeys = new Set(
+      translations.flatMap((translation) =>
+        translation.textRegions.map((region) => region.translationKey),
+      ),
+    )
+    let changed = false
+
+    const createFullRegion = (spriteId: string, sprite: (typeof sprites)[number]): TextRegion => {
+      let keyIndex = 1
+      let translationKey = `${spriteTableId}.${spriteId}.${keyIndex}`
+      while (usedTranslationKeys.has(translationKey)) {
+        keyIndex += 1
+        translationKey = `${spriteTableId}.${spriteId}.${keyIndex}`
+      }
+      usedTranslationKeys.add(translationKey)
+      const size = getLogicalSpriteSize(sprite)
+      return {
+        id: crypto.randomUUID(),
+        rect: { x: 0, y: 0, width: size.width, height: size.height },
+        rotation: 0,
+        translationKey,
+      }
+    }
+
+    const updatedTranslations = translations.map((translation) => {
+      if (
+        translation.spriteTableId !== spriteTableId ||
+        !selectedIds.has(translation.spriteId) ||
+        translation.textRegions.length > 0
+      )
+        return translation
+
+      const sprite = sprites.find((item) => item.id === translation.spriteId)
+      if (!sprite) return translation
+      changed = true
+      return { ...translation, textRegions: [createFullRegion(sprite.id, sprite)] }
+    })
+
+    for (const sprite of sprites) {
+      if (translationBySpriteId.has(sprite.id)) continue
+      changed = true
+      updatedTranslations.push({
+        spriteTableId,
+        spriteId: sprite.id,
+        backgroundType: defaultTranslationBackground.value,
+        textRegions: [createFullRegion(sprite.id, sprite)],
+      })
+    }
+
+    if (!changed) return true
+    selectedTextRegionId.value = undefined
+    return saveTranslations('spriteTranslation.batchEnable', updatedTranslations)
+  }
+
+  function batchDisableSpriteTranslations(
+    spriteTableId: string,
+    spriteIds: readonly string[],
+  ): boolean {
+    if (!project.value) return failProjectNotOpen()
+    const spriteTable = spriteTables.value.find((table) => table.id === spriteTableId)
+    if (!spriteTable || spriteIds.length === 0) return false
+
+    const selectedIds = new Set(
+      spriteTable.sprites
+        .filter((sprite) => spriteIds.includes(sprite.id))
+        .map((sprite) => sprite.id),
+    )
+    if (selectedIds.size === 0) return false
+
+    const translations = project.value.translations ?? []
+    const updatedTranslations = translations.filter(
+      (translation) =>
+        translation.spriteTableId !== spriteTableId || !selectedIds.has(translation.spriteId),
+    )
+    if (updatedTranslations.length === translations.length) return true
+    selectedTextRegionId.value = undefined
+    return saveTranslations('spriteTranslation.batchDisable', updatedTranslations)
+  }
+
+  function setBatchSpriteTranslationsEnabled(
+    spriteTableId: string,
+    spriteIds: readonly string[],
+    enabled: boolean,
+  ): boolean {
+    return enabled
+      ? batchEnableSpriteTranslations(spriteTableId, spriteIds)
+      : batchDisableSpriteTranslations(spriteTableId, spriteIds)
+  }
+
   function addTextRegion(rect: Rect): boolean {
     const translation = selectedSpriteTranslation.value
     if (!translation) return false
@@ -1842,6 +1949,9 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     undo,
     redo,
     setSpriteTranslationEnabled,
+    batchEnableSpriteTranslations,
+    batchDisableSpriteTranslations,
+    setBatchSpriteTranslationsEnabled,
     addTextRegion,
     addFullSpriteTextRegion,
     copyTextRegion,

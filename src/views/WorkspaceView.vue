@@ -50,6 +50,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import type { Rect } from '@/domain/shared/geometry'
 
+interface SpriteSelectionModifiers {
+  ctrlKey: boolean
+  metaKey: boolean
+  shiftKey: boolean
+}
+
 const workspace = useWorkspaceStore()
 const { locale, t } = useI18n()
 const projectName = ref(workspace.project?.name ?? '')
@@ -58,6 +64,10 @@ const projectRenameOpen = ref(false)
 const projectRenameDraft = ref('')
 const expandedTexturePaths = ref(new Set<string>())
 const selectedTreeSpriteId = ref<string>()
+const selectedGridSpriteIds = ref(new Set<string>())
+const lastGridSpriteId = ref<string>()
+const bulkTranslationConfirmOpen = ref(false)
+const bulkTranslationTarget = ref(false)
 
 const errorText = computed(() =>
   workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
@@ -157,6 +167,28 @@ const lastSavedText = computed(() => {
 })
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
 const selectedTextDiagnostics = computed(() => workspace.selectedTextDiagnostics)
+const selectedGridSpriteCount = computed(() => selectedGridSpriteIds.value.size)
+const hasMultipleGridSpritesSelected = computed(() => selectedGridSpriteCount.value > 1)
+const selectedGridTranslationEnabledCount = computed(() => {
+  const tableId = workspace.selectedSpriteTableId
+  const translations = workspace.project?.translations ?? []
+  if (!tableId) return 0
+  return [...selectedGridSpriteIds.value].filter((spriteId) =>
+    translations.some(
+      (translation) => translation.spriteTableId === tableId && translation.spriteId === spriteId,
+    ),
+  ).length
+})
+const allSelectedGridSpritesNeedTranslation = computed(
+  () =>
+    selectedGridSpriteCount.value > 0 &&
+    selectedGridTranslationEnabledCount.value === selectedGridSpriteCount.value,
+)
+const someSelectedGridSpritesNeedTranslation = computed(
+  () =>
+    selectedGridTranslationEnabledCount.value > 0 &&
+    selectedGridTranslationEnabledCount.value < selectedGridSpriteCount.value,
+)
 
 function toggleTexturePath(path: string): void {
   const next = new Set(expandedTexturePaths.value)
@@ -188,6 +220,112 @@ function selectSpriteTable(spriteTableId: string): void {
 function selectProject(): void {
   selectedTreeSpriteId.value = undefined
   workspace.selectProject()
+}
+
+watch([() => workspace.selectedSpriteTableId, () => workspace.selectedTextureDirectory], () => {
+  selectedGridSpriteIds.value = new Set()
+  lastGridSpriteId.value = undefined
+})
+
+function toggleGridSpriteSelection(spriteId: string): void {
+  const next = new Set(selectedGridSpriteIds.value)
+  if (next.has(spriteId)) next.delete(spriteId)
+  else next.add(spriteId)
+  selectedGridSpriteIds.value = next
+  lastGridSpriteId.value = spriteId
+}
+
+function clearGridSelection(): void {
+  selectedGridSpriteIds.value = new Set()
+  lastGridSpriteId.value = undefined
+}
+
+function selectGridSprite(
+  spriteId: string,
+  modifiers: SpriteSelectionModifiers = { ctrlKey: false, metaKey: false, shiftKey: false },
+): void {
+  const spriteTable = workspace.selectedSpriteTable
+  if (!spriteTable) return
+
+  const visibleSpriteIds = spriteTable.sprites
+    .filter((sprite) => workspace.selectedTextureIds.has(sprite.id))
+    .map((sprite) => sprite.id)
+  const anchorId = lastGridSpriteId.value
+  const isAdditiveSelection = modifiers.ctrlKey || modifiers.metaKey
+
+  if (modifiers.shiftKey && anchorId !== undefined) {
+    const anchorIndex = visibleSpriteIds.indexOf(anchorId)
+    const targetIndex = visibleSpriteIds.indexOf(spriteId)
+    if (anchorIndex >= 0 && targetIndex >= 0) {
+      const next = isAdditiveSelection ? new Set(selectedGridSpriteIds.value) : new Set<string>()
+      const start = Math.min(anchorIndex, targetIndex)
+      const end = Math.max(anchorIndex, targetIndex)
+      for (const id of visibleSpriteIds.slice(start, end + 1)) next.add(id)
+      selectedGridSpriteIds.value = next
+    }
+  } else if (isAdditiveSelection) {
+    const next = new Set(selectedGridSpriteIds.value)
+    if (next.size === 0 && lastGridSpriteId.value && lastGridSpriteId.value !== spriteId) {
+      next.add(lastGridSpriteId.value)
+    }
+    if (next.has(spriteId)) next.delete(spriteId)
+    else next.add(spriteId)
+    selectedGridSpriteIds.value = next
+  } else {
+    selectedGridSpriteIds.value = new Set()
+  }
+
+  lastGridSpriteId.value = spriteId
+  workspace.selectSprite(spriteTable.id, spriteId)
+}
+
+function openGridSprite(spriteId: string): void {
+  if (!workspace.selectedSpriteTableId) return
+  workspace.openSprite(workspace.selectedSpriteTableId, spriteId)
+}
+
+function batchEnableGridTranslations(): void {
+  if (selectedGridSpriteCount.value === 0) return
+  bulkTranslationTarget.value = true
+  bulkTranslationConfirmOpen.value = true
+}
+
+function requestBatchTranslationToggle(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const nextValue = input.checked
+  input.checked = allSelectedGridSpritesNeedTranslation.value
+  input.indeterminate = someSelectedGridSpritesNeedTranslation.value
+  bulkTranslationTarget.value = nextValue
+  bulkTranslationConfirmOpen.value = true
+}
+
+function confirmBatchTranslationToggle(): void {
+  const spriteTableId = workspace.selectedSpriteTableId
+  const spriteIds = [...selectedGridSpriteIds.value]
+  if (!spriteTableId || spriteIds.length === 0) {
+    bulkTranslationConfirmOpen.value = false
+    return
+  }
+
+  if (
+    workspace.setBatchSpriteTranslationsEnabled(
+      spriteTableId,
+      spriteIds,
+      bulkTranslationTarget.value,
+    )
+  ) {
+    toast.success(
+      t(
+        bulkTranslationTarget.value
+          ? 'spriteGrid.batchTranslateSuccess'
+          : 'spriteGrid.batchUntranslateSuccess',
+        {
+          count: spriteIds.length,
+        },
+      ),
+    )
+    bulkTranslationConfirmOpen.value = false
+  }
 }
 
 watch(
@@ -531,9 +669,14 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
           "
           :visible-sprite-ids="workspace.selectedTextureIds"
           :selected-sprite-id="workspace.selectedSpriteId"
+          :selected-sprite-ids="selectedGridSpriteIds"
+          :batch-disabled="workspace.isBusy"
           :preview-background="workspace.previewBackground"
-          @select="workspace.selectSprite(workspace.selectedSpriteTable!.id, $event)"
-          @open="workspace.openSprite(workspace.selectedSpriteTable!.id, $event)"
+          @select="selectGridSprite"
+          @open="openGridSprite"
+          @toggle-selection="toggleGridSpriteSelection"
+          @batch-translate="batchEnableGridTranslations"
+          @clear-selection="clearGridSelection"
         />
         <SpritePreview
           v-else-if="workspace.selectedTexture && workspace.selectedSprite && selectedImageUrl"
@@ -566,8 +709,28 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         >
           {{ t('panel.inspector') }}
         </div>
+        <div v-if="hasMultipleGridSpritesSelected" class="space-y-4 p-3 text-xs">
+          <div>
+            <p class="font-semibold">
+              {{ t('sprite.multipleSelected', { count: selectedGridSpriteCount }) }}
+            </p>
+            <p class="mt-0.5 text-muted-foreground">{{ t('sprite.multipleSelectedHint') }}</p>
+          </div>
+          <label
+            class="flex cursor-pointer items-center justify-between gap-3 rounded border px-2 py-2"
+          >
+            <span>{{ t('sprite.translate') }}</span>
+            <input
+              type="checkbox"
+              :checked="allSelectedGridSpritesNeedTranslation"
+              :indeterminate="someSelectedGridSpritesNeedTranslation"
+              :disabled="workspace.isBusy"
+              @change="requestBatchTranslationToggle"
+            />
+          </label>
+        </div>
         <div
-          v-if="
+          v-else-if="
             workspace.selectedSprite && workspace.selectedSpriteTable && workspace.selectedTexture
           "
           class="space-y-4 p-3 text-xs"
@@ -856,6 +1019,30 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
             @click="renameProject"
             >{{ t('common.save') }}</Button
           >
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="bulkTranslationConfirmOpen">
+      <DialogContent class="sm:max-w-md" :show-close-button="false">
+        <DialogHeader>
+          <DialogTitle>{{ t('sprite.batchTranslationConfirmTitle') }}</DialogTitle>
+        </DialogHeader>
+        <p class="text-sm text-muted-foreground">
+          {{
+            t('sprite.batchTranslationConfirm', {
+              count: selectedGridSpriteCount,
+              state: t(bulkTranslationTarget ? 'sprite.needsTranslation' : 'sprite.noTranslation'),
+            })
+          }}
+        </p>
+        <DialogFooter>
+          <Button variant="outline" @click="bulkTranslationConfirmOpen = false">
+            {{ t('common.cancel') }}
+          </Button>
+          <Button :disabled="workspace.isBusy" @click="confirmBatchTranslationToggle">
+            {{ t('common.ok') }}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
