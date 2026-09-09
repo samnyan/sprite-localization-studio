@@ -14,7 +14,7 @@ export interface DdsTextureFormat {
   container: 'dds'
   compression: DdsCompression
   header: 'legacy' | 'dx10'
-  fourCC?: 'DXT1' | 'DXT3' | 'DXT5' | 'ATI1' | 'ATI2'
+  fourCC?: 'DXT1' | 'DXT3' | 'DXT5' | 'ATI1' | 'ATI2' | 'DX10'
   dxgiFormat?: number
   srgb: boolean
   mipCount: number

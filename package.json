@@ -23,6 +23,7 @@
     "canvaskit-wasm": "^0.42.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dds-ktx-parser": "1.0.1",
     "opentype.js": "^2.0.0",
     "pinia": "^4.0.2",
     "reka-ui": "^2.10.4",

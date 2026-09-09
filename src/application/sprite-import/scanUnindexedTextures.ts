@@ -1,5 +1,5 @@
 import type { ProjectStorage } from '@/application/storage/ProjectStorage'
-import { readPngSize } from '@/infrastructure/image/pngSize'
+import { parseTextureMetadata } from '@/infrastructure/image/textureParser'
 import {
   createLooseSpriteImportPlan,
   isLooseSpriteImage,
@@ -84,7 +84,8 @@ export async function scanUnindexedTextures(
     const images: LooseSpriteImage[] = []
     for (const name of group.images) {
       const data = await storage.readBinary(`textures/${group.directoryName}/${name}`)
-      images.push({ name, size: readPngSize(data) })
+      const metadata = parseTextureMetadata(name, data)
+      images.push({ name, ...metadata })
       completed += 1
       onProgress?.(completed, total)
     }

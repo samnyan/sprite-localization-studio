@@ -1,10 +1,15 @@
 import { isProjectRelativePath } from '@/application/storage/projectPath'
 import type { Size } from '@/domain/shared/geometry'
-import { SPRITE_TABLE_SCHEMA_VERSION, type SpriteTable } from '@/domain/sprite-table/types'
+import {
+  SPRITE_TABLE_SCHEMA_VERSION,
+  type SpriteTable,
+  type TextureFormat,
+} from '@/domain/sprite-table/types'
 
 export interface LooseSpriteImage {
   name: string
   size: Size
+  format?: TextureFormat
 }
 
 export interface LooseSpriteImportPlan {
@@ -13,7 +18,8 @@ export interface LooseSpriteImportPlan {
 }
 
 export function isLooseSpriteImage(name: string): boolean {
-  return name.toLocaleLowerCase().endsWith('.png')
+  const lowerName = name.toLocaleLowerCase()
+  return lowerName.endsWith('.png') || lowerName.endsWith('.dds')
 }
 
 function normalizeImageName(name: string): string {
@@ -22,7 +28,7 @@ function normalizeImageName(name: string): string {
 
 function fileStem(name: string): string {
   const normalized = normalizeImageName(name)
-  return normalized.slice(0, -4)
+  return normalized.replace(/\.[^.]+$/, '')
 }
 
 function spriteId(imageName: string): string {
@@ -39,7 +45,7 @@ export function createLooseSpriteImportPlan(
   images: LooseSpriteImage[],
 ): LooseSpriteImportPlan {
   assertImportPath(directoryName)
-  if (!images.length) throw new Error('No PNG images were selected for import.')
+  if (!images.length) throw new Error('No supported images were selected for import.')
 
   const names = new Set<string>()
   const spriteIds = new Set<string>()
@@ -73,7 +79,7 @@ export function createLooseSpriteImportPlan(
         id: spriteId(image.name),
         imagePath: `${directoryName}/${normalizeImageName(image.name)}`,
         size: image.size,
-        format: { container: 'png' as const },
+        format: image.format ?? { container: 'png' as const },
       })),
       sprites: images.map((image) => {
         const id = spriteId(image.name)

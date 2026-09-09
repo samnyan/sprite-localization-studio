@@ -3,6 +3,7 @@ import { isProjectRelativePath } from '@/application/storage/projectPath'
 import type { Point, Rect, Size } from '@/domain/shared/geometry'
 import {
   SPRITE_TABLE_SCHEMA_VERSION,
+  type DdsCompression,
   type TextureFormat,
   type SpriteTable,
   type Texture,
@@ -104,21 +105,84 @@ function parseRotation(value: unknown, field: string): SpriteRotation {
 
 function parseTextureFormat(value: unknown, field: string): TextureFormat {
   const object = expectObject(value, field)
-  if (object.container !== 'png') {
+  if (object.container === 'png') return { container: 'png' }
+
+  if (object.container !== 'dds') {
     throw new SpriteTableFormatError('invalidField', { field: `${field}.container` })
   }
 
-  return { container: 'png' }
+  const compression = object.compression
+  if (
+    compression !== 'bc1' &&
+    compression !== 'bc2' &&
+    compression !== 'bc3' &&
+    compression !== 'bc4' &&
+    compression !== 'bc5' &&
+    compression !== 'bc6h' &&
+    compression !== 'bc7'
+  ) {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.compression` })
+  }
+
+  const header = object.header
+  if (header !== 'legacy' && header !== 'dx10') {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.header` })
+  }
+
+  const fourCC = object.fourCC
+  if (
+    fourCC !== undefined &&
+    fourCC !== 'DXT1' &&
+    fourCC !== 'DXT3' &&
+    fourCC !== 'DXT5' &&
+    fourCC !== 'ATI1' &&
+    fourCC !== 'ATI2' &&
+    fourCC !== 'DX10'
+  ) {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.fourCC` })
+  }
+
+  const rawDxgiFormat = object.dxgiFormat
+  const dxgiFormat = typeof rawDxgiFormat === 'number' ? rawDxgiFormat : undefined
+  if (
+    (header === 'dx10' && (!Number.isInteger(dxgiFormat) || (dxgiFormat as number) < 0)) ||
+    (header === 'legacy' && rawDxgiFormat !== undefined)
+  ) {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.dxgiFormat` })
+  }
+
+  if (typeof object.srgb !== 'boolean') {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.srgb` })
+  }
+
+  if (!Number.isInteger(object.mipCount) || (object.mipCount as number) < 1) {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.mipCount` })
+  }
+
+  return {
+    container: 'dds',
+    compression: compression as DdsCompression,
+    header,
+    ...(fourCC === undefined ? {} : { fourCC }),
+    ...(dxgiFormat === undefined ? {} : { dxgiFormat }),
+    srgb: object.srgb as boolean,
+    mipCount: object.mipCount as number,
+  }
 }
 
 function parseTexture(value: unknown, index: number, schemaVersion: number): Texture {
   const field = `textures[${index}]`
   const object = expectObject(value, field)
   const imagePath = expectString(object, 'imagePath', field)
+  const format =
+    schemaVersion === 1
+      ? ({ container: 'png' } as const)
+      : parseTextureFormat(object.format, `${field}.format`)
 
   if (
     !isProjectRelativePath(imagePath) ||
-    !imagePath.toLowerCase().endsWith('.png') ||
+    (format.container === 'png' && !imagePath.toLowerCase().endsWith('.png')) ||
+    (format.container === 'dds' && !imagePath.toLowerCase().endsWith('.dds')) ||
     imagePath.toLowerCase().startsWith('textures/')
   ) {
     throw new SpriteTableFormatError('invalidPath', { path: imagePath })
@@ -128,10 +192,7 @@ function parseTexture(value: unknown, index: number, schemaVersion: number): Tex
     id: expectString(object, 'id', field),
     imagePath,
     size: parseSize(object.size, `${field}.size`),
-    format:
-      schemaVersion === 1
-        ? { container: 'png' }
-        : parseTextureFormat(object.format, `${field}.format`),
+    format,
   }
 }
 

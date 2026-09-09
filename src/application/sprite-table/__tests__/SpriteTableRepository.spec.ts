@@ -145,6 +145,41 @@ describe('parseSpriteTableManifest', () => {
     expect(spriteTable.textures[0]?.format).toEqual({ container: 'png' })
   })
 
+  it('accepts DDS format metadata in schema v2 manifests', () => {
+    const manifest = JSON.stringify({
+      schemaVersion: 2,
+      id: 'ui-common',
+      name: 'UI Common',
+      textures: [
+        {
+          id: 'atlas',
+          imagePath: 'ui/common/atlas.dds',
+          size: { width: 512, height: 512 },
+          format: {
+            container: 'dds',
+            compression: 'bc7',
+            header: 'dx10',
+            fourCC: 'DX10',
+            dxgiFormat: 99,
+            srgb: true,
+            mipCount: 10,
+          },
+        },
+      ],
+      sprites: [],
+    })
+
+    expect(parseSpriteTableManifest(manifest).textures[0]?.format).toEqual({
+      container: 'dds',
+      compression: 'bc7',
+      header: 'dx10',
+      fourCC: 'DX10',
+      dxgiFormat: 99,
+      srgb: true,
+      mipCount: 10,
+    })
+  })
+
   it('reports schema v1 manifests that can be upgraded', async () => {
     const files = new Map([['manifests/ui.json', manifestWith([])]])
     const storage = {

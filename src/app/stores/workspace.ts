@@ -38,7 +38,7 @@ import type { ProjectManifest } from '@/domain/project/types'
 import type { FontDiagnostic, ProjectFont } from '@/domain/font/types'
 import type { BackgroundTemplate, ImageResource, SpriteBackground } from '@/domain/resource/types'
 import type { Rect } from '@/domain/shared/geometry'
-import type { SpriteTable } from '@/domain/sprite-table/types'
+import type { SpriteTable, TextureFormat } from '@/domain/sprite-table/types'
 import {
   resolveBackgroundType,
   type SpriteTranslation,
@@ -54,6 +54,10 @@ import { projectFontRegistry } from '@/infrastructure/font/BrowserFontRegistry'
 import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitTypefaceCache'
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 import { getLogicalSpriteSize } from '@/infrastructure/image/spriteGeometry'
+import {
+  createTexturePreviewBlob,
+  parseTextureMetadata,
+} from '@/infrastructure/image/textureParser'
 
 type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'importing' | 'building' | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
@@ -101,6 +105,7 @@ interface LooseSpriteFile {
   data: Uint8Array
   name: string
   size: { width: number; height: number }
+  format: TextureFormat
 }
 
 const AUTOSAVE_DELAY_MS = 5_000
@@ -151,17 +156,9 @@ function createBuildSnapshot<T>(value: T): T {
 
 async function readLooseSpriteFile(handle: FileSystemFileHandle): Promise<LooseSpriteFile> {
   const file = await handle.getFile()
-  const bitmap = await createImageBitmap(file)
-  try {
-    return {
-      file,
-      data: new Uint8Array(await file.arrayBuffer()),
-      name: file.name,
-      size: { width: bitmap.width, height: bitmap.height },
-    }
-  } finally {
-    bitmap.close()
-  }
+  const data = await file.arrayBuffer()
+  const metadata = parseTextureMetadata(file.name, data)
+  return { file, data: new Uint8Array(data), name: file.name, ...metadata }
 }
 
 export async function loadBackgroundImages(
@@ -346,7 +343,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const session = documentSession
     const loading = (async () => {
       const data = await storage.readBinary(path)
-      const url = URL.createObjectURL(new Blob([data], { type: imageMimeType(path) }))
+      const blob = path.toLocaleLowerCase().endsWith('.dds')
+        ? await createTexturePreviewBlob(path, data)
+        : new Blob([data], { type: imageMimeType(path) })
+      const url = URL.createObjectURL(blob)
       if (session !== documentSession || activeStorage !== storage) {
         URL.revokeObjectURL(url)
         return undefined
@@ -757,7 +757,11 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       const plan = createLooseSpriteImportPlan(
         pending.directory.name,
-        files.map((file, index) => ({ name: pending.images[index]!.name, size: file.size })),
+        files.map((file, index) => ({
+          name: pending.images[index]!.name,
+          size: file.size,
+          format: file.format,
+        })),
       )
       await operation.storage.writeText(
         plan.manifestPath,
@@ -777,14 +781,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       if (!isCurrentResourceSession(operation)) return false
 
-      const importedUrls = Object.fromEntries(
-        plan.spriteTable.textures.map((texture, index) => {
-          const file = files[index]!
-          return [texture.id, URL.createObjectURL(file.file)]
-        }),
-      )
       spriteTables.value = [...spriteTables.value, plan.spriteTable]
-      textureImageUrls.value = { ...textureImageUrls.value, [plan.spriteTable.id]: importedUrls }
       selectedSpriteTableId.value = plan.spriteTable.id
       selectedSpriteId.value = undefined
       selectedTextRegionId.value = undefined

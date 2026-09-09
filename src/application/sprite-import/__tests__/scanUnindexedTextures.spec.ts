@@ -15,6 +15,23 @@ function pngHeader(width: number, height: number): ArrayBuffer {
   return data
 }
 
+function ddsHeader(width: number, height: number): ArrayBuffer {
+  const data = new ArrayBuffer(136)
+  const bytes = new Uint8Array(data)
+  const view = new DataView(data)
+  view.setUint32(0, 0x20534444, true)
+  view.setUint32(4, 124, true)
+  view.setUint32(12, height, true)
+  view.setUint32(16, width, true)
+  view.setUint32(28, 1, true)
+  view.setUint32(80, 4, true)
+  bytes.set(
+    Array.from('DXT1').map((character) => character.charCodeAt(0)),
+    84,
+  )
+  return data
+}
+
 function createStorage(initial: Record<string, string | ArrayBuffer>): ProjectStorage {
   const files = new Map(Object.entries(initial))
   return {
@@ -61,13 +78,14 @@ function createStorage(initial: Record<string, string | ArrayBuffer>): ProjectSt
 }
 
 describe('scanUnindexedTextures', () => {
-  it('skips indexed files and writes manifests with real PNG dimensions', async () => {
+  it('skips indexed files and writes manifests with parsed texture metadata', async () => {
     const storage = createStorage({
       'manifests/existing.sprite-table.json': JSON.stringify({
         textures: [{ imagePath: 'data_jp/common/Texture/TestMode/already.png' }],
       }),
       'textures/data_jp/common/Texture/TestMode/0.png': pngHeader(4000, 2000),
       'textures/data_jp/common/Texture/TestMode/1.png': pngHeader(32, 48),
+      'textures/data_jp/common/Texture/TestMode/2.dds': ddsHeader(64, 32),
       'textures/data_jp/common/Texture/TestMode/already.png': pngHeader(1, 1),
     })
     const progress: Array<[number, number]> = []
@@ -84,11 +102,12 @@ describe('scanUnindexedTextures', () => {
         imagePaths: [
           'data_jp/common/Texture/TestMode/0.png',
           'data_jp/common/Texture/TestMode/1.png',
+          'data_jp/common/Texture/TestMode/2.dds',
         ],
       },
     ])
-    expect(progress[0]).toEqual([0, 2])
-    expect(progress[progress.length - 1]).toEqual([2, 2])
+    expect(progress[0]).toEqual([0, 3])
+    expect(progress[progress.length - 1]).toEqual([3, 3])
     const manifest = JSON.parse(await storage.readText('manifests/data_jp.sprite-table.json')) as {
       schemaVersion: number
       textures: { id: string; size: { width: number; height: number } }[]
@@ -106,6 +125,19 @@ describe('scanUnindexedTextures', () => {
         imagePath: 'data_jp/common/Texture/TestMode/1.png',
         size: { width: 32, height: 48 },
         format: { container: 'png' },
+      },
+      {
+        id: 'common/Texture/TestMode/2',
+        imagePath: 'data_jp/common/Texture/TestMode/2.dds',
+        size: { width: 64, height: 32 },
+        format: {
+          container: 'dds',
+          compression: 'bc1',
+          header: 'legacy',
+          fourCC: 'DXT1',
+          srgb: false,
+          mipCount: 1,
+        },
       },
     ])
   })

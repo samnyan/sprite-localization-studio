@@ -73,6 +73,7 @@ describe('LooseSpriteImport', () => {
   })
   it('detects supported image extensions and rejects duplicate names', () => {
     expect(isLooseSpriteImage('BTN.PNG')).toBe(true)
+    expect(isLooseSpriteImage('BTN.DDS')).toBe(true)
     expect(isLooseSpriteImage('BTN.webp')).toBe(false)
     expect(() =>
       createLooseSpriteImportPlan('sprites', [
