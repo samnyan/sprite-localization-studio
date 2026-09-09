@@ -19,9 +19,11 @@ import { toast } from 'vue-sonner'
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
 import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
+import { createTextureTree, type TextureTreeNode } from '@/application/sprite-table/TextureTree'
 import SpritePreview from '@/components/sprite/SpritePreview.vue'
 import SpriteTableGrid from '@/components/sprite/SpriteTableGrid.vue'
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
+import TextureTreeNodeView from '@/components/workspace/TextureTreeNode.vue'
 import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
@@ -29,7 +31,13 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
@@ -48,6 +56,7 @@ const projectName = ref(workspace.project?.name ?? '')
 const saved = ref(false)
 const projectRenameOpen = ref(false)
 const projectRenameDraft = ref('')
+const expandedTexturePaths = ref(new Set<string>())
 
 const errorText = computed(() =>
   workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
@@ -59,8 +68,16 @@ const selectedImageUrl = computed(() => {
     ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
     : undefined
 })
+const textureTrees = computed(
+  () => new Map(workspace.spriteTables.map((table) => [table.id, createTextureTree(table)])),
+)
 const statusText = computed(() => {
-  if (workspace.status === 'opening') return t('status.opening')
+  if (workspace.status === 'opening') {
+    const progress = workspace.openProgress
+    return progress?.total
+      ? t('status.openingProgress', { completed: progress.completed, total: progress.total })
+      : t('status.opening')
+  }
   if (workspace.status === 'saving') return t('status.saving')
   if (workspace.status === 'importing') {
     const progress = workspace.importProgress
@@ -79,6 +96,7 @@ const statusText = computed(() => {
   return t('status.ready')
 })
 const operationProgress = computed(() => {
+  if (workspace.status === 'opening') return workspace.openProgress
   if (workspace.status === 'importing') return workspace.importProgress
   if (workspace.status === 'building') return workspace.buildProgress
   return undefined
@@ -128,13 +146,21 @@ const lastSavedText = computed(() => {
 const spriteTranslationEnabled = computed(() => workspace.selectedSpriteTranslation !== undefined)
 const selectedTextDiagnostics = computed(() => workspace.selectedTextDiagnostics)
 
-function isSpriteTranslationEnabled(spriteTableId: string, spriteId: string): boolean {
-  return (
-    workspace.project?.translations?.some(
-      (translation) =>
-        translation.spriteTableId === spriteTableId && translation.spriteId === spriteId,
-    ) ?? false
-  )
+function toggleTexturePath(path: string): void {
+  const next = new Set(expandedTexturePaths.value)
+  if (next.has(path)) next.delete(path)
+  else next.add(path)
+  expandedTexturePaths.value = next
+}
+
+function selectTextureDirectory(node: TextureTreeNode): void {
+  workspace.selectSpriteTable(node.spriteTableId)
+  workspace.selectTextureDirectory(node.path)
+}
+
+function selectTextureSprite(node: TextureTreeNode): void {
+  if (node.spriteId) workspace.openSprite(node.spriteTableId, node.spriteId)
+  else selectTextureDirectory(node)
 }
 
 watch(
@@ -404,7 +430,9 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                 class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-5 text-left hover:bg-accent"
                 :class="{
                   'bg-accent':
-                    workspace.selectedSpriteTableId === spriteTable.id && !workspace.selectedSpriteId,
+                    workspace.selectedSpriteTableId === spriteTable.id &&
+                    !workspace.selectedSpriteId &&
+                    !workspace.selectedTextureDirectory,
                 }"
                 @click="workspace.selectSpriteTable(spriteTable.id)"
               >
@@ -415,25 +443,18 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                   spriteTable.sprites.length
                 }}</span>
               </button>
-              <template v-if="workspace.mode === 'sprites'">
-                <button
-                  v-for="sprite in spriteTable.sprites"
-                  :key="sprite.id"
-                  type="button"
-                  class="flex w-full items-center gap-2 rounded py-1.5 pr-2 pl-9 text-left hover:bg-accent"
-                  :class="{
-                    'bg-accent':
-                      workspace.selectedSpriteTableId === spriteTable.id &&
-                      workspace.selectedSpriteId === sprite.id,
-                    'font-semibold': isSpriteTranslationEnabled(spriteTable.id, sprite.id),
-                  }"
-                  @click="workspace.openSprite(spriteTable.id, sprite.id)"
-                >
-                  <Image class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{
-                    sprite.name
-                  }}</span>
-                </button>
-              </template>
+              <TextureTreeNodeView
+                v-for="node in textureTrees.get(spriteTable.id)"
+                :key="node.path"
+                :node="node"
+                :depth="3"
+                :expanded-paths="expandedTexturePaths"
+                :selected-directory="workspace.selectedTextureDirectory"
+                :selected-sprite-id="workspace.selectedSpriteId"
+                @toggle="toggleTexturePath"
+                @select-directory="selectTextureDirectory"
+                @select-sprite="selectTextureSprite"
+              />
             </div>
             <p v-if="workspace.spriteTables.length === 0" class="px-2 py-3 text-muted-foreground">
               {{ t('workspace.noSpriteTables') }}
@@ -474,11 +495,10 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
           </div>
         </div>
         <SpriteTableGrid
-          v-else-if="
-            workspace.selectedSpriteTable && workspace.spriteManagementView === 'grid'
-          "
+          v-else-if="workspace.selectedSpriteTable && workspace.spriteManagementView === 'grid'"
           :sprite-table="workspace.selectedSpriteTable"
           :texture-urls="workspace.textureImageUrls[workspace.selectedSpriteTable.id] ?? {}"
+          :visible-sprite-ids="workspace.selectedTextureIds"
           :selected-sprite-id="workspace.selectedSpriteId"
           :preview-background="workspace.previewBackground"
           @select="workspace.selectSprite(workspace.selectedSpriteTable!.id, $event)"
@@ -677,7 +697,9 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                 aria-live="polite"
                 :aria-label="t('translation.issues', selectedTextDiagnostics.length)"
               >
-                <ul class="space-y-1 rounded border border-destructive/30 bg-destructive/5 p-2 text-destructive">
+                <ul
+                  class="space-y-1 rounded border border-destructive/30 bg-destructive/5 p-2 text-destructive"
+                >
                   <li
                     v-for="diagnostic in selectedTextDiagnostics"
                     :key="JSON.stringify([diagnostic.code, diagnostic.fontId])"
@@ -785,14 +807,18 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
 
     <Dialog v-model:open="projectRenameOpen">
       <DialogContent class="sm:max-w-md" :show-close-button="false">
-        <DialogHeader><DialogTitle>{{ t('project.rename') }}</DialogTitle></DialogHeader>
+        <DialogHeader
+          ><DialogTitle>{{ t('project.rename') }}</DialogTitle></DialogHeader
+        >
         <Input
           v-model="projectRenameDraft"
           :aria-label="t('project.name')"
           @keyup.enter="renameProject"
         />
         <DialogFooter>
-          <Button variant="outline" @click="projectRenameOpen = false">{{ t('common.cancel') }}</Button>
+          <Button variant="outline" @click="projectRenameOpen = false">{{
+            t('common.cancel')
+          }}</Button>
           <Button
             :disabled="!projectRenameDraft.trim() || workspace.isBusy"
             data-testid="confirm-project-rename"

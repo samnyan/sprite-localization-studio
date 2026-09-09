@@ -18,6 +18,7 @@ const props = withDefaults(
     textureUrls: Record<string, string>
     selectedSpriteId?: string
     previewBackground?: PreviewBackground
+    visibleSpriteIds?: Set<string>
   }>(),
   { previewBackground: 'transparent' },
 )
@@ -42,19 +43,23 @@ const viewportHeight = computed(() => height.value || 480)
 const columns = computed(() =>
   Math.max(1, Math.floor((viewportWidth.value - padding * 2 + gap) / (thumbnailSize.value + gap))),
 )
-const rowCount = computed(() => Math.ceil(props.spriteTable.sprites.length / columns.value))
-const rowHeight = computed(() => itemHeight.value + gap)
-const startRow = computed(() =>
-  Math.max(0, Math.floor(y.value / rowHeight.value) - overscanRows),
+const visibleSprites = computed(() =>
+  props.spriteTable.sprites.filter(
+    (sprite) => !props.visibleSpriteIds || props.visibleSpriteIds.has(sprite.id),
+  ),
 )
+
+const rowCount = computed(() => Math.ceil(visibleSprites.value.length / columns.value))
+const rowHeight = computed(() => itemHeight.value + gap)
+const startRow = computed(() => Math.max(0, Math.floor(y.value / rowHeight.value) - overscanRows))
 const endRow = computed(() =>
   Math.min(
     rowCount.value,
     Math.ceil((y.value + viewportHeight.value) / rowHeight.value) + overscanRows,
   ),
 )
-const visibleSprites = computed(() =>
-  props.spriteTable.sprites.slice(startRow.value * columns.value, endRow.value * columns.value),
+const virtualSprites = computed(() =>
+  visibleSprites.value.slice(startRow.value * columns.value, endRow.value * columns.value),
 )
 const totalHeight = computed(() => rowCount.value * rowHeight.value + padding * 2)
 const gridStyle = computed(() => ({
@@ -117,14 +122,7 @@ async function drawThumbnail(sprite: Sprite): Promise<void> {
     context.scale(scale, scale)
     context.translate(sprite.trimOffset?.x ?? 0, sprite.trimOffset?.y ?? 0)
     const transform = getStoredToLogicalTransform(sprite)
-    context.transform(
-      transform.a,
-      transform.b,
-      transform.c,
-      transform.d,
-      transform.e,
-      transform.f,
-    )
+    context.transform(transform.a, transform.b, transform.c, transform.d, transform.e, transform.f)
     context.drawImage(
       image,
       sprite.frame.x,
@@ -144,11 +142,11 @@ async function drawThumbnail(sprite: Sprite): Promise<void> {
 
 async function drawVisibleThumbnails(): Promise<void> {
   await nextTick()
-  await Promise.all(visibleSprites.value.map((sprite) => drawThumbnail(sprite)))
+  await Promise.all(virtualSprites.value.map((sprite) => drawThumbnail(sprite)))
 }
 
 watch(
-  [visibleSprites, thumbnailSize, () => props.textureUrls],
+  [virtualSprites, thumbnailSize, () => props.textureUrls],
   () => void drawVisibleThumbnails(),
   { deep: true, flush: 'post', immediate: true },
 )
@@ -160,7 +158,7 @@ watch(
       <div class="min-w-0">
         <h1 class="truncate text-sm font-semibold">{{ spriteTable.name }}</h1>
         <p class="text-xs text-muted-foreground">
-          {{ t('spriteGrid.spriteCount', { count: spriteTable.sprites.length }) }}
+          {{ t('spriteGrid.spriteCount', { count: visibleSprites.length }) }}
         </p>
       </div>
       <label class="ml-auto flex w-56 items-center gap-3 text-xs text-muted-foreground">
@@ -175,18 +173,14 @@ watch(
         <span class="w-10 shrink-0 text-right tabular-nums">{{ thumbnailSize }} px</span>
       </label>
     </header>
-    <div
-      ref="viewport"
-      class="min-h-0 flex-1 overflow-auto"
-      data-testid="sprite-grid-viewport"
-    >
-      <div v-if="spriteTable.sprites.length === 0" class="p-6 text-center text-sm text-muted-foreground">
+    <div ref="viewport" class="min-h-0 flex-1 overflow-auto" data-testid="sprite-grid-viewport">
+      <div v-if="visibleSprites.length === 0" class="p-6 text-center text-sm text-muted-foreground">
         {{ t('spriteGrid.empty') }}
       </div>
       <div v-else class="relative" :style="{ height: `${totalHeight}px` }">
         <div class="absolute grid justify-center gap-2" :style="gridStyle">
           <button
-            v-for="sprite in visibleSprites"
+            v-for="sprite in virtualSprites"
             :key="sprite.id"
             type="button"
             class="flex flex-col gap-1 rounded-md p-1 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/60"

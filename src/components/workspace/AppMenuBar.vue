@@ -28,6 +28,7 @@ const emit = defineEmits<{
   newProject: []
   openProject: []
   importSprites: []
+  scanTextures: []
   saveProject: []
   undo: []
   redo: []
@@ -72,6 +73,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleShortcut))
           >
           <MenubarItem :disabled="busy || !projectPath" @select="emit('importSprites')">
             {{ t('menu.importSprites') }}
+          </MenubarItem>
+          <MenubarItem :disabled="busy || !projectPath" @select="emit('scanTextures')">
+            {{ t('menu.scanTextures') }}
           </MenubarItem>
           <MenubarSeparator />
           <MenubarItem :disabled="busy || !projectPath" @select="emit('saveProject')"

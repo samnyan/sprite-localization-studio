@@ -30,18 +30,30 @@ function handleOpenChange(open: boolean): void {
   <AlertDialog :open="open" @update:open="handleOpenChange">
     <AlertDialogContent>
       <AlertDialogHeader>
-        <AlertDialogTitle>{{ t('spriteImport.title') }}</AlertDialogTitle>
+        <AlertDialogTitle>
+          {{ t(preview?.mode === 'scan' ? 'spriteImport.scanTitle' : 'spriteImport.title') }}
+        </AlertDialogTitle>
         <AlertDialogDescription>
           {{
-            t('spriteImport.description', {
-              count: preview?.imageCount ?? 0,
-              directory: preview?.directoryName ?? '',
-            })
+            t(
+              preview?.mode === 'scan'
+                ? 'spriteImport.scanDescription'
+                : 'spriteImport.description',
+              {
+                count: preview?.imageCount ?? 0,
+                directory: preview?.directoryName ?? '',
+              },
+            )
           }}
         </AlertDialogDescription>
       </AlertDialogHeader>
       <p class="text-sm text-muted-foreground">
-        {{ t('spriteImport.destination', { directory: preview?.directoryName ?? '' }) }}
+        {{
+          t(
+            preview?.mode === 'scan' ? 'spriteImport.scanDestination' : 'spriteImport.destination',
+            { directory: preview?.directoryName ?? '' },
+          )
+        }}
       </p>
       <AlertDialogFooter>
         <Button variant="outline" :disabled="busy" @click="emit('cancel')">
@@ -49,7 +61,11 @@ function handleOpenChange(open: boolean): void {
         </Button>
         <Button :disabled="busy" @click="emit('confirm')">
           <Spinner v-if="busy" />
-          {{ t('spriteImport.confirm', { count: preview?.imageCount ?? 0 }) }}
+          {{
+            t(preview?.mode === 'scan' ? 'spriteImport.scanConfirm' : 'spriteImport.confirm', {
+              count: preview?.imageCount ?? 0,
+            })
+          }}
         </Button>
       </AlertDialogFooter>
     </AlertDialogContent>

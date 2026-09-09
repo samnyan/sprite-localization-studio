@@ -8,6 +8,10 @@ import {
   createLooseSpriteImportPlan,
   isLooseSpriteImage,
 } from '@/application/sprite-import/LooseSpriteImport'
+import {
+  findUnindexedTextureGroups,
+  scanUnindexedTextures,
+} from '@/application/sprite-import/scanUnindexedTextures'
 import { collectTextDiagnostics, type TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import { collectTextFontDiagnostics } from '@/application/qa/TextFontDiagnostics'
 import { collectTextLayoutDiagnostics } from '@/application/qa/TextLayoutDiagnostics'
@@ -51,14 +55,7 @@ import { canvasKitTypefaceCache } from '@/infrastructure/rendering/CanvasKitType
 import { supportsLocalFolderProjects } from '@/infrastructure/storage/browserSupport'
 import { getLogicalSpriteSize } from '@/infrastructure/image/spriteGeometry'
 
-type WorkspaceStatus =
-  | 'idle'
-  | 'opening'
-  | 'ready'
-  | 'saving'
-  | 'importing'
-  | 'building'
-  | 'error'
+type WorkspaceStatus = 'idle' | 'opening' | 'ready' | 'saving' | 'importing' | 'building' | 'error'
 export type WorkspaceMode = 'sprites' | 'translations'
 export type PreviewBackground = 'transparent' | 'black' | 'white'
 export type DefaultTranslationBackground = 'original' | 'blank'
@@ -89,13 +86,14 @@ interface BackgroundLoadResult {
 }
 
 export interface LooseSpriteImportPreview {
+  mode: 'import' | 'scan'
   directoryName: string
   imageCount: number
 }
 
 interface PendingLooseSpriteImport {
   directory: FileSystemDirectoryHandle
-  images: FileSystemFileHandle[]
+  images: { handle: FileSystemFileHandle; name: string }[]
 }
 
 interface LooseSpriteFile {
@@ -155,10 +153,12 @@ async function readLooseSpriteFile(handle: FileSystemFileHandle): Promise<LooseS
 export async function loadBackgroundImages(
   storage: ProjectStorage,
   backgrounds: ImageResource[],
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<BackgroundLoadResult> {
   const urls: BackgroundImageUrls = {}
   const diagnostics: BackgroundDiagnostic[] = []
-  for (const background of backgrounds) {
+  onProgress?.(0, backgrounds.length)
+  for (const [index, background] of backgrounds.entries()) {
     try {
       const data = await storage.readBinary(background.path)
       urls[background.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
@@ -169,6 +169,7 @@ export async function loadBackgroundImages(
         message: error instanceof Error ? error.message : 'Unable to load background image.',
       })
     }
+    onProgress?.(index + 1, backgrounds.length)
   }
   return { urls, diagnostics }
 }
@@ -181,9 +182,26 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const projectFonts = ref<ProjectFont[]>([])
   const fontDiagnostics = ref<FontDiagnostic[]>([])
   const backgroundDiagnostics = ref<BackgroundDiagnostic[]>([])
+  const openProgress = ref<LocalizedTextureBuildProgress>()
   const selectedSpriteTableId = ref<string>()
   const selectedSpriteId = ref<string>()
   const selectedTextRegionId = ref<string>()
+  const selectedTextureDirectory = ref<string>()
+  const selectedTextureIds = computed(() => {
+    const prefix = selectedTextureDirectory.value
+    const table = selectedSpriteTable.value
+    if (!table) return new Set<string>()
+    return new Set(
+      table.textures
+        .filter(
+          (texture) =>
+            !prefix ||
+            texture.imagePath.split('/').slice(0, -1).join('/') === prefix ||
+            texture.imagePath.startsWith(`${prefix}/`),
+        )
+        .map((texture) => texture.id),
+    )
+  })
   const directoryName = ref('')
   const status = ref<WorkspaceStatus>('idle')
   const error = ref<WorkspaceError>()
@@ -208,6 +226,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   let documentSession = 0
   let activeResourceOperation: ResourceOperation | undefined
   let pendingLooseSpriteImport: PendingLooseSpriteImport | undefined
+  let pendingTextureScan = false
 
   const hasProject = computed(() => project.value !== undefined)
   const isBusy = computed(
@@ -289,8 +308,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   async function loadTextureImages(
     storage: ProjectStorage,
     loadedSpriteTables: SpriteTable[],
+    onProgress?: (completed: number, total: number) => void,
   ): Promise<TextureImageUrls> {
     const urls: TextureImageUrls = {}
+    const total = loadedSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
+    let completed = 0
+    onProgress?.(0, total)
 
     try {
       for (const spriteTable of loadedSpriteTables) {
@@ -299,6 +322,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         for (const texture of spriteTable.textures) {
           const data = await storage.readBinary(`textures/${texture.imagePath}`)
           textureUrls[texture.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
+          completed += 1
+          onProgress?.(completed, total)
         }
       }
       return urls
@@ -479,6 +504,116 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return false
   }
 
+  async function prepareScanUnindexedTextures(): Promise<LooseSpriteImportPreview | undefined> {
+    if (!project.value || !activeStorage) {
+      failProjectNotOpen()
+      return undefined
+    }
+    if (isBusy.value || activeResourceOperation) return undefined
+
+    try {
+      const groups = await findUnindexedTextureGroups(
+        activeStorage,
+        project.value.spriteTableManifestPaths ?? [],
+      )
+      const imageCount = groups.reduce((sum, group) => sum + group.images.length, 0)
+      if (!imageCount) {
+        status.value = 'error'
+        error.value = { key: 'errors.spriteImport.noUnindexedTextures' }
+        return undefined
+      }
+      pendingTextureScan = true
+      error.value = undefined
+      return { mode: 'scan', directoryName: 'textures', imageCount }
+    } catch (caughtError) {
+      status.value = 'error'
+      error.value = workspaceErrorFrom(caughtError)
+      return undefined
+    }
+  }
+
+  async function scanUnindexedProjectTextures(): Promise<boolean> {
+    if (!pendingTextureScan || !project.value || !activeStorage || activeResourceOperation) {
+      return false
+    }
+    const operation = beginResourceOperation()
+    if (!operation) return false
+    let results: Awaited<ReturnType<typeof scanUnindexedTextures>> = []
+    let projectPersisted = false
+    try {
+      status.value = 'importing'
+      importProgress.value = { completed: 0, total: 0 }
+      results = await scanUnindexedTextures(
+        operation.storage,
+        operation.project.spriteTableManifestPaths ?? [],
+        (completed, total) => {
+          importProgress.value = { completed, total }
+        },
+      )
+      if (!results.length) {
+        status.value = 'ready'
+        return false
+      }
+
+      const updatedProject: ProjectManifest = {
+        ...operation.project,
+        spriteTableManifestPaths: [
+          ...(operation.project.spriteTableManifestPaths ?? []),
+          ...results.map((result) => result.manifestPath),
+        ],
+      }
+      if (!(await persistAssetProject(operation, updatedProject))) {
+        for (const result of results)
+          await removeResourceFile(operation.storage, result.manifestPath)
+        return false
+      }
+      projectPersisted = true
+      status.value = 'importing'
+      const loadedSpriteTables = await new SpriteTableRepository(operation.storage).loadMany(
+        updatedProject.spriteTableManifestPaths ?? [],
+      )
+      const existingTableIds = new Set(spriteTables.value.map((table) => table.id))
+      const newSpriteTables = loadedSpriteTables.filter((table) => !existingTableIds.has(table.id))
+      const newTextureCount = newSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
+      const scanTextureCount = results.reduce((sum, result) => sum + result.imagePaths.length, 0)
+      const reloadTotal = scanTextureCount + newTextureCount
+      importProgress.value = { completed: scanTextureCount, total: reloadTotal }
+      const loadedImageUrls = await loadTextureImages(
+        operation.storage,
+        newSpriteTables,
+        (completed) => {
+          importProgress.value = { completed: scanTextureCount + completed, total: reloadTotal }
+        },
+      )
+      if (!isCurrentResourceSession(operation)) {
+        revokeTextureImageUrls(loadedImageUrls)
+        return false
+      }
+      project.value = updatedProject
+      spriteTables.value = loadedSpriteTables
+      textureImageUrls.value = { ...textureImageUrls.value, ...loadedImageUrls }
+      selectedSpriteTableId.value = loadedSpriteTables[loadedSpriteTables.length - 1]?.id
+      selectedSpriteId.value = undefined
+      selectedTextureDirectory.value = undefined
+      spriteManagementView.value = 'grid'
+      mode.value = 'sprites'
+      return true
+    } catch (caughtError) {
+      if (!projectPersisted) {
+        for (const result of results)
+          await removeResourceFile(operation.storage, result.manifestPath)
+      }
+      if (isCurrentResourceSession(operation)) {
+        status.value = 'error'
+        error.value = workspaceErrorFrom(caughtError)
+      }
+      return false
+    } finally {
+      pendingTextureScan = false
+      importProgress.value = undefined
+      finishResourceOperation(operation)
+    }
+  }
   async function prepareLooseSpriteImport(): Promise<LooseSpriteImportPreview | undefined> {
     if (!project.value || !activeStorage) {
       failProjectNotOpen()
@@ -493,12 +628,17 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     try {
       const directory = await window.showDirectoryPicker({ mode: 'read' })
-      const images: FileSystemFileHandle[] = []
-      for await (const entry of directory.values()) {
-        if (entry.kind === 'file' && isLooseSpriteImage(entry.name)) {
-          images.push(entry as FileSystemFileHandle)
+      const images: { handle: FileSystemFileHandle; name: string }[] = []
+      async function collect(handle: FileSystemDirectoryHandle, prefix = ''): Promise<void> {
+        for await (const entry of handle.values()) {
+          const name = prefix ? `${prefix}/${entry.name}` : entry.name
+          if (entry.kind === 'file' && isLooseSpriteImage(entry.name))
+            images.push({ handle: entry as FileSystemFileHandle, name })
+          else if (entry.kind === 'directory')
+            await collect(entry as FileSystemDirectoryHandle, name)
         }
       }
+      await collect(directory)
       images.sort((left, right) => left.name.localeCompare(right.name))
       if (!images.length) {
         failLooseSpriteImport('emptyDirectory')
@@ -519,7 +659,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
       pendingLooseSpriteImport = { directory, images }
       error.value = undefined
-      return { directoryName: directory.name, imageCount: images.length }
+      return { mode: 'import', directoryName: directory.name, imageCount: images.length }
     } catch (caughtError) {
       if (caughtError instanceof DOMException && caughtError.name === 'AbortError') return undefined
       status.value = 'error'
@@ -530,6 +670,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
   function cancelLooseSpriteImport(): void {
     pendingLooseSpriteImport = undefined
+    pendingTextureScan = false
   }
 
   async function importPreparedLooseSprites(): Promise<boolean> {
@@ -562,7 +703,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       importProgress.value = { completed: 0, total: pending.images.length }
       const files: LooseSpriteFile[] = []
       for (const [index, handle] of pending.images.entries()) {
-        const file = await readLooseSpriteFile(handle)
+        const file = await readLooseSpriteFile(handle.handle)
         const texture = previewPlan.spriteTable.textures[index]!
         const texturePath = `textures/${texture.imagePath}`
         await operation.storage.writeBinary(texturePath, file.data)
@@ -572,7 +713,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       }
       const plan = createLooseSpriteImportPlan(
         pending.directory.name,
-        files.map(({ name, size }) => ({ name, size })),
+        files.map((file, index) => ({ name: pending.images[index]!.name, size: file.size })),
       )
       await operation.storage.writeText(
         plan.manifestPath,
@@ -698,30 +839,41 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     loadedProject: ProjectManifest,
     activation: number,
   ): Promise<boolean> {
+    openProgress.value = { completed: 0, total: 1 }
     const loadedSpriteTables = await new SpriteTableRepository(storage).loadMany(
       loadedProject.spriteTableManifestPaths ?? [],
     )
     if (activation !== projectActivation) return false
-    const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables)
+    const backgrounds = [
+      ...(loadedProject.backgroundTemplates ?? []),
+      ...(loadedProject.spriteBackgrounds ?? []),
+    ]
+    const textureCount = loadedSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
+    const total = 1 + textureCount + backgrounds.length + 1
+    openProgress.value = { completed: 1, total }
+    const loadedImageUrls = await loadTextureImages(storage, loadedSpriteTables, (completed) => {
+      openProgress.value = { completed: 1 + completed, total }
+    })
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
       return false
     }
-    const loadedBackgrounds = await loadBackgroundImages(storage, [
-      ...(loadedProject.backgroundTemplates ?? []),
-      ...(loadedProject.spriteBackgrounds ?? []),
-    ])
+    const loadedBackgrounds = await loadBackgroundImages(storage, backgrounds, (completed) => {
+      openProgress.value = { completed: 1 + textureCount + completed, total }
+    })
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
       revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
+    openProgress.value = { completed: total - 1, total }
     const loadedFonts = await scanProjectFonts(storage)
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
       revokeBackgroundImageUrls(loadedBackgrounds.urls)
       return false
     }
+    openProgress.value = { completed: total, total }
     const fontRegistration = await projectFontRegistry.register(storage, loadedFonts.fonts)
     if (activation !== projectActivation) {
       revokeTextureImageUrls(loadedImageUrls)
@@ -764,6 +916,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     const activation = ++projectActivation
     status.value = 'opening'
+    openProgress.value = { completed: 0, total: 1 }
     error.value = undefined
     try {
       const directory = await window.showDirectoryPicker({ mode: 'readwrite' })
@@ -777,15 +930,18 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (!(await activateProject(directory, storage, repository, loadedProject, activation)))
         return false
       status.value = 'ready'
+      openProgress.value = undefined
       return true
     } catch (caughtError) {
       if (activation !== projectActivation) return false
       if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
         status.value = project.value ? 'ready' : 'idle'
+        openProgress.value = undefined
         return false
       }
       status.value = 'error'
       error.value = workspaceErrorFrom(caughtError)
+      openProgress.value = undefined
       return false
     }
   }
@@ -799,6 +955,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
 
     const activation = ++projectActivation
     status.value = 'opening'
+    openProgress.value = { completed: 0, total: 1 }
     error.value = undefined
     try {
       const directory = await window.showDirectoryPicker({ mode: 'readwrite' })
@@ -812,15 +969,18 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       if (!(await activateProject(directory, storage, repository, loadedProject, activation)))
         return false
       status.value = 'ready'
+      openProgress.value = undefined
       return true
     } catch (caughtError) {
       if (activation !== projectActivation) return false
       if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
         status.value = project.value ? 'ready' : 'idle'
+        openProgress.value = undefined
         return false
       }
       status.value = 'error'
       error.value = workspaceErrorFrom(caughtError)
+      openProgress.value = undefined
       return false
     }
   }
@@ -1524,16 +1684,23 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const spriteTable = spriteTables.value.find((item) => item.id === spriteTableId)
     selectedSpriteTableId.value = spriteTable?.id
     selectedSpriteId.value = undefined
+    selectedTextureDirectory.value = undefined
     selectedTextRegionId.value = undefined
     spriteManagementView.value = 'grid'
   }
 
+  function selectTextureDirectory(directory?: string): void {
+    selectedTextureDirectory.value = directory
+    selectedSpriteId.value = undefined
+    spriteManagementView.value = 'grid'
+  }
   function selectSprite(spriteTableId: string, spriteId: string): void {
     const spriteTable = spriteTables.value.find((item) => item.id === spriteTableId)
     const sprite = spriteTable?.sprites.find((item) => item.id === spriteId)
     if (!spriteTable || !sprite) return
     selectedSpriteTableId.value = spriteTable.id
     selectedSpriteId.value = sprite.id
+    selectedTextureDirectory.value = undefined
     selectedTextRegionId.value = undefined
   }
 
@@ -1566,6 +1733,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   function selectProject(): void {
     selectedSpriteTableId.value = undefined
     selectedSpriteId.value = undefined
+    selectedTextureDirectory.value = undefined
     selectedTextRegionId.value = undefined
   }
 
@@ -1584,6 +1752,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   return {
     project,
     spriteTables,
+    directoryName,
+
     textureImageUrls,
     backgroundImageUrls,
     projectFonts,
@@ -1600,7 +1770,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     selectedSpriteTranslation,
     selectedTextRegion,
     selectedBackgroundTemplate,
-    directoryName,
+    selectedTextureDirectory,
+    selectedTextureIds,
+    selectTextureDirectory,
+
     status,
     error,
     hasProject,
@@ -1617,11 +1790,14 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     lastBuildReport,
     buildProgress,
     importProgress,
+    openProgress,
     lastSavedAt,
     openLocalProject,
     createLocalProject,
     saveProject,
     prepareLooseSpriteImport,
+    prepareScanUnindexedTextures,
+    scanUnindexedProjectTextures,
     cancelLooseSpriteImport,
     importPreparedLooseSprites,
     buildTextures,

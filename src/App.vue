@@ -24,13 +24,31 @@ async function prepareLooseSpriteImport(): Promise<void> {
   looseSpriteImport.value = await workspace.prepareLooseSpriteImport()
 }
 
+async function prepareScanTextures(): Promise<void> {
+  looseSpriteImport.value = await workspace.prepareScanUnindexedTextures()
+}
+
 async function importLooseSprites(): Promise<void> {
   const preview = looseSpriteImport.value
   if (!preview) return
-  if (await workspace.importPreparedLooseSprites()) {
-    toast.success(t('spriteImport.success', { count: preview.imageCount }), {
-      description: t('spriteImport.successDescription', { directory: preview.directoryName }),
-    })
+  const success =
+    preview.mode === 'scan'
+      ? await workspace.scanUnindexedProjectTextures()
+      : await workspace.importPreparedLooseSprites()
+  if (success) {
+    toast.success(
+      t(preview.mode === 'scan' ? 'spriteImport.scanSuccess' : 'spriteImport.success', {
+        count: preview.imageCount,
+      }),
+      {
+        description: t(
+          preview.mode === 'scan'
+            ? 'spriteImport.scanSuccessDescription'
+            : 'spriteImport.successDescription',
+          { directory: preview.directoryName },
+        ),
+      },
+    )
   }
   workspace.cancelLooseSpriteImport()
   looseSpriteImport.value = undefined
@@ -54,6 +72,7 @@ function cancelLooseSpriteImport(): void {
       @new-project="newProject"
       @open-project="workspace.openLocalProject"
       @import-sprites="prepareLooseSpriteImport"
+      @scan-textures="prepareScanTextures"
       @save-project="workspace.saveProject"
       @undo="workspace.undo"
       @redo="workspace.redo"
@@ -67,7 +86,7 @@ function cancelLooseSpriteImport(): void {
     <LooseSpriteImportDialog
       :open="looseSpriteImport !== undefined"
       :preview="looseSpriteImport"
-      :busy="workspace.status === 'importing'"
+      :busy="workspace.isBusy"
       @confirm="importLooseSprites"
       @cancel="cancelLooseSpriteImport"
     />

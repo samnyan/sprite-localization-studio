@@ -291,6 +291,7 @@ describe('workspace texture builds', () => {
     )
 
     await expect(workspace.prepareLooseSpriteImport()).resolves.toEqual({
+      mode: 'import',
       directoryName: 'spr_ent_name',
       imageCount: 1,
     })

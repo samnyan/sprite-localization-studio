@@ -128,7 +128,7 @@ describe('WorkspaceView', () => {
     expect(wrapper.text()).toContain('button_start')
     const resourceItems = wrapper.findAll('aside button').map((button) => button.text())
     expect(resourceItems.some((item) => item.startsWith('UI Table'))).toBe(true)
-    expect(resourceItems).toContain('button_start')
+    expect(resourceItems).not.toContain('button_start')
     expect(wrapper.text()).toContain('90°')
     expect(wrapper.text()).toContain('180 × 100')
     expect(wrapper.find('[data-testid="sprite-preview"]').exists()).toBe(true)
@@ -145,20 +145,24 @@ describe('WorkspaceView', () => {
       name: 'Example',
       translations: [{ spriteTableId: 'ui', spriteId: 'button', textRegions: [] }],
     }
-    workspace.spriteTables = [{
-      schemaVersion: 1,
-      id: 'ui',
-      name: 'UI Table',
-      textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 32, height: 32 } }],
-      sprites: [{
-        id: 'button',
-        name: 'Button',
-        textureId: 'atlas',
-        frame: { x: 0, y: 0, width: 32, height: 32 },
-        rotation: 0,
-        trimmed: false,
-      }],
-    }]
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI Table',
+        textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 32, height: 32 } }],
+        sprites: [
+          {
+            id: 'button',
+            name: 'Button',
+            textureId: 'atlas',
+            frame: { x: 0, y: 0, width: 32, height: 32 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
     workspace.textureImageUrls = { ui: { atlas: 'blob:atlas' } }
     workspace.selectSpriteTable('ui')
     const wrapper = mount(WorkspaceView, {
@@ -185,12 +189,7 @@ describe('WorkspaceView', () => {
 
     expect(workspace.spriteManagementView).toBe('editor')
     expect(wrapper.find('[data-testid="sprite-preview"]').exists()).toBe(true)
-    expect(
-      wrapper
-        .findAll('aside button')
-        .find((button) => button.text() === 'Button')
-        ?.classes(),
-    ).toContain('bg-accent')
+    expect(workspace.selectedSpriteId).toBe('button')
   })
 
   it('creates a full-size text region from the inspector action', async () => {
@@ -207,29 +206,38 @@ describe('WorkspaceView', () => {
       name: 'Example',
       translations: [{ spriteTableId: 'ui', spriteId: 'button', textRegions: [] }],
     }
-    workspace.spriteTables = [{
-      schemaVersion: 1,
-      id: 'ui',
-      name: 'UI Table',
-      textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 80, height: 32 } }],
-      sprites: [{
-        id: 'button',
-        name: 'Button',
-        textureId: 'atlas',
-        frame: { x: 0, y: 0, width: 80, height: 32 },
-        rotation: 0,
-        trimmed: false,
-      }],
-    }]
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI Table',
+        textures: [{ id: 'atlas', imagePath: 'ui.png', size: { width: 80, height: 32 } }],
+        sprites: [
+          {
+            id: 'button',
+            name: 'Button',
+            textureId: 'atlas',
+            frame: { x: 0, y: 0, width: 80, height: 32 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
     workspace.openSprite('ui', 'button')
     const wrapper = mount(WorkspaceView, {
       global: {
         plugins: [pinia, i18n],
-        stubs: { SpritePreview: { template: '<div data-testid="sprite-preview"></div>' } },
+        stubs: {
+          SpritePreview: { template: '<div data-testid="sprite-preview"></div>' },
+          SpriteTableGrid: { template: '<div data-testid="sprite-grid"></div>' },
+        },
       },
     })
 
-    expect(wrapper.text()).toContain('Click + or drag in the preview to create a translation text region.')
+    expect(wrapper.text()).toContain(
+      'Click + or drag in the preview to create a translation text region.',
+    )
     await wrapper.get('[aria-label="Add full-size text region"]').trigger('click')
 
     expect(workspace.selectedSpriteTranslation?.textRegions).toEqual([
@@ -304,6 +312,22 @@ describe('WorkspaceView', () => {
     )
   })
 
+  it('shows project opening progress in the status bar', () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.status = 'opening'
+    workspace.openProgress = { completed: 8, total: 24 }
+    const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
+
+    expect(wrapper.find('footer').text()).toContain('Opening project 8/24…')
+    expect(wrapper.get('[data-slot="progress"]').attributes('aria-label')).toBe(
+      'Opening project 8/24…',
+    )
+  })
+
   it('shows loose sprite import progress in the status bar', () => {
     const pinia = createPinia()
     setActivePinia(pinia)
@@ -348,47 +372,65 @@ describe('WorkspaceView', () => {
     workspace.project = {
       schemaVersion: 3,
       name: 'Example',
-      translations: [{
-        spriteTableId: 'ui',
-        spriteId: 'button-start',
-        textRegions: [{
-          id: 'title',
-          rect: { x: 0, y: 0, width: 80, height: 20 },
-          rotation: 0,
-          translationKey: 'title',
-        }],
-      }, {
-        spriteTableId: 'ui',
-        spriteId: 'other-button',
-        textRegions: [{
-          id: 'title',
-          rect: { x: 0, y: 0, width: 80, height: 20 },
-          rotation: 0,
-          translationKey: 'other-title',
-        }],
-      }],
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'button-start',
+          textRegions: [
+            {
+              id: 'title',
+              rect: { x: 0, y: 0, width: 80, height: 20 },
+              rotation: 0,
+              translationKey: 'title',
+            },
+          ],
+        },
+        {
+          spriteTableId: 'ui',
+          spriteId: 'other-button',
+          textRegions: [
+            {
+              id: 'title',
+              rect: { x: 0, y: 0, width: 80, height: 20 },
+              rotation: 0,
+              translationKey: 'other-title',
+            },
+          ],
+        },
+      ],
     }
-    workspace.spriteTables = [{
-      schemaVersion: 1,
-      id: 'ui',
-      name: 'UI Table',
-      textures: [{ id: 'page-00', imagePath: 'ui/page-00.png', size: { width: 100, height: 100 } }],
-      sprites: [{
-        id: 'button-start',
-        name: 'button_start',
-        textureId: 'page-00',
-        frame: { x: 0, y: 0, width: 80, height: 20 },
-        rotation: 0,
-        trimmed: false,
-      }],
-    }]
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI Table',
+        textures: [
+          { id: 'page-00', imagePath: 'ui/page-00.png', size: { width: 100, height: 100 } },
+        ],
+        sprites: [
+          {
+            id: 'button-start',
+            name: 'button_start',
+            textureId: 'page-00',
+            frame: { x: 0, y: 0, width: 80, height: 20 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
     workspace.openSprite('ui', 'button-start')
     workspace.selectTextRegion('title')
 
     const wrapper = mount(WorkspaceView, { global: { plugins: [pinia, i18n] } })
 
     expect(workspace.selectedTextDiagnostics).toEqual([
-      { code: 'missingTranslation', spriteTableId: 'ui', spriteId: 'button-start', regionId: 'title' },
+      {
+        code: 'missingTranslation',
+        spriteTableId: 'ui',
+        spriteId: 'button-start',
+        regionId: 'title',
+      },
     ])
     expect(wrapper.get('[aria-label="1 translation issue"]').text()).toBe('Missing: title')
   })
@@ -463,5 +505,79 @@ describe('WorkspaceView', () => {
     expect(wrapper.get('time').attributes('datetime')).toBe('2026-08-30T09:15:00.000Z')
     expect(wrapper.get('[role="status"]').attributes('aria-live')).toBe('polite')
     expect(wrapper.get('[role="status"]').attributes('aria-atomic')).toBe('true')
+  })
+
+  it('expands and collapses texture directories and opens a file sprite', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+
+    const workspace = useWorkspaceStore()
+    workspace.project = { schemaVersion: 3, name: 'Example' }
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'data_jp',
+        name: 'data_jp',
+        textures: [
+          {
+            id: 'common/Texture/TestMode/0',
+            imagePath: 'data_jp/common/Texture/TestMode/0.png',
+            size: { width: 32, height: 48 },
+          },
+        ],
+        sprites: [
+          {
+            id: 'common/Texture/TestMode/0',
+            name: '0',
+            textureId: 'common/Texture/TestMode/0',
+            frame: { x: 0, y: 0, width: 32, height: 48 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
+    workspace.textureImageUrls = { data_jp: { 'common/Texture/TestMode/0': 'blob:0' } }
+
+    const wrapper = mount(WorkspaceView, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          SpritePreview: { template: '<div data-testid="sprite-preview"></div>' },
+          SpriteTableGrid: { template: '<div data-testid="sprite-grid"></div>' },
+        },
+      },
+    })
+
+    const root = wrapper.findAll('aside button').find((button) => button.text() === 'data_jp')
+    expect(root).toBeDefined()
+    await root!.trigger('click')
+    expect(wrapper.text()).toContain('common')
+
+    const common = wrapper.findAll('aside button').find((button) => button.text() === 'common')
+    expect(common).toBeDefined()
+    await common!.trigger('click')
+    expect(wrapper.text()).toContain('Texture')
+
+    const texture = wrapper.findAll('aside button').find((button) => button.text() === 'Texture')
+    expect(texture).toBeDefined()
+    await texture!.trigger('click')
+    expect(wrapper.text()).toContain('TestMode')
+
+    const testMode = wrapper.findAll('aside button').find((button) => button.text() === 'TestMode')
+    expect(testMode).toBeDefined()
+    await testMode!.trigger('click')
+    expect(wrapper.text()).toContain('0.png')
+
+    await wrapper
+      .findAll('aside button')
+      .find((button) => button.text() === '0.png')!
+      .trigger('click')
+    expect(workspace.selectedSpriteId).toBe('common/Texture/TestMode/0')
+    expect(workspace.spriteManagementView).toBe('editor')
+
+    await testMode!.trigger('click')
+    expect(wrapper.text()).not.toContain('0.png')
   })
 })
