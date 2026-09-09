@@ -97,11 +97,13 @@ describe('scanUnindexedTextures', () => {
         id: 'common/Texture/TestMode/0',
         imagePath: 'data_jp/common/Texture/TestMode/0.png',
         size: { width: 4000, height: 2000 },
+        format: { container: 'png' },
       },
       {
         id: 'common/Texture/TestMode/1',
         imagePath: 'data_jp/common/Texture/TestMode/1.png',
         size: { width: 32, height: 48 },
+        format: { container: 'png' },
       },
     ])
   })

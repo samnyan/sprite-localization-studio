@@ -249,6 +249,8 @@ export default {
   spriteTable: {
     textures: '贴图',
     sprites: 'Sprites',
+    upgradeAvailable: 'Sprite Table Schema 可以升级',
+    upgradeAvailableDescription: '{count} 个 Sprite Table manifest 使用 v1，可升级到 v2。',
   },
   spriteGrid: {
     previewSize: '预览大小',

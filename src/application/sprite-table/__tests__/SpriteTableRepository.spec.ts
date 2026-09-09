@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ProjectStorage } from '@/application/storage/ProjectStorage'
 import { parseSpriteTableManifest } from '@/application/sprite-table/SpriteTableRepository'
+import { SpriteTableRepository } from '@/application/sprite-table/SpriteTableRepository'
 
 const textures = [
   {
@@ -41,6 +43,8 @@ describe('parseSpriteTableManifest', () => {
     const spriteTable = parseSpriteTableManifest(manifestWith([trimmedRotatedSprite]))
 
     expect(spriteTable.textures).toHaveLength(2)
+    expect(spriteTable.schemaVersion).toBe(2)
+    expect(spriteTable.textures[0]?.format).toEqual({ container: 'png' })
     expect(spriteTable.sprites[0]).toMatchObject({
       id: 'dialog-title',
       textureId: 'page-00',
@@ -111,5 +115,44 @@ describe('parseSpriteTableManifest', () => {
         manifestWith([], [{ ...textures[0], imagePath: 'textures/page-00.png' }]),
       ),
     ).toThrowError(expect.objectContaining({ code: 'invalidPath' }))
+  })
+
+  it('requires format metadata in schema v2 manifests', () => {
+    const manifest = JSON.stringify({
+      schemaVersion: 2,
+      id: 'ui-common',
+      name: 'UI Common',
+      textures,
+      sprites: [],
+    })
+
+    expect(() => parseSpriteTableManifest(manifest)).toThrowError(
+      expect.objectContaining({ code: 'invalidField' }),
+    )
+  })
+
+  it('accepts format metadata in schema v2 manifests', () => {
+    const manifest = JSON.stringify({
+      schemaVersion: 2,
+      id: 'ui-common',
+      name: 'UI Common',
+      textures: textures.map((texture) => ({ ...texture, format: { container: 'png' } })),
+      sprites: [],
+    })
+
+    const spriteTable = parseSpriteTableManifest(manifest)
+    expect(spriteTable.schemaVersion).toBe(2)
+    expect(spriteTable.textures[0]?.format).toEqual({ container: 'png' })
+  })
+
+  it('reports schema v1 manifests that can be upgraded', async () => {
+    const storage = {
+      readText: async () => manifestWith([]),
+    } as unknown as ProjectStorage
+
+    const result = await new SpriteTableRepository(storage).loadWithMetadata('manifests/ui.json')
+
+    expect(result.needsUpgrade).toBe(true)
+    expect(result.spriteTable.schemaVersion).toBe(2)
   })
 })

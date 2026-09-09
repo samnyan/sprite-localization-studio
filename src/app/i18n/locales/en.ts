@@ -249,6 +249,9 @@ export default {
   spriteTable: {
     textures: 'Textures',
     sprites: 'Sprites',
+    upgradeAvailable: 'Sprite Table schema upgrade available',
+    upgradeAvailableDescription:
+      '{count} Sprite Table manifest(s) use schema v1 and can be upgraded to schema v2.',
   },
   spriteGrid: {
     previewSize: 'Preview size',

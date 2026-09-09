@@ -3,6 +3,7 @@ import { isProjectRelativePath } from '@/application/storage/projectPath'
 import type { Point, Rect, Size } from '@/domain/shared/geometry'
 import {
   SPRITE_TABLE_SCHEMA_VERSION,
+  type TextureFormat,
   type SpriteTable,
   type Texture,
 } from '@/domain/sprite-table/types'
@@ -101,7 +102,16 @@ function parseRotation(value: unknown, field: string): SpriteRotation {
   return value
 }
 
-function parseTexture(value: unknown, index: number): Texture {
+function parseTextureFormat(value: unknown, field: string): TextureFormat {
+  const object = expectObject(value, field)
+  if (object.container !== 'png') {
+    throw new SpriteTableFormatError('invalidField', { field: `${field}.container` })
+  }
+
+  return { container: 'png' }
+}
+
+function parseTexture(value: unknown, index: number, schemaVersion: number): Texture {
   const field = `textures[${index}]`
   const object = expectObject(value, field)
   const imagePath = expectString(object, 'imagePath', field)
@@ -118,6 +128,10 @@ function parseTexture(value: unknown, index: number): Texture {
     id: expectString(object, 'id', field),
     imagePath,
     size: parseSize(object.size, `${field}.size`),
+    format:
+      schemaVersion === 1
+        ? { container: 'png' }
+        : parseTextureFormat(object.format, `${field}.format`),
   }
 }
 
@@ -182,7 +196,7 @@ export function parseSpriteTableManifest(text: string): SpriteTable {
 
   const object = expectObject(value, 'root')
 
-  if (object.schemaVersion !== SPRITE_TABLE_SCHEMA_VERSION) {
+  if (object.schemaVersion !== 1 && object.schemaVersion !== SPRITE_TABLE_SCHEMA_VERSION) {
     throw new SpriteTableFormatError('unsupportedSchema', {
       version: String(object.schemaVersion),
     })
@@ -196,7 +210,9 @@ export function parseSpriteTableManifest(text: string): SpriteTable {
     throw new SpriteTableFormatError('emptyTextures')
   }
 
-  const textures = object.textures.map(parseTexture)
+  const textures = object.textures.map((texture, index) =>
+    parseTexture(texture, index, object.schemaVersion as number),
+  )
   const texturesById = new Map<string, Texture>()
   const texturePaths = new Set<string>()
 
@@ -237,6 +253,16 @@ export function parseSpriteTableManifest(text: string): SpriteTable {
   }
 }
 
+export interface SpriteTableLoadResult {
+  spriteTable: SpriteTable
+  needsUpgrade: boolean
+}
+
+export interface SpriteTableLoadManyResult {
+  spriteTables: SpriteTable[]
+  upgradeManifestPaths: string[]
+}
+
 export class SpriteTableRepository {
   constructor(private readonly storage: ProjectStorage) {}
 
@@ -245,11 +271,33 @@ export class SpriteTableRepository {
       throw new SpriteTableFormatError('invalidPath', { path: manifestPath })
     }
 
-    return parseSpriteTableManifest(await this.storage.readText(manifestPath))
+    return (await this.loadWithMetadata(manifestPath)).spriteTable
+  }
+
+  async loadWithMetadata(manifestPath: string): Promise<SpriteTableLoadResult> {
+    if (!isProjectRelativePath(manifestPath)) {
+      throw new SpriteTableFormatError('invalidPath', { path: manifestPath })
+    }
+
+    const text = await this.storage.readText(manifestPath)
+    const spriteTable = parseSpriteTableManifest(text)
+    let sourceSchemaVersion: unknown
+    try {
+      sourceSchemaVersion = (JSON.parse(text) as { schemaVersion?: unknown }).schemaVersion
+    } catch {
+      sourceSchemaVersion = undefined
+    }
+
+    return { spriteTable, needsUpgrade: sourceSchemaVersion === 1 }
   }
 
   async loadMany(manifestPaths: string[]): Promise<SpriteTable[]> {
-    const spriteTables = await Promise.all(manifestPaths.map((path) => this.load(path)))
+    return (await this.loadManyWithMetadata(manifestPaths)).spriteTables
+  }
+
+  async loadManyWithMetadata(manifestPaths: string[]): Promise<SpriteTableLoadManyResult> {
+    const loaded = await Promise.all(manifestPaths.map((path) => this.loadWithMetadata(path)))
+    const spriteTables = loaded.map(({ spriteTable }) => spriteTable)
     const spriteTableIds = new Set<string>()
 
     for (const spriteTable of spriteTables) {
@@ -260,6 +308,11 @@ export class SpriteTableRepository {
       spriteTableIds.add(spriteTable.id)
     }
 
-    return spriteTables
+    return {
+      spriteTables,
+      upgradeManifestPaths: loaded
+        .map((item, index) => (item.needsUpgrade ? manifestPaths[index] : undefined))
+        .filter((path): path is string => path !== undefined),
+    }
   }
 }

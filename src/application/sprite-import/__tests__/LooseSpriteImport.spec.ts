@@ -19,11 +19,13 @@ describe('LooseSpriteImport', () => {
         id: 'BASE',
         imagePath: 'spr_ent_name/BASE.png',
         size: { width: 512, height: 128 },
+        format: { container: 'png' },
       },
       {
         id: 'BTN_DELETE_A',
         imagePath: 'spr_ent_name/BTN_DELETE_A.png',
         size: { width: 96, height: 32 },
+        format: { container: 'png' },
       },
     ])
     expect(plan.spriteTable.sprites).toEqual([

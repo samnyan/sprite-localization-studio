@@ -192,6 +192,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const project = ref<ProjectManifest>()
   const spriteTables = ref<SpriteTable[]>([])
   const textureImageUrls = ref<TextureImageUrls>({})
+  const spriteTableUpgradePaths = ref<string[]>([])
   const backgroundImageUrls = ref<BackgroundImageUrls>({})
   const projectFonts = ref<ProjectFont[]>([])
   const fontDiagnostics = ref<FontDiagnostic[]>([])
@@ -885,9 +886,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     documentSession += 1
     imageLoads.clear()
     openProgress.value = { completed: 0, total: 1 }
-    const loadedSpriteTables = await new SpriteTableRepository(storage).loadMany(
+    const loadedSpriteTablesResult = await new SpriteTableRepository(storage).loadManyWithMetadata(
       loadedProject.spriteTableManifestPaths ?? [],
     )
+    const loadedSpriteTables = loadedSpriteTablesResult.spriteTables
     if (activation !== projectActivation) return false
     const backgrounds = [
       ...(loadedProject.backgroundTemplates ?? []),
@@ -926,6 +928,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     project.value = loadedProject
     resetDocumentHistory()
     spriteTables.value = loadedSpriteTables
+    spriteTableUpgradePaths.value = loadedSpriteTablesResult.upgradeManifestPaths
     textureImageUrls.value = {}
     backgroundImageUrls.value = loadedBackgrounds.urls
     projectFonts.value = loadedFonts.fonts.filter((font) =>
@@ -1897,6 +1900,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     directoryName,
 
     textureImageUrls,
+    spriteTableUpgradePaths,
     backgroundImageUrls,
     projectFonts,
     fontDiagnostics,

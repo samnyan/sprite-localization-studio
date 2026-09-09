@@ -73,6 +73,7 @@ export function createLooseSpriteImportPlan(
         id: spriteId(image.name),
         imagePath: `${directoryName}/${normalizeImageName(image.name)}`,
         size: image.size,
+        format: { container: 'png' as const },
       })),
       sprites: images.map((image) => {
         const id = spriteId(image.name)

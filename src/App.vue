@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 
@@ -15,6 +15,17 @@ const workspace = useWorkspaceStore()
 const { t } = useI18n()
 const looseSpriteImport = ref<LooseSpriteImportPreview>()
 useWorkspaceShortcuts()
+
+watch(
+  () => workspace.spriteTableUpgradePaths,
+  (paths) => {
+    if (!paths.length) return
+    toast.info(t('spriteTable.upgradeAvailable'), {
+      description: t('spriteTable.upgradeAvailableDescription', { count: paths.length }),
+    })
+  },
+  { deep: true },
+)
 
 function newProject(): void {
   void workspace.createLocalProject(t('project.untitled'))
