@@ -319,6 +319,7 @@ export default {
     ok: 'OK',
     cancel: 'Cancel',
     save: 'Save',
+    close: 'Close',
   },
   language: {
     label: 'Language',

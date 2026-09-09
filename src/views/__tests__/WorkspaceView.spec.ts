@@ -472,7 +472,7 @@ describe('WorkspaceView', () => {
     }
     await nextTick()
 
-    expect(wrapper.get('[role="alert"]').text()).toBe(
+    expect(wrapper.get('[role="alert"]').text()).toContain(
       'Texture build failed (1 total). See details below.',
     )
     expect(wrapper.get('[aria-label="Build failures"]').text()).toContain(
@@ -483,6 +483,13 @@ describe('WorkspaceView', () => {
     expect(buildStatus.text()).toContain('1 failed')
     expect(buildStatus.text()).toContain('0 ms')
     expect(buildStatus.classes()).toContain('ml-3')
+    expect(wrapper.get('[data-testid="workspace-error-panel"]').element.parentElement).toBe(
+      wrapper.find('footer').element.parentElement,
+    )
+
+    await wrapper.get('[data-testid="dismiss-workspace-error"]').trigger('click')
+    expect(wrapper.find('[data-testid="workspace-error-panel"]').exists()).toBe(false)
+    expect(wrapper.find('footer').exists()).toBe(true)
 
     workspace.status = 'ready'
     await nextTick()

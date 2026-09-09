@@ -11,6 +11,7 @@ import {
   Save,
   Trash2,
   Undo2,
+  X,
 } from '@lucide/vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
@@ -75,6 +76,18 @@ const buildSummary = ref({
 
 const errorText = computed(() =>
   workspace.error ? t(workspace.error.key, workspace.error.params ?? {}) : '',
+)
+const errorPanelDismissed = ref(false)
+const errorPanelVisible = computed(
+  () =>
+    !errorPanelDismissed.value &&
+    (Boolean(errorText.value) || Boolean(workspace.lastBuildReport?.failures.length)),
+)
+watch(
+  [() => workspace.error, () => workspace.lastBuildReport],
+  () => {
+    errorPanelDismissed.value = false
+  },
 )
 const selectedImageUrl = computed(() => {
   const spriteTable = workspace.selectedSpriteTable
@@ -552,26 +565,6 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         {{ t('build.action') }}
       </Button>
     </div>
-    <p
-      v-if="errorText"
-      class="border-b bg-destructive/5 px-3 py-1.5 text-xs text-destructive"
-      role="alert"
-    >
-      {{ errorText }}
-    </p>
-    <ul
-      v-if="workspace.lastBuildReport?.failures.length"
-      class="max-h-36 space-y-1 overflow-auto border-b bg-destructive/5 px-3 py-2 text-xs text-destructive"
-      :aria-label="t('build.failures')"
-    >
-      <li
-        v-for="failure in workspace.lastBuildReport.failures"
-        :key="JSON.stringify([failure.spriteTableId, failure.textureId])"
-      >
-        {{ buildFailureText(failure) }}
-      </li>
-    </ul>
-
     <div class="flex min-h-0 flex-1">
       <aside class="flex w-64 shrink-0 flex-col border-r bg-card">
         <div
@@ -957,6 +950,38 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
         <p v-else class="p-3 text-xs text-muted-foreground">{{ t('panel.empty') }}</p>
       </aside>
     </div>
+    <section
+      v-if="errorPanelVisible"
+      data-testid="workspace-error-panel"
+      class="flex max-h-40 shrink-0 items-start gap-2 border-t bg-destructive/5 px-3 py-2 text-xs text-destructive"
+      role="alert"
+    >
+      <div class="min-w-0 flex-1">
+        <p v-if="errorText">{{ errorText }}</p>
+        <ul
+          v-if="workspace.lastBuildReport?.failures.length"
+          class="mt-1 max-h-28 space-y-1 overflow-auto"
+          :aria-label="t('build.failures')"
+        >
+          <li
+            v-for="failure in workspace.lastBuildReport.failures"
+            :key="JSON.stringify([failure.spriteTableId, failure.textureId])"
+          >
+            {{ buildFailureText(failure) }}
+          </li>
+        </ul>
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="size-6 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        :aria-label="t('common.close')"
+        data-testid="dismiss-workspace-error"
+        @click="errorPanelDismissed = true"
+      >
+        <X class="size-3.5" aria-hidden="true" />
+      </Button>
+    </section>
     <footer
       class="flex h-6 shrink-0 items-center border-t bg-card px-2 text-[11px] text-muted-foreground"
     >

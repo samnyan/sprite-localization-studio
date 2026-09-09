@@ -317,6 +317,7 @@ export default {
     ok: '确定',
     cancel: '取消',
     save: '保存',
+    close: '关闭',
   },
   language: {
     label: '语言',
