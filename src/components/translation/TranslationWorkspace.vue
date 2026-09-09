@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { resolveBackgroundType, type TextRenderConfig } from '@/domain/text-region/types'
+import type { SpriteTranslation } from '@/domain/text-region/types'
+import type { Texture } from '@/domain/sprite-table/types'
 import { textStyleTemplates } from '@/domain/text-region/styleTemplates'
 
 const workspace = useWorkspaceStore()
@@ -63,17 +65,30 @@ const tableStyle = computed(() => ({
   gridTemplateColumns: columnRatios.value.map((ratio) => `minmax(0, ${ratio}fr)`).join(' '),
 }))
 const availableSpriteTables = computed(() => workspace.spriteTables)
+const translationsBySpriteKey = computed(() => {
+  const index = new Map<string, SpriteTranslation>()
+  for (const translation of workspace.project?.translations ?? []) {
+    index.set(spriteKey(translation.spriteTableId, translation.spriteId), translation)
+  }
+  return index
+})
+const texturesBySpriteTable = computed(() => {
+  const index = new Map<string, Map<string, Texture>>()
+  for (const spriteTable of workspace.spriteTables) {
+    index.set(spriteTable.id, new Map(spriteTable.textures.map((texture) => [texture.id, texture])))
+  }
+  return index
+})
 const translationRows = computed(() => {
   const spriteTables = workspace.spriteTables
-  const translations = workspace.project?.translations ?? []
+  const translations = translationsBySpriteKey.value
+  const textures = texturesBySpriteTable.value
   if (!spriteTables.length) return []
 
   return spriteTables.flatMap((spriteTable) =>
     spriteTable.sprites.flatMap((sprite) => {
-      const translation = translations.find(
-        (item) => item.spriteTableId === spriteTable.id && item.spriteId === sprite.id,
-      )
-      const texture = spriteTable.textures.find((item) => item.id === sprite.textureId)
+      const translation = translations.get(spriteKey(spriteTable.id, sprite.id))
+      const texture = textures.get(spriteTable.id)?.get(sprite.textureId)
       const imageUrl = texture
         ? workspace.textureImageUrls[spriteTable.id]?.[texture.id]
         : undefined
@@ -114,10 +129,7 @@ const previewRow = computed(() => {
 })
 const previewImages = computed<ImagePreviewItem[]>(() =>
   previewRow.value
-    ? [
-        { title: t('translation.originalSprite') },
-        { title: t('translation.output') },
-      ]
+    ? [{ title: t('translation.originalSprite') }, { title: t('translation.output') }]
     : [],
 )
 const hasActiveFilters = computed(
@@ -769,6 +781,17 @@ onUnmounted(() => {
           <article
             v-for="row in filteredTranslationRows"
             :key="spriteKey(row.translation.spriteTableId, row.sprite.id)"
+            v-memo="[
+              row.translation,
+              row.imageUrl,
+              workspace.previewBackground,
+              workspace.isBusy,
+              workspace.selectedSpriteTableId === row.translation.spriteTableId &&
+                workspace.selectedSpriteId === row.sprite.id,
+              workspace.selectedTextRegionId,
+              workspace.project?.textStyleTemplates,
+              workspace.backgroundImageUrls,
+            ]"
             :ref="
               (element) =>
                 setTranslationRow(spriteKey(row.translation.spriteTableId, row.sprite.id), element)
@@ -1017,7 +1040,9 @@ onUnmounted(() => {
           :texture-size="previewRow.texture.size"
           :sprite="previewRow.sprite"
           :translation="previewRow.translation"
-          :background-url="index === 1 ? backgroundUrl(previewRow.translation.backgroundId) : undefined"
+          :background-url="
+            index === 1 ? backgroundUrl(previewRow.translation.backgroundId) : undefined
+          "
           :output="index === 1"
           :output-blank="index === 1 && previewRow.translation.backgroundType === 'blank'"
           :preview-background="workspace.previewBackground"

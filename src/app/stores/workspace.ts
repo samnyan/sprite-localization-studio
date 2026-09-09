@@ -310,21 +310,33 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     loadedSpriteTables: SpriteTable[],
     onProgress?: (completed: number, total: number) => void,
   ): Promise<TextureImageUrls> {
+    const batchSize = 16
     const urls: TextureImageUrls = {}
-    const total = loadedSpriteTables.reduce((sum, table) => sum + table.textures.length, 0)
+    const textures = loadedSpriteTables.flatMap((spriteTable) =>
+      spriteTable.textures.map((texture) => ({ spriteTableId: spriteTable.id, texture })),
+    )
+    const total = textures.length
     let completed = 0
+    for (const spriteTable of loadedSpriteTables) urls[spriteTable.id] = {}
     onProgress?.(0, total)
 
     try {
-      for (const spriteTable of loadedSpriteTables) {
-        const textureUrls: Record<string, string> = {}
-        urls[spriteTable.id] = textureUrls
-        for (const texture of spriteTable.textures) {
-          const data = await storage.readBinary(`textures/${texture.imagePath}`)
-          textureUrls[texture.id] = URL.createObjectURL(new Blob([data], { type: 'image/png' }))
-          completed += 1
-          onProgress?.(completed, total)
-        }
+      for (let start = 0; start < textures.length; start += batchSize) {
+        const batch = textures.slice(start, start + batchSize)
+        const results = await Promise.allSettled(
+          batch.map(async ({ spriteTableId, texture }) => {
+            const data = await storage.readBinary(`textures/${texture.imagePath}`)
+            urls[spriteTableId]![texture.id] = URL.createObjectURL(
+              new Blob([data], { type: 'image/png' }),
+            )
+            completed += 1
+            onProgress?.(completed, total)
+          }),
+        )
+        const failed = results.find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected',
+        )
+        if (failed) throw failed.reason
       }
       return urls
     } catch (caughtError) {
