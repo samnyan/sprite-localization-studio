@@ -37,11 +37,13 @@ describe('TranslationWorkspace', () => {
     workspace.project = {
       schemaVersion: 3,
       name: 'Example',
-      translations: [{
-        spriteTableId: 'ui',
-        spriteId: 'button',
-        textRegions: [],
-      }],
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'button',
+          textRegions: [],
+        },
+      ],
     }
     workspace.spriteTables = [spriteTable('ui', 'UI', 'button')]
     workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
@@ -606,6 +608,105 @@ describe('TranslationWorkspace', () => {
 
     expect(uiSharedTranslation?.backgroundType).toBeUndefined()
     expect(hudSharedTranslation?.backgroundType).toBe('blank')
+  })
+
+  it('filters translation rows by the active texture directory', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      translations: [
+        {
+          spriteTableId: 'ui',
+          spriteId: 'common-sprite',
+          textRegions: [
+            {
+              id: 'common-region',
+              translationKey: 'common',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              sourceText: 'Common source',
+            },
+          ],
+        },
+        {
+          spriteTableId: 'ui',
+          spriteId: 'other-sprite',
+          textRegions: [
+            {
+              id: 'other-region',
+              translationKey: 'other',
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+              rotation: 0,
+              sourceText: 'Other source',
+            },
+          ],
+        },
+      ],
+    }
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI',
+        textures: [
+          { id: 'common-page', imagePath: 'common/page.png', size: { width: 1, height: 1 } },
+          { id: 'other-page', imagePath: 'other/page.png', size: { width: 1, height: 1 } },
+        ],
+        sprites: [
+          {
+            id: 'common-sprite',
+            name: 'Common sprite',
+            textureId: 'common-page',
+            frame: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            trimmed: false,
+          },
+          {
+            id: 'other-sprite',
+            name: 'Other sprite',
+            textureId: 'other-page',
+            frame: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            trimmed: false,
+          },
+        ],
+      },
+    ]
+    workspace.textureImageUrls = {
+      ui: { 'common-page': 'blob:common', 'other-page': 'blob:other' },
+    }
+    workspace.selectSpriteTable('ui')
+    workspace.selectTextureDirectory('common')
+
+    const wrapper = mount(TranslationWorkspace, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+        },
+      },
+    })
+    mountedWrapper = wrapper
+
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect(wrapper.text()).toContain('1 of 1 shown')
+    expect((wrapper.findAll('textarea')[0]!.element as HTMLTextAreaElement).value).toBe(
+      'Common source',
+    )
+
+    workspace.selectTextureDirectory('other')
+    await nextTick()
+
+    expect(wrapper.findAll('article')).toHaveLength(1)
+    expect((wrapper.findAll('textarea')[0]!.element as HTMLTextAreaElement).value).toBe(
+      'Other source',
+    )
   })
 })
 

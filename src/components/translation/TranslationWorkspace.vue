@@ -65,6 +65,15 @@ const tableStyle = computed(() => ({
   gridTemplateColumns: columnRatios.value.map((ratio) => `minmax(0, ${ratio}fr)`).join(' '),
 }))
 const availableSpriteTables = computed(() => workspace.spriteTables)
+const activeDirectorySpriteKeys = computed(() => {
+  if (!workspace.selectedTextureDirectory || !workspace.selectedSpriteTableId) return undefined
+  const textureIds = workspace.selectedTextureIds
+  return new Set(
+    (workspace.selectedSpriteTable?.sprites ?? [])
+      .filter((sprite) => textureIds.has(sprite.textureId))
+      .map((sprite) => spriteKey(workspace.selectedSpriteTableId!, sprite.id)),
+  )
+})
 const translationsBySpriteKey = computed(() => {
   const index = new Map<string, SpriteTranslation>()
   for (const translation of workspace.project?.translations ?? []) {
@@ -83,10 +92,13 @@ const translationRows = computed(() => {
   const spriteTables = workspace.spriteTables
   const translations = translationsBySpriteKey.value
   const textures = texturesBySpriteTable.value
+  const directorySpriteKeys = activeDirectorySpriteKeys.value
   if (!spriteTables.length) return []
 
   return spriteTables.flatMap((spriteTable) =>
     spriteTable.sprites.flatMap((sprite) => {
+      if (directorySpriteKeys && !directorySpriteKeys.has(spriteKey(spriteTable.id, sprite.id)))
+        return []
       const translation = translations.get(spriteKey(spriteTable.id, sprite.id))
       const texture = textures.get(spriteTable.id)?.get(sprite.textureId)
       const imageUrl = texture
