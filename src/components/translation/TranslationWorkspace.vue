@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 
 import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
-import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
 import TranslationSpritePreview from '@/components/translation/TranslationSpritePreview.vue'
 import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialog.vue'
 import BackgroundEditorDialog from '@/components/translation/BackgroundEditorDialog.vue'
@@ -49,7 +48,6 @@ const previewing = ref<{
   initialIndex: number
 }>()
 const columnRatios = ref([1.25, 1, 1, 1.25, 1])
-const diagnosticDisplayCount = ref(12)
 const translatedTextInputs = new Map<string, HTMLTextAreaElement>()
 const translationRowsBySprite = new Map<string, HTMLElement>()
 const searchQuery = ref('')
@@ -216,42 +214,6 @@ const filteredTranslationRows = computed(() => {
     return row.searchText.includes(query)
   })
 })
-const visibleDiagnostics = computed(() =>
-  workspace.textDiagnostics.slice(0, diagnosticDisplayCount.value),
-)
-const remainingDiagnosticCount = computed(() =>
-  Math.max(0, workspace.textDiagnostics.length - visibleDiagnostics.value.length),
-)
-const diagnosticItems = computed(() => {
-  const spriteTablesById = new Map(workspace.spriteTables.map((item) => [item.id, item]))
-  const spritesByKey = new Map(
-    workspace.spriteTables.flatMap((spriteTable) =>
-      spriteTable.sprites.map((sprite) => [spriteKey(spriteTable.id, sprite.id), sprite]),
-    ),
-  )
-  const regionsBySprite = new Map(
-    (workspace.project?.translations ?? []).map((translation) => [
-      spriteKey(translation.spriteTableId, translation.spriteId),
-      new Map(translation.textRegions.map((region) => [region.id, region.translationKey])),
-    ]),
-  )
-
-  return visibleDiagnostics.value.map((diagnostic) => {
-    const spriteTable = spriteTablesById.get(diagnostic.spriteTableId)
-    const sprite = spritesByKey.get(spriteKey(diagnostic.spriteTableId, diagnostic.spriteId))
-    const region = regionsBySprite
-      .get(spriteKey(diagnostic.spriteTableId, diagnostic.spriteId))
-      ?.get(diagnostic.regionId)
-    return {
-      diagnostic,
-      label: [
-        spriteTable?.name ?? diagnostic.spriteTableId,
-        sprite?.id ?? diagnostic.spriteId,
-        region ?? diagnostic.regionId,
-      ].join(' / '),
-    }
-  })
-})
 const backgroundDiagnosticItems = computed(() =>
   workspace.backgroundDiagnostics.flatMap((diagnostic) => {
     const translations = (workspace.project?.translations ?? []).filter(
@@ -335,20 +297,6 @@ function isSelectedTextRegion(spriteTableId: string, spriteId: string, regionId:
   )
 }
 
-async function selectDiagnostic(diagnostic: TextDiagnostic): Promise<void> {
-  if (!workspace.selectTextDiagnostic(diagnostic)) return
-
-  searchQuery.value = ''
-  translationFilter.value = 'all'
-  spriteTableFilter.value = 'all'
-  await nextTick()
-  const input = translatedTextInputs.get(
-    textRegionKey(diagnostic.spriteTableId, diagnostic.spriteId, diagnostic.regionId),
-  )
-  input?.scrollIntoView({ block: 'center' })
-  input?.focus({ preventScroll: true })
-}
-
 async function moveTranslatedTextFocus(
   spriteTableId: string,
   spriteId: string,
@@ -402,14 +350,6 @@ function finishTextEdit(spriteTableId: string, spriteId: string): void {
   editingClearTimer = setTimeout(() => {
     if (editingSpriteKey.value === key) editingSpriteKey.value = undefined
   })
-}
-
-function showMoreDiagnostics(): void {
-  diagnosticDisplayCount.value += 12
-}
-
-function diagnosticMessage(diagnostic: TextDiagnostic, label: string): string {
-  return t(`translation.${diagnostic.code}`, { label, fontId: diagnostic.fontId })
 }
 
 function startResize(index: number, event: PointerEvent): void {
@@ -624,54 +564,6 @@ onUnmounted(() => {
             </Button>
           </template>
         </div>
-      </div>
-      <div
-        v-if="workspace.textDiagnostics.length"
-        class="border-b bg-muted/40 px-3 py-2"
-        role="region"
-        :aria-label="t('translation.issues', workspace.textDiagnostics.length)"
-      >
-        <p class="text-xs font-medium" role="status" aria-live="polite">
-          {{ t('translation.issues', workspace.textDiagnostics.length) }}
-        </p>
-        <div class="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto" role="list">
-          <div
-            v-for="item in diagnosticItems"
-            :key="
-              JSON.stringify([
-                item.diagnostic.spriteTableId,
-                item.diagnostic.spriteId,
-                item.diagnostic.regionId,
-                item.diagnostic.code,
-                item.diagnostic.fontId,
-              ])
-            "
-            role="listitem"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              class="max-w-72"
-              :aria-label="
-                t('translation.goToIssue', {
-                  label: diagnosticMessage(item.diagnostic, item.label),
-                })
-              "
-              @click="selectDiagnostic(item.diagnostic)"
-            >
-              <span class="truncate">{{ diagnosticMessage(item.diagnostic, item.label) }}</span>
-            </Button>
-          </div>
-        </div>
-        <Button
-          v-if="remainingDiagnosticCount"
-          variant="ghost"
-          size="sm"
-          class="mt-1.5"
-          @click="showMoreDiagnostics"
-        >
-          {{ t('translation.showMoreIssues', { count: remainingDiagnosticCount }) }}
-        </Button>
       </div>
       <div
         class="flex flex-wrap items-center justify-between gap-2 bg-background border-b px-3 py-2"

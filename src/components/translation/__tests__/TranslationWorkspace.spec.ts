@@ -145,9 +145,6 @@ describe('TranslationWorkspace', () => {
     const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
 
     expect(workspace.selectedSpriteId).toBeUndefined()
-    await wrapper.get('[aria-label="Go to translation issue: ui / start"]').trigger('click')
-    await nextTick()
-    expect(workspace.selectedSpriteId).toBe('start')
 
     await inputs[0]!.trigger('keydown', { altKey: true, key: 'ArrowDown' })
     await nextTick()
@@ -160,7 +157,7 @@ describe('TranslationWorkspace', () => {
     )
   })
 
-  it('navigates missing translations to their text region', async () => {
+  it('filters translations by text and completion status', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     setLocale('en')
@@ -250,25 +247,8 @@ describe('TranslationWorkspace', () => {
     await filter.setValue('ready')
     await nextTick()
 
-    const issue = wrapper.get(
-      '[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]',
-    )
-    expect(wrapper.text()).toContain('1 translation issue')
-    expect(i18n.global.t('translation.issues', 2)).toBe('2 translation issues')
-
-    await issue.trigger('click')
-    await nextTick()
-
-    expect(workspace.selectedSpriteTableId).toBe('second')
-    expect(workspace.selectedSpriteId).toBe('second-sprite')
-    expect(workspace.selectedTextRegionId).toBe('second-region')
-    const inputs = wrapper.findAll('textarea[aria-label="Translation"]')
-    const targetInput = inputs.find((i) => i.classes().includes('ring-2'))
-    expect(targetInput).toBeDefined()
-    expect(document.activeElement).toBe(targetInput!.element)
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
-
     await statusFilter.vm.$emit('update:modelValue', 'incomplete')
+    await filter.setValue('')
     await nextTick()
     expect(wrapper.get('textarea[aria-label="Translation"]')).toBeDefined()
 
@@ -286,55 +266,11 @@ describe('TranslationWorkspace', () => {
       ),
     }
     await nextTick()
-    expect(
-      wrapper
-        .find('[aria-label="Go to translation issue: Missing: Second / second-sprite / start"]')
-        .exists(),
-    ).toBe(false)
-    const completedInput = wrapper.get('textarea[aria-label="Translation"]')
-    expect(completedInput).toBeDefined()
-    await completedInput.trigger('blur')
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    await nextTick()
     expect(wrapper.text()).toContain('No translations match the filters.')
     await statusFilter.vm.$emit('update:modelValue', 'all')
-
-    expect(
-      workspace.selectTextDiagnostic({
-        code: 'missingTranslation',
-        spriteTableId: 'missing',
-        spriteId: 'missing',
-        regionId: 'missing',
-      }),
-    ).toBe(false)
-    expect(workspace.selectedSpriteTableId).toBe('second')
-    expect(workspace.selectedSpriteId).toBe('second-sprite')
-    expect(workspace.selectedTextRegionId).toBe('second-region')
-
-    workspace.project = {
-      ...workspace.project,
-      translations: [
-        {
-          spriteTableId: 'second',
-          spriteId: 'second-sprite',
-          textRegions: Array.from({ length: 13 }, (_, index) => ({
-            id: `issue-${index}`,
-            rect: { x: 0, y: 0, width: 1, height: 1 },
-            rotation: 0,
-            translationKey: `issue-${index}`,
-          })),
-        },
-      ],
-    }
-    await nextTick()
-    expect(wrapper.findAll('[role="listitem"]')).toHaveLength(12)
-    const showMore = wrapper.findAll('button').find((button) => button.text() === 'Show 1 more')
-    expect(showMore).toBeDefined()
-    await showMore?.trigger('click')
-    expect(wrapper.findAll('[role="listitem"]')).toHaveLength(13)
   })
 
-  it('shows a navigable diagnostic for an unavailable explicit project font', async () => {
+  it('does not render a top diagnostic list for an unavailable explicit project font', async () => {
     const pinia = createPinia()
     setActivePinia(pinia)
     setLocale('en')
@@ -369,16 +305,6 @@ describe('TranslationWorkspace', () => {
     workspace.spriteTables = [spriteTable('ui', 'UI', 'start')]
     workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
     workspace.selectSpriteTable('ui')
-    const scrollIntoView = vi.fn<() => void>()
-    scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      'scrollIntoView',
-    )
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoView,
-    })
-
     const wrapper = mount(TranslationWorkspace, {
       attachTo: document.body,
       global: {
@@ -392,14 +318,10 @@ describe('TranslationWorkspace', () => {
     })
     mountedWrapper = wrapper
 
-    expect(wrapper.text()).toContain('Project font unavailable (missing-font): UI / start / title')
-    await wrapper
-      .get(
-        '[aria-label="Go to translation issue: Project font unavailable (missing-font): UI / start / title"]',
-      )
-      .trigger('click')
-    expect(workspace.selectedTextRegionId).toBe('title')
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+    expect(wrapper.text()).not.toContain(
+      'Project font unavailable (missing-font): UI / start / title',
+    )
+    expect(wrapper.find('[aria-label^="Go to translation issue"]').exists()).toBe(false)
   })
 
   it('supports single/combined filtering across tables, shows counts, handles duplicate sprite IDs, and clears filters properly', async () => {
