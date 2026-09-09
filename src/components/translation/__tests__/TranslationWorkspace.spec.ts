@@ -11,6 +11,7 @@ import TextStyleEditorDialog from '@/components/translation/TextStyleEditorDialo
 import TranslationWorkspace from '@/components/translation/TranslationWorkspace.vue'
 import { Select } from '@/components/ui/select'
 import type { SpriteTable } from '@/domain/sprite-table/types'
+import { DEFAULT_TEXT_RENDER } from '@/domain/text-region/styleTemplates'
 
 let mountedWrapper: VueWrapper | undefined
 let scrollIntoViewDescriptor: PropertyDescriptor | undefined
@@ -322,6 +323,86 @@ describe('TranslationWorkspace', () => {
       'Project font unavailable (missing-font): UI / start / title',
     )
     expect(wrapper.find('[aria-label^="Go to translation issue"]').exists()).toBe(false)
+  })
+
+  it('copies template and custom styles from the previous translation row', async () => {
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    setLocale('en')
+    const workspace = useWorkspaceStore()
+    const templateRender = { ...DEFAULT_TEXT_RENDER, fontFamily: 'TemplateFont' }
+    const customRender = { ...DEFAULT_TEXT_RENDER, fontFamily: 'CustomFont' }
+    workspace.project = {
+      schemaVersion: 3,
+      name: 'Example',
+      textStyleTemplates: [{ id: 'template-1', name: 'Headline', render: templateRender }],
+      translations: ['first', 'second', 'third'].map((spriteId, index) => ({
+        spriteTableId: 'ui',
+        spriteId,
+        textRegions: [
+          {
+            id: `region-${index}`,
+            rect: { x: 0, y: 0, width: 1, height: 1 },
+            rotation: 0,
+            translationKey: `key-${index}`,
+            ...(index === 0
+              ? { styleId: 'template-1', render: templateRender }
+              : index === 1
+                ? { render: customRender }
+                : { styleId: 'template-1', render: DEFAULT_TEXT_RENDER }),
+          },
+        ],
+      })),
+    }
+    workspace.spriteTables = [
+      {
+        schemaVersion: 1,
+        id: 'ui',
+        name: 'UI',
+        textures: [{ id: 'page', imagePath: 'ui.png', size: { width: 1, height: 1 } }],
+        sprites: ['first', 'second', 'third'].map((id) => ({
+          id,
+          name: id,
+          textureId: 'page',
+          frame: { x: 0, y: 0, width: 1, height: 1 },
+          rotation: 0 as const,
+          trimmed: false,
+        })),
+      },
+    ]
+    workspace.textureImageUrls = { ui: { page: 'blob:ui' } }
+    workspace.selectSpriteTable('ui')
+    setWorkspaceProjectSessionForTesting({
+      save: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    } as unknown as ProjectRepository)
+
+    const wrapper = mount(TranslationWorkspace, {
+      global: {
+        plugins: [pinia, i18n],
+        stubs: {
+          TranslationSpritePreview: true,
+          TextStyleEditorDialog: true,
+          BackgroundEditorDialog: true,
+        },
+      },
+    })
+    mountedWrapper = wrapper
+
+    const copyButtons = wrapper.findAll('button[aria-label="Same as above"]')
+    expect(copyButtons).toHaveLength(3)
+    expect(copyButtons[0]!.attributes('disabled')).toBeDefined()
+
+    await copyButtons[2]!.trigger('click')
+    await copyButtons[1]!.trigger('click')
+
+    expect(workspace.project?.translations?.[1]?.textRegions[0]).toMatchObject({
+      styleId: 'template-1',
+      render: templateRender,
+    })
+    expect(workspace.project?.translations?.[2]?.textRegions[0]).toMatchObject({
+      styleId: undefined,
+      render: customRender,
+    })
   })
 
   it('supports single/combined filtering across tables, shows counts, handles duplicate sprite IDs, and clears filters properly', async () => {

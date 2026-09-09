@@ -278,6 +278,28 @@ function textRegionKey(spriteTableId: string, spriteId: string, regionId: string
   return JSON.stringify([spriteTableId, spriteId, regionId])
 }
 
+function previousStyleRegion(rowIndex: number, regionIndex: number) {
+  return filteredTranslationRows.value[rowIndex - 1]?.translation.textRegions[regionIndex]
+}
+
+function copyPreviousStyle(rowIndex: number, regionIndex: number): void {
+  const row = filteredTranslationRows.value[rowIndex]
+  const previousRegion = previousStyleRegion(rowIndex, regionIndex)
+  if (!row || !previousRegion) return
+
+  workspace.updateTranslationRegion(
+    row.translation.spriteTableId,
+    row.sprite.id,
+    row.translation.textRegions[regionIndex]!.id,
+    {
+      render: previousRegion.render
+        ? (JSON.parse(JSON.stringify(previousRegion.render)) as TextRenderConfig)
+        : undefined,
+      styleId: previousRegion.styleId,
+    },
+  )
+}
+
 function setTranslatedTextInput(
   key: string,
   element: Element | ComponentPublicInstance | null,
@@ -683,7 +705,7 @@ onUnmounted(() => {
         </div>
         <template v-else>
           <article
-            v-for="row in filteredTranslationRows"
+            v-for="(row, rowIndex) in filteredTranslationRows"
             :key="spriteKey(row.translation.spriteTableId, row.sprite.id)"
             v-memo="[
               row.translation,
@@ -853,7 +875,7 @@ onUnmounted(() => {
             </div>
             <div class="space-y-2 p-3">
               <div
-                v-for="region in row.translation.textRegions"
+                v-for="(region, regionIndex) in row.translation.textRegions"
                 :key="region.id"
                 class="rounded border p-2 text-xs"
               >
@@ -868,22 +890,34 @@ onUnmounted(() => {
                   {{ region.render?.fontSize ?? 24 }}px ·
                   {{ region.render?.fill?.color ?? region.render?.color ?? '#ffffff' }}
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  class="mt-2 h-7 w-full text-xs"
-                  @click="
-                    openStyleEditor(
-                      row.translation.spriteTableId,
-                      row.sprite.id,
-                      region.id,
-                      region.translatedText ?? '',
-                      region.render,
-                      region.styleId,
-                    )
-                  "
-                  >{{ t('style.edit') }}</Button
-                >
+                <div class="mt-2 flex w-full gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 flex-1 text-xs"
+                    @click="
+                      openStyleEditor(
+                        row.translation.spriteTableId,
+                        row.sprite.id,
+                        region.id,
+                        region.translatedText ?? '',
+                        region.render,
+                        region.styleId,
+                      )
+                    "
+                    >{{ t('style.edit') }}</Button
+                  >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 px-2 text-xs"
+                    :disabled="workspace.isBusy || !previousStyleRegion(rowIndex, regionIndex)"
+                    :title="t('style.copyPrevious')"
+                    :aria-label="t('style.copyPrevious')"
+                    @click="copyPreviousStyle(rowIndex, regionIndex)"
+                    >{{ t('style.copyPrevious') }}</Button
+                  >
+                </div>
               </div>
               <span
                 v-if="row.translation.textRegions.length === 0"
