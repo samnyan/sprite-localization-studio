@@ -278,6 +278,23 @@ function textRegionKey(spriteTableId: string, spriteId: string, regionId: string
   return JSON.stringify([spriteTableId, spriteId, regionId])
 }
 
+function previousBackgroundTranslation(rowIndex: number) {
+  return filteredTranslationRows.value[rowIndex - 1]?.translation
+}
+
+function copyPreviousBackground(rowIndex: number): void {
+  const row = filteredTranslationRows.value[rowIndex]
+  const previousTranslation = previousBackgroundTranslation(rowIndex)
+  if (!row || !previousTranslation) return
+
+  workspace.setSpriteTranslationBackground(
+    row.translation.spriteTableId,
+    row.sprite.id,
+    previousTranslation.backgroundId,
+    resolveBackgroundType(previousTranslation),
+  )
+}
+
 function previousStyleRegion(rowIndex: number, regionIndex: number) {
   return filteredTranslationRows.value[rowIndex - 1]?.translation.textRegions[regionIndex]
 }
@@ -871,6 +888,17 @@ onUnmounted(() => {
                   "
                   >{{ t('style.edit') }}</Button
                 >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-7 px-2 text-xs"
+                  data-testid="copy-previous-background"
+                  :disabled="workspace.isBusy || !previousBackgroundTranslation(rowIndex)"
+                  :title="t('style.copyPrevious')"
+                  :aria-label="t('style.copyPrevious')"
+                  @click="copyPreviousBackground(rowIndex)"
+                  >{{ t('style.copyPrevious') }}</Button
+                >
               </div>
             </div>
             <div class="space-y-2 p-3">
@@ -911,6 +939,7 @@ onUnmounted(() => {
                     variant="outline"
                     size="sm"
                     class="h-7 px-2 text-xs"
+                    data-testid="copy-previous-style"
                     :disabled="workspace.isBusy || !previousStyleRegion(rowIndex, regionIndex)"
                     :title="t('style.copyPrevious')"
                     :aria-label="t('style.copyPrevious')"

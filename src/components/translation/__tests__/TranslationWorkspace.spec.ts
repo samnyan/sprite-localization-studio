@@ -339,6 +339,7 @@ describe('TranslationWorkspace', () => {
       translations: ['first', 'second', 'third'].map((spriteId, index) => ({
         spriteTableId: 'ui',
         spriteId,
+        backgroundType: index === 0 ? ('blank' as const) : ('original' as const),
         textRegions: [
           {
             id: `region-${index}`,
@@ -388,9 +389,19 @@ describe('TranslationWorkspace', () => {
     })
     mountedWrapper = wrapper
 
-    const copyButtons = wrapper.findAll('button[aria-label="Same as above"]')
+    const copyButtons = wrapper.findAll('[data-testid="copy-previous-style"]')
     expect(copyButtons).toHaveLength(3)
     expect(copyButtons[0]!.attributes('disabled')).toBeDefined()
+
+    const backgroundCopyButtons = wrapper.findAll('[data-testid="copy-previous-background"]')
+    expect(backgroundCopyButtons).toHaveLength(3)
+    expect(backgroundCopyButtons[0]!.attributes('disabled')).toBeDefined()
+
+    await backgroundCopyButtons[1]!.trigger('click')
+    expect(workspace.project?.translations?.[1]).toMatchObject({
+      backgroundType: 'blank',
+      backgroundId: undefined,
+    })
 
     await copyButtons[2]!.trigger('click')
     await copyButtons[1]!.trigger('click')

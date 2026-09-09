@@ -73,6 +73,10 @@ function uploadSprite(event: Event): void {
 function typeLabel(type: (typeof choices)[number]): string {
   return t(`translation.background${type[0]?.toUpperCase()}${type.slice(1)}`)
 }
+
+function displayResourceName(name: string): string {
+  return name.replace(/\\/g, '/').split('/').pop() || name
+}
 </script>
 
 <template>
@@ -126,9 +130,12 @@ function typeLabel(type: (typeof choices)[number]): string {
               <img
                 :src="imageUrls[background.id]"
                 :alt="background.name"
+                :title="background.name"
                 class="aspect-video w-full object-contain"
               />
-              <span class="block truncate px-1 py-1 text-xs">{{ background.name }}</span>
+              <span class="block truncate px-1 py-1 text-xs" :title="background.name">{{
+                displayResourceName(background.name)
+              }}</span>
             </button>
           </div>
         </template>
@@ -144,7 +151,8 @@ function typeLabel(type: (typeof choices)[number]): string {
               draftType === 'template' || draftType === 'sprite' ? draftBackgroundId : undefined,
             )
           "
-        >{{ t('common.ok') }}</Button>
+          >{{ t('common.ok') }}</Button
+        >
       </DialogFooter>
     </DialogContent>
   </Dialog>
