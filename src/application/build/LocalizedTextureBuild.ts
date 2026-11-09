@@ -9,6 +9,8 @@ export interface LocalizedTextureBuildTask {
   texture: Texture
   translations: SpriteTranslation[]
   outputPath: string
+  outputFormat?: LocalizedTextureOutputFormat
+  pngFallback?: boolean
 }
 
 export interface LocalizedTextureBuildPlan {
@@ -22,10 +24,32 @@ export interface LocalizedTextureBuildOptions {
   exportType?: LocalizedTextureExportType
   overwriteType?: LocalizedTextureOverwriteType
   existingOutputKeys?: ReadonlySet<string>
+  outputFormat?: LocalizedTextureOutputFormat
+  pngFallback?: boolean
 }
 
 export type LocalizedTextureExportType = 'all' | 'translated'
 export type LocalizedTextureOverwriteType = 'changed' | 'all'
+export type LocalizedTextureOutputFormat = 'original' | 'png'
+
+export function pngOutputPath(path: string): string {
+  return path.replace(/\.[^./]+$/, '') + '.png'
+}
+
+export function textureOutputPath(
+  path: string,
+  texture: Texture,
+  options: LocalizedTextureBuildOptions,
+): string {
+  if (options.outputFormat === 'png') return pngOutputPath(path)
+  if (
+    (options.pngFallback ?? true) &&
+    texture.format?.container === 'dds' &&
+    !['bc1', 'bc3'].includes(texture.format.compression)
+  )
+    return pngOutputPath(path)
+  return path
+}
 
 export interface BuiltTexture {
   outputPath: string
@@ -119,7 +143,11 @@ export function createLocalizedTextureBuildPlan(
   }
   const tasks = spriteTables.flatMap((spriteTable) =>
     spriteTable.textures.flatMap((texture) => {
-      const outputPath = `${outputRoot}/${locale}/${texture.imagePath}`
+      const outputPath = textureOutputPath(
+        `${outputRoot}/${locale}/${texture.imagePath}`,
+        texture,
+        options,
+      )
       const cacheKey = textureBuildCacheKey(spriteTable.id, texture.id)
       if (exportType === 'translated' && !translatedTextureKeys.has(cacheKey)) return []
       if (
@@ -137,6 +165,8 @@ export function createLocalizedTextureBuildPlan(
           texture,
           translations: translationsByTexture.get(cacheKey) ?? [],
           outputPath,
+          outputFormat: options.outputFormat ?? 'original',
+          pngFallback: options.pngFallback ?? true,
         },
       ]
     }),
@@ -156,10 +186,18 @@ export async function buildLocalizedTextures(
   const startedAt = performance.now()
   const textures: BuiltTexture[] = []
   const failures: LocalizedTextureBuildFailure[] = []
+  const pathCounts = new Map<string, number>()
+  for (const task of plan.tasks) {
+    const path = task.outputPath.toLowerCase()
+    pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1)
+  }
   onProgress?.({ completed: 0, total: plan.tasks.length })
 
   for (const task of plan.tasks) {
     try {
+      if ((pathCounts.get(task.outputPath.toLowerCase()) ?? 0) > 1) {
+        throw new Error(`Multiple textures resolve to the same output path: ${task.outputPath}`)
+      }
       textures.push({
         ...(await builder.buildTexture(task)),
         cacheKey: task.cacheKey,

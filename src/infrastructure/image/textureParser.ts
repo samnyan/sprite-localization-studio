@@ -4,6 +4,7 @@ import type { Size } from '@/domain/shared/geometry'
 import type { DdsCompression, TextureFormat } from '@/domain/sprite-table/types'
 
 import { readPngSize } from './pngSize'
+import UTEX from './vendor/utex.js'
 
 export interface ParsedTextureMetadata {
   size: Size
@@ -63,16 +64,20 @@ function readFourCC(bytes: Uint8Array, offset: number): string {
 }
 
 function parserBuffer(data: ArrayBuffer): Parameters<typeof parseDDSHeader>[0] {
+  if (
+    data.byteLength >= 148 &&
+    new DataView(data).getUint32(84, true) === 0x30315844 &&
+    new DataView(data).getUint32(128, true) === 72
+  ) {
+    const copy = data.slice(0)
+    new DataView(copy).setUint32(128, 71, true)
+    return new Uint8Array(copy) as unknown as Parameters<typeof parseDDSHeader>[0]
+  }
   return new Uint8Array(data) as unknown as Parameters<typeof parseDDSHeader>[0]
 }
 
 interface DecoderBuffer extends Uint8Array {
-  copy(
-    target: Uint8Array,
-    targetStart: number,
-    sourceStart?: number,
-    sourceEnd?: number,
-  ): void
+  copy(target: Uint8Array, targetStart: number, sourceStart?: number, sourceEnd?: number): void
 }
 
 interface DecoderBufferGlobal {
@@ -192,7 +197,25 @@ export async function createTextureImageBitmap(
   const info = parseDDSHeader(parserBuffer(data))
   const layer = info?.layers[0]
   if (!info || !layer) throw new Error('DDS mip level 0 is unavailable.')
-  const rgba = decodeDdsImage(parserBuffer(data), info.format, layer)
+  let rgba: Uint8Array
+  if (info.format === 'BC1' || info.format === 'BC2' || info.format === 'BC3') {
+    const width = metadata.size.width,
+      height = metadata.size.height
+    const paddedWidth = Math.ceil(width / 4) * 4,
+      paddedHeight = Math.ceil(height / 4) * 4
+    const start = metadata.format.header === 'dx10' ? 148 : 128
+    const length = ((paddedWidth * paddedHeight) / 16) * (info.format === 'BC1' ? 8 : 16)
+    if (data.byteLength < start + length) throw new Error('DDS mip level 0 is truncated.')
+    const padded = new Uint8Array(paddedWidth * paddedHeight * 4)
+    const reader =
+      info.format === 'BC1' ? UTEX.readBC1 : info.format === 'BC2' ? UTEX.readBC2 : UTEX.readBC3
+    reader(new Uint8Array(data), start, padded, paddedWidth, paddedHeight)
+    rgba = new Uint8Array(width * height * 4)
+    for (let y = 0; y < height; y++)
+      rgba.set(padded.subarray(y * paddedWidth * 4, y * paddedWidth * 4 + width * 4), y * width * 4)
+  } else {
+    rgba = decodeDdsImage(parserBuffer(data), info.format, layer)
+  }
   const pixels = new Uint8ClampedArray(rgba.byteLength)
   pixels.set(rgba)
   return createImageBitmap(

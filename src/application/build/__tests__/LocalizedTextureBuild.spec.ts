@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createLocalizedTextureBuildPlan,
+  buildLocalizedTextures,
   isSpriteTranslationModified,
   LocalizedTextureBuildSpriteError,
   runLocalizedTextureBuild,
@@ -38,6 +39,21 @@ function project(translations: SpriteTranslation[]): ProjectManifest {
 }
 
 describe('localized texture build plan', () => {
+  it('does not overwrite textures that resolve to the same PNG path', async () => {
+    const table: SpriteTable = {
+      ...spriteTable,
+      textures: [
+        { id: 'a', imagePath: 'ui.dds', size: { width: 4, height: 4 } },
+        { id: 'b', imagePath: 'ui.png', size: { width: 4, height: 4 } },
+      ],
+    }
+    const plan = createLocalizedTextureBuildPlan(project([]), [table], { outputFormat: 'png' })
+    const buildTexture = vi.fn<() => Promise<never>>()
+    const report = await buildLocalizedTextures(plan, { buildTexture })
+    expect(report.failures).toHaveLength(2)
+    expect(buildTexture).not.toHaveBeenCalled()
+  })
+
   it('writes every source texture and includes only changed sprites', () => {
     const changed: SpriteTranslation = {
       ...unchanged,

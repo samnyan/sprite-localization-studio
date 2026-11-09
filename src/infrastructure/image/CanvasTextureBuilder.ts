@@ -1,5 +1,6 @@
 import {
   LocalizedTextureBuildSpriteError,
+  pngOutputPath,
   type BuiltTexture,
   type LocalizedTextureBuilder,
   type LocalizedTextureBuildTask,
@@ -9,6 +10,15 @@ import type { ProjectManifest } from '@/domain/project/types'
 import type { Sprite } from '@/domain/sprite/types'
 import { resolveBackgroundType, type SpriteTranslation } from '@/domain/text-region/types'
 import { drawTranslationText } from '@/infrastructure/image/textRenderer'
+import {
+  createTextureImageBitmap,
+  parseTextureMetadata,
+} from '@/infrastructure/image/textureParser'
+import {
+  assertSingleDdsImage,
+  encodeDds,
+  UnsupportedDdsExportError,
+} from '@/infrastructure/image/ddsEncoder'
 import { drawCanvasKitTextOverlay } from '@/infrastructure/rendering/CanvasKitTextOverlay'
 import {
   getLogicalSpriteSize,
@@ -127,6 +137,7 @@ function describeSpriteGeometry(sprite: Sprite): string {
 
 export class CanvasTextureBuilder implements LocalizedTextureBuilder {
   private readonly imageCache = new Map<string, ImageBitmap>()
+  private readonly writtenPaths = new Set<string>()
 
   constructor(
     private readonly storage: ProjectStorage,
@@ -135,7 +146,13 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
 
   async buildTexture(task: LocalizedTextureBuildTask): Promise<BuiltTexture> {
     try {
-      const source = await this.loadImage(`textures/${task.texture.imagePath}`)
+      const sourcePath = `textures/${task.texture.imagePath}`
+      const data = await this.storage.readBinary(sourcePath)
+      if (sourcePath.toLowerCase().endsWith('.dds')) {
+        const metadata = parseTextureMetadata(sourcePath, data)
+        if (metadata.format.container === 'dds') assertSingleDdsImage(data, metadata.format)
+      }
+      const source = await this.loadImage(sourcePath, data)
       if (source.width !== task.texture.size.width || source.height !== task.texture.size.height) {
         throw new Error(`Texture size mismatch: ${task.texture.imagePath}`)
       }
@@ -160,8 +177,29 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
         }
       }
 
-      await this.storage.writeBinary(task.outputPath, await canvasToPng(output))
-      return { outputPath: task.outputPath, modifiedSpriteCount: task.translations.length }
+      const format = parseTextureMetadata(sourcePath, data).format
+      let outputPath = task.outputPath
+      let bytes: Uint8Array
+      if (task.outputFormat !== 'png' && format.container === 'dds') {
+        try {
+          bytes = encodeDds(output, data, format)
+          outputPath = outputPath.replace(/\.png$/i, '.dds')
+        } catch (error) {
+          if (!(error instanceof UnsupportedDdsExportError) || !(task.pngFallback ?? true))
+            throw error
+          bytes = await canvasToPng(output)
+          outputPath = pngOutputPath(outputPath)
+        }
+      } else {
+        bytes = await canvasToPng(output)
+        outputPath = pngOutputPath(outputPath)
+      }
+      if (this.writtenPaths.has(outputPath.toLowerCase())) {
+        throw new Error(`Multiple textures resolve to the same output path: ${outputPath}`)
+      }
+      await this.storage.writeBinary(outputPath, bytes)
+      this.writtenPaths.add(outputPath.toLowerCase())
+      return { outputPath, modifiedSpriteCount: task.translations.length }
     } finally {
       this.disposeImages()
     }
@@ -228,11 +266,13 @@ export class CanvasTextureBuilder implements LocalizedTextureBuilder {
     return this.loadImage(background.path)
   }
 
-  private async loadImage(path: string): Promise<ImageBitmap> {
+  private async loadImage(path: string, sourceData?: ArrayBuffer): Promise<ImageBitmap> {
     const cached = this.imageCache.get(path)
     if (cached) return cached
-    const data = await this.storage.readBinary(path)
-    const image = await createImageBitmap(new Blob([data]))
+    const data = sourceData ?? (await this.storage.readBinary(path))
+    const image = path.toLowerCase().endsWith('.dds')
+      ? await createTextureImageBitmap(path, data)
+      : await createImageBitmap(new Blob([data]))
     this.imageCache.set(path, image)
     return image
   }

@@ -24,6 +24,7 @@ import {
   runLocalizedTextureBuild,
   textureBuildCacheKey,
   type LocalizedTextureExportType,
+  type LocalizedTextureOutputFormat,
   type LocalizedTextureOverwriteType,
   type LocalizedTextureBuildReport,
   type LocalizedTextureBuildProgress,
@@ -813,14 +814,21 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   async function existingTextureBuildKeys(
     projectSnapshot: ProjectManifest,
     spriteTablesSnapshot: SpriteTable[],
+    outputFormat: LocalizedTextureOutputFormat = 'original',
+    pngFallback = true,
   ): Promise<Set<string>> {
     const existing = new Set<string>()
     if (!activeStorage) return existing
     const plan = createLocalizedTextureBuildPlan(projectSnapshot, spriteTablesSnapshot, {
       exportType: 'all',
       overwriteType: 'all',
+      outputFormat,
+      pngFallback,
     })
     for (const task of plan.tasks) {
+      // DDS and PNG outputs have separate histories; the project only tracks one edit flag.
+      // Rebuild DDS sources until per-format output revisions are tracked.
+      if (task.texture.imagePath.toLowerCase().endsWith('.dds')) continue
       if (task.cacheKey && (await activeStorage.exists(task.outputPath))) {
         existing.add(task.cacheKey)
       }
@@ -828,7 +836,10 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     return existing
   }
 
-  async function getTextureBuildSummary(): Promise<{
+  async function getTextureBuildSummary(
+    outputFormat: LocalizedTextureOutputFormat = 'original',
+    pngFallback = true,
+  ): Promise<{
     all: { total: number; changed: number }
     translated: { total: number; changed: number }
     existingOutputKeys: string[]
@@ -844,7 +855,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       exportType: 'all',
       overwriteType: 'all',
     })
-    const existingOutputKeys = await existingTextureBuildKeys(project.value, spriteTables.value)
+    const existingOutputKeys = await existingTextureBuildKeys(
+      project.value,
+      spriteTables.value,
+      outputFormat,
+      pngFallback,
+    )
     const changedAll = createLocalizedTextureBuildPlan(project.value, spriteTables.value, {
       exportType: 'all',
       overwriteType: 'changed',
@@ -870,6 +886,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     exportType: LocalizedTextureExportType = 'all',
     overwriteType: LocalizedTextureOverwriteType = 'all',
     existingOutputKeys?: ReadonlySet<string>,
+    outputFormat: LocalizedTextureOutputFormat = 'original',
+    pngFallback = true,
   ): Promise<boolean> {
     if (!project.value || !activeStorage) return failProjectNotOpen()
     const session = documentSession
@@ -884,7 +902,12 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     const outputKeys =
       overwriteType === 'changed'
         ? (existingOutputKeys ??
-          (await existingTextureBuildKeys(projectSnapshot, spriteTablesSnapshot)))
+          (await existingTextureBuildKeys(
+            projectSnapshot,
+            spriteTablesSnapshot,
+            outputFormat,
+            pngFallback,
+          )))
         : undefined
     status.value = 'building'
     error.value = undefined
@@ -897,7 +920,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
         (progress) => {
           if (session === documentSession) buildProgress.value = progress
         },
-        { exportType, overwriteType, existingOutputKeys: outputKeys },
+        { exportType, overwriteType, existingOutputKeys: outputKeys, outputFormat, pngFallback },
       )
       if (result.status === 'blocked') {
         if (session === documentSession) {

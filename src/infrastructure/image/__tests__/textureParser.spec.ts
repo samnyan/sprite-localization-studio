@@ -73,6 +73,25 @@ describe('textureParser', () => {
     })
   })
 
+  it('reads DX10 BC1 sRGB without modifying the source', () => {
+    const data = ddsHeader({ width: 4, height: 4, fourCC: 'DX10', dxgiFormat: 72 })
+    expect(parseTextureMetadata('texture.dds', data).format).toMatchObject({
+      compression: 'bc1',
+      dxgiFormat: 72,
+      srgb: true,
+    })
+    expect(new DataView(data).getUint32(128, true)).toBe(72)
+  })
+
+  it('rejects a truncated compressed DDS before decoding', async () => {
+    await expect(
+      createTextureImageBitmap(
+        'texture.dds',
+        ddsHeader({ width: 4, height: 4, fourCC: 'DXT5', payloadSize: 8 }),
+      ),
+    ).rejects.toThrow('truncated')
+  })
+
   it('keeps PNG metadata on the same parser path', () => {
     const data = new ArrayBuffer(24)
     const bytes = new Uint8Array(data)

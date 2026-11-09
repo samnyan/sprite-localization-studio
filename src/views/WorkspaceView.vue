@@ -20,6 +20,7 @@ import { useWorkspaceStore } from '@/app/stores/workspace'
 import { showAlert } from '@/app/services/alertDialog'
 import type {
   LocalizedTextureExportType,
+  LocalizedTextureOutputFormat,
   LocalizedTextureOverwriteType,
 } from '@/application/build/LocalizedTextureBuild'
 import type { TextDiagnostic } from '@/application/qa/TextDiagnostics'
@@ -68,6 +69,9 @@ const buildConfirmOpen = ref(false)
 const buildPreparing = ref(false)
 const buildExportType = ref<LocalizedTextureExportType>('all')
 const buildOverwriteType = ref<LocalizedTextureOverwriteType>('changed')
+const buildOutputFormat = ref<LocalizedTextureOutputFormat>('original')
+const buildPngFallback = ref(true)
+let buildSummaryGeneration = 0
 const buildSummary = ref({
   all: { total: 0, changed: 0 },
   translated: { total: 0, changed: 0 },
@@ -83,12 +87,9 @@ const errorPanelVisible = computed(
     !errorPanelDismissed.value &&
     (Boolean(errorText.value) || Boolean(workspace.lastBuildReport?.failures.length)),
 )
-watch(
-  [() => workspace.error, () => workspace.lastBuildReport],
-  () => {
-    errorPanelDismissed.value = false
-  },
-)
+watch([() => workspace.error, () => workspace.lastBuildReport], () => {
+  errorPanelDismissed.value = false
+})
 const selectedImageUrl = computed(() => {
   const spriteTable = workspace.selectedSpriteTable
   const texture = workspace.selectedTexture
@@ -366,7 +367,12 @@ async function prepareBuildTextures(): Promise<void> {
   if (!workspace.project || workspace.isBusy || buildPreparing.value) return
   buildPreparing.value = true
   try {
-    buildSummary.value = await workspace.getTextureBuildSummary()
+    buildOutputFormat.value = 'original'
+    buildPngFallback.value = true
+    buildSummary.value = await workspace.getTextureBuildSummary(
+      buildOutputFormat.value,
+      buildPngFallback.value,
+    )
     buildExportType.value = 'all'
     buildOverwriteType.value = 'changed'
     buildConfirmOpen.value = true
@@ -374,6 +380,29 @@ async function prepareBuildTextures(): Promise<void> {
     buildPreparing.value = false
   }
 }
+
+watch([buildOutputFormat, buildPngFallback], async () => {
+  if (!buildConfirmOpen.value) return
+  const generation = ++buildSummaryGeneration
+  buildPreparing.value = true
+  try {
+    const summary = await workspace.getTextureBuildSummary(
+      buildOutputFormat.value,
+      buildPngFallback.value,
+    )
+    if (generation === buildSummaryGeneration && buildConfirmOpen.value)
+      buildSummary.value = summary
+  } finally {
+    if (generation === buildSummaryGeneration) buildPreparing.value = false
+  }
+})
+
+watch(buildConfirmOpen, (open) => {
+  if (!open) {
+    buildSummaryGeneration++
+    buildPreparing.value = false
+  }
+})
 
 async function confirmBuildTextures(): Promise<void> {
   const exportType = buildExportType.value
@@ -384,6 +413,8 @@ async function confirmBuildTextures(): Promise<void> {
       exportType,
       overwriteType,
       new Set(buildSummary.value.existingOutputKeys),
+      buildOutputFormat.value,
+      buildPngFallback.value,
     )
   ) {
     toast.success(t('build.successToast'), { description: t('build.outputDirectory') })
@@ -1041,7 +1072,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
     </Dialog>
 
     <Dialog v-model:open="buildConfirmOpen">
-      <DialogContent class="sm:max-w-md" :show-close-button="false">
+      <DialogContent class="max-h-[90vh] overflow-y-auto sm:max-w-md" :show-close-button="false">
         <DialogHeader>
           <DialogTitle>{{ t('build.confirmTitle') }}</DialogTitle>
         </DialogHeader>
@@ -1067,6 +1098,24 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
                 t('build.translatedTexturesDescription', { count: buildSummary.translated.total })
               }}</span>
             </span>
+          </label>
+        </div>
+        <div class="space-y-2" role="radiogroup" :aria-label="t('build.outputFormat')">
+          <p class="text-xs font-semibold text-muted-foreground">{{ t('build.outputFormat') }}</p>
+          <label class="flex cursor-pointer items-center gap-2 text-sm">
+            <input v-model="buildOutputFormat" type="radio" value="original" />
+            {{ t('build.originalFormat') }}
+          </label>
+          <label
+            v-if="buildOutputFormat === 'original'"
+            class="ml-5 flex cursor-pointer items-center gap-2 text-sm"
+          >
+            <input v-model="buildPngFallback" type="checkbox" />
+            {{ t('build.pngFallback') }}
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 text-sm">
+            <input v-model="buildOutputFormat" type="radio" value="png" />
+            {{ t('build.pngFormat') }}
           </label>
         </div>
         <div class="space-y-2" role="radiogroup" :aria-label="t('build.overwriteType')">
@@ -1106,7 +1155,7 @@ function selectDefaultTranslationBackground(background: 'original' | 'blank'): v
           </Button>
           <Button
             data-testid="confirm-build-textures"
-            :disabled="workspace.isBusy"
+            :disabled="workspace.isBusy || buildPreparing"
             @click="confirmBuildTextures"
           >
             {{ t('common.ok') }}
